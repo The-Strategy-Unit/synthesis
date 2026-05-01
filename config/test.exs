@@ -1,3 +1,5 @@
 import Config
 
-config :synthesis, start_queue: false
+config :synthesis,
+  extractor: Synthesis.MockExtractor,
+  writer: Synthesis.MockWriter

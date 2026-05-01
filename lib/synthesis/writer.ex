@@ -1,4 +1,9 @@
+defmodule Synthesis.WriterBehaviour do
+  @callback write(String.t(), map()) :: :ok | {:error, String.t()}
+end
+
 defmodule Synthesis.Writer do
+  @behaviour Synthesis.WriterBehaviour
   @moduledoc """
   Writes extracted insights and summaries to Obsidian-ready Zettelkasten markdown files.
   Output is organised per video source under the configured output directory.

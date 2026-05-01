@@ -1,4 +1,7 @@
 ExUnit.start()
 Application.stop(:synthesis)
+Application.put_env(:synthesis, :extractor, Synthesis.MockExtractor)
+Application.put_env(:synthesis, :writer, Synthesis.MockWriter)
 Mox.defmock(Synthesis.MockFetcher, for: Synthesis.FetcherBehaviour)
 Mox.defmock(Synthesis.MockExtractor, for: Synthesis.ExtractorBehaviour)
+Mox.defmock(Synthesis.MockWriter, for: Synthesis.WriterBehaviour)
