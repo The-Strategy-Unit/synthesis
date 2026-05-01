@@ -28,21 +28,27 @@ defmodule Synthesis.QueueTest do
     Synthesis.MockExtractor
     |> expect(:extract, fn _t -> {:ok, %{summary: "s", insights: []}} end)
 
-    Synthesis.MockFetcher
-    |> expect(:fetch, fn _url -> {:ok, "transcript"} end)
+    Synthesis.MockWriter
+    |> expect(:write, fn _id, _extraction -> :ok end)
+
+    allow(Synthesis.MockExtractor, self(), Process.whereis(Queue))
+    allow(Synthesis.MockWriter, self(), Process.whereis(Queue))
 
     Queue.enqueue("abc123", "transcript")
     Process.sleep(500)
-    assert {:error, :not_found} = Queue.job("abc123")
+    assert {:ok, %{status: :done}} = Queue.job("abc123")
   end
 
   # 4. Failure handling
   test "job transitions to failed on extractor error" do
     Synthesis.MockExtractor
-    |> expect(:extract, 3, fn _t -> {:error, "Ollama failed"} end)
+    |> expect(:extract, 1, fn _t -> {:error, "Ollama failed"} end)
+
+    allow(Synthesis.MockExtractor, self(), Process.whereis(Queue))
 
     Queue.enqueue("abc123", "transcript")
-    Process.sleep(1000)
-    assert {:error, :not_found} = Queue.job("abc123")
+    Process.sleep(3000)
+    assert {:ok, %{status: :failed}} = Queue.job("abc123")
   end
 end
+

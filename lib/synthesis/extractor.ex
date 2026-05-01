@@ -42,7 +42,7 @@ defmodule Synthesis.Extractor do
 
   @spec extract(transcript()) :: extract_result()
   def extract(transcript) do
-    max_retries = Application.fetch_env!(:synthesis, :max_retries)
+    max_retries = Application.get_env(:synthesis, :max_retries, 3)
     do_extract(transcript, 0, max_retries)
   end
 

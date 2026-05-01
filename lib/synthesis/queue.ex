@@ -7,7 +7,8 @@ defmodule Synthesis.Queue do
 
   use GenServer
 
-  alias Synthesis.{Extractor, Writer}
+  defp extractor, do: Application.get_env(:synthesis, :extractor, Synthesis.Extractor)
+  defp writer, do: Application.get_env(:synthesis, :writer, Synthesis.Writer)
 
   @type job_status :: :pending | :processing | :done | :failed
   @type job :: %{
@@ -89,8 +90,8 @@ defmodule Synthesis.Queue do
           |> Map.put(:queue, rest)
 
         result =
-          with {:ok, extraction} <- Extractor.extract(new_state.jobs[video_id].transcript),
-               :ok <- Writer.write(video_id, extraction) do
+          with {:ok, extraction} <- extractor().extract(new_state.jobs[video_id].transcript),
+               :ok <- writer().write(video_id, extraction) do
             :ok
           end
 
