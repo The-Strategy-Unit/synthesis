@@ -8,7 +8,8 @@ defmodule Synthesis.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      escript: [main_module: Synthesis.CLI]
+      escript: [main_module: Synthesis.CLI],
+      dialyzer: [plt_add_apps: [:mix]]
     ]
   end
 
@@ -23,12 +24,14 @@ defmodule Synthesis.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:req, "~> 0.5.17"},
       {:burrito, "~> 1.5.0"},
+      {:yaml_elixir, "~> 2.9"},
       {:jason, "~> 1.4.4"},
+      {:exqlite, "~> 0.36.0"},
+      {:sqlite_vec, "~> 0.1.0"},
       {:mox, "~> 1.2.0", only: :test}
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]
   end
 end

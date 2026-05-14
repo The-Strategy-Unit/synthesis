@@ -6,7 +6,7 @@ defmodule Synthesis.Extractor do
   @behaviour Synthesis.ExtractorBehaviour
   @moduledoc """
   Sends transcripts to Ollama and extracts structured insights using JSON schema mode.
-  Retries on validation failure up to the configured limit.
+  Retries on HTTP or validation failure with exponential backoff.
   """
 
   @type transcript :: String.t()
@@ -19,74 +19,49 @@ defmodule Synthesis.Extractor do
   @type extraction :: %{summary: String.t(), insights: [insight()]}
   @type extract_result :: {:ok, extraction()} | {:error, String.t()}
 
-  @json_schema %{
-    type: "object",
-    required: ["summary", "insights"],
-    properties: %{
-      summary: %{type: "string"},
-      insights: %{
-        type: "array",
-        items: %{
-          type: "object",
-          required: ["title", "content", "tags", "related"],
-          properties: %{
-            title: %{type: "string"},
-            content: %{type: "string"},
-            tags: %{type: "array", items: %{type: "string"}},
-            related: %{type: "array", items: %{type: "string"}}
-          }
-        }
-      }
-    }
-  }
-
   @spec extract(transcript()) :: extract_result()
   def extract(transcript) do
     max_retries = Application.get_env(:synthesis, :max_retries, 3)
     do_extract(transcript, 0, max_retries)
   end
 
-  @spec do_extract(transcript(), non_neg_integer(), non_neg_integer()) :: extract_result()
   defp do_extract(_transcript, attempt, max) when attempt >= max do
     {:error, "Extraction failed after #{max} attempts"}
   end
 
   defp do_extract(transcript, attempt, max) do
-    case call_ollama(transcript) do
-      {:ok, body} ->
-        validate(body)
-
+    with {:ok, body} <- call_ollama(transcript),
+         {:ok, result} <- validate(body) do
+      {:ok, result}
+    else
       {:error, reason} ->
         IO.warn("Attempt #{attempt + 1} failed: #{reason}. Retrying...")
-        do_extract(transcript, attempt + 1, max)
-    end
-    |> case do
-      {:ok, _} = result ->
-        result
-
-      {:error, reason} ->
-        IO.warn("Attempt #{attempt + 1} validation failed: #{reason}. Retrying...")
+        Process.sleep((1_000 * :math.pow(2, attempt)) |> trunc())
         do_extract(transcript, attempt + 1, max)
     end
   end
 
-  @spec call_ollama(transcript()) :: {:ok, map()} | {:error, String.t()}
   defp call_ollama(transcript) do
     url = Application.fetch_env!(:synthesis, :ollama_url)
     model = Application.fetch_env!(:synthesis, :ollama_model)
 
-    Req.post("#{url}/api/generate",
-      json: %{
-        model: model,
-        prompt: build_prompt(transcript),
-        stream: false,
-        format: @json_schema
-      }
-    )
-    |> case do
-      {:ok, %{status: 200, body: %{"response" => response}}} ->
-        Jason.decode(response)
-        |> case do
+    case Req.post("#{url}/api/generate",
+           json: %{
+             model: model,
+             prompt: build_prompt(transcript),
+             stream: false,
+             format: "json",
+             options: %{
+               temperature: 0.2,
+               num_predict: 4096
+             }
+           },
+           receive_timeout: 300_000
+         ) do
+      {:ok, %{status: 200, body: %{"response" => response, "thinking" => thinking}}} ->
+        text = if response == "", do: thinking, else: response
+
+        case text |> strip_thinking() |> Jason.decode() do
           {:ok, parsed} -> {:ok, parsed}
           {:error, reason} -> {:error, "JSON decode failed: #{inspect(reason)}"}
         end
@@ -99,9 +74,13 @@ defmodule Synthesis.Extractor do
     end
   end
 
+  defp strip_thinking(response) do
+    Regex.replace(~r/<think>.*?<\/think>/s, response, "") |> String.trim()
+  end
+
   @spec validate(map()) :: extract_result()
-  defp validate(%{"summary" => summary, "insights" => insights})
-       when is_binary(summary) and is_list(insights) do
+  def validate(%{"summary" => summary, "insights" => insights})
+      when is_binary(summary) and is_list(insights) do
     {:ok,
      %{
        summary: summary,
@@ -109,9 +88,8 @@ defmodule Synthesis.Extractor do
      }}
   end
 
-  defp validate(_), do: {:error, "Response missing required fields"}
+  def validate(_), do: {:error, "Response missing required fields"}
 
-  @spec normalise_insight(map()) :: insight()
   defp normalise_insight(raw) do
     %{
       title: Map.get(raw, "title", "Untitled"),
@@ -121,19 +99,27 @@ defmodule Synthesis.Extractor do
     }
   end
 
-  @spec build_prompt(transcript()) :: String.t()
   defp build_prompt(transcript) do
     """
     You are an expert knowledge curator. Analyse the following podcast transcript.
+    You MUST respond with valid JSON only. No explanation, no markdown, no code fences.
 
-    TASK 1 - SUMMARY: Write a concise 2-3 paragraph overview of the main discussion.
+    Your response must match this exact structure:
+    {
+      "summary": "2-3 paragraph overview of the main discussion",
+      "insights": [
+        {
+          "title": "Short title, max 6 words",
+          "content": "1-2 sentences explaining the insight clearly",
+          "tags": ["relevant", "topic", "keywords"],
+          "related": ["Title of related insight", "Another related title"]
+        }
+      ]
+    }
 
-    TASK 2 - ATOMIC INSIGHTS: Extract every distinct, standalone insight from the transcript.
-    For each insight:
-    - title: short descriptive title (max 6 words)
-    - content: 1-2 sentences explaining the insight clearly
-    - tags: relevant topic keywords
-    - related: titles of other insights in this list that connect to this one
+    Extract every distinct, standalone insight from the transcript.
+    Before finalising your list, review all insights and merge any that cover the same or highly overlapping concepts into a single, more complete insight. Each insight must be genuinely distinct.
+    The "related" field must only reference titles of other insights in your list.
 
     TRANSCRIPT:
     #{transcript}

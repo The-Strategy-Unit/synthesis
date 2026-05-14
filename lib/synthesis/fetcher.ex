@@ -1,5 +1,5 @@
 defmodule Synthesis.FetcherBehaviour do
-  @callback fetch(String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  @callback fetch(String.t()) :: {:ok, {String.t(), String.t()}} | {:error, String.t()}
 end
 
 defmodule Synthesis.Fetcher do
@@ -7,17 +7,98 @@ defmodule Synthesis.Fetcher do
   @moduledoc """
   Fetches transcripts from YouTube URLs using yt-dlp as a system dependency.
   Works across operating systems using Elixir's built-in path utilities.
+
+  ## Security
+
+  URLs are validated against YouTube patterns before shell invocation.
+  Video IDs are sanitised to prevent injection attacks.
+
+  ## Examples
+
+      iex> Synthesis.Fetcher.validate_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+      {:ok, "dQw4w9WgXcQ"}
+
+      iex> Synthesis.Fetcher.validate_url("https://youtu.be/dQw4w9WgXcQ")
+      {:ok, "dQw4w9WgXcQ"}
+
+      iex> Synthesis.Fetcher.validate_url("https://example.com/watch?v=abc123")
+      {:error, "Invalid YouTube URL"}
+
+      iex> Synthesis.Fetcher.validate_url("https://www.youtube.com/watch?v=<script>")
+      {:error, "Invalid video ID"}
+
   """
-  alias Synthesis.Utils
 
   @type url :: String.t()
   @type transcript :: String.t()
-  @type fetch_result :: {:ok, transcript()} | {:error, String.t()}
+  @type fetch_result :: {:ok, {String.t(), transcript()}} | {:error, String.t()}
+
+  @youtube_host_pattern ~r/(youtube\.com|youtu\.be)/
+  @video_id_pattern ~r/^[a-zA-Z0-9_-]{11}$/
 
   @spec fetch(url()) :: fetch_result()
   def fetch(url) do
+    with {:ok, video_id} <- validate_url(url),
+         {:ok, transcript} <- fetch_with_retry(url, video_id, 0) do
+      {:ok, transcript}
+    end
+  end
+
+  @spec validate_url(String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def validate_url(url) when is_binary(url) do
+    if String.match?(url, @youtube_host_pattern) do
+      uri = URI.parse(url)
+
+      video_id =
+        cond do
+          uri.query ->
+            uri.query |> URI.decode_query() |> Map.get("v")
+
+          uri.host == "youtu.be" ->
+            uri.path |> String.trim_leading("/")
+
+          true ->
+            nil
+        end
+
+      case video_id do
+        nil ->
+          {:error, "Invalid YouTube URL"}
+
+        id when is_binary(id) ->
+          if String.match?(id, @video_id_pattern),
+            do: {:ok, id},
+            else: {:error, "Invalid video ID"}
+      end
+    else
+      {:error, "Invalid YouTube URL"}
+    end
+  end
+
+  defp fetch_with_retry(url, video_id, attempt, max \\ get_max_retries())
+
+  defp fetch_with_retry(_url, _video_id, attempt, max) when attempt >= max do
+    {:error, "Fetch failed after #{attempt} attempts"}
+  end
+
+  defp fetch_with_retry(url, video_id, attempt, max) do
+    case do_fetch(url, video_id) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, reason} ->
+        IO.warn("Fetch attempt #{attempt + 1} failed: #{reason}. Retrying...")
+        Process.sleep((1_000 * :math.pow(2, attempt)) |> trunc())
+        fetch_with_retry(url, video_id, attempt + 1, max)
+    end
+  end
+
+  defp get_max_retries do
+    Application.get_env(:synthesis, :max_fetch_retries, 3)
+  end
+
+  defp do_fetch(url, video_id) do
     tmp_dir = System.tmp_dir!()
-    video_id = Utils.extract_video_id(url)
     output_template = Path.join(tmp_dir, "synthesis_#{video_id}")
 
     case System.cmd(
@@ -29,6 +110,8 @@ defmodule Synthesis.Fetcher do
              "--skip-download",
              "--sub-format",
              "vtt",
+             # <-- added
+             "--write-info-json",
              "-o",
              output_template,
              url
@@ -41,12 +124,11 @@ defmodule Synthesis.Fetcher do
         result
 
       {error, _} ->
+        cleanup(tmp_dir, video_id)
         {:error, "yt-dlp failed: #{error}"}
     end
   end
 
-  # Returns the correct yt-dlp command for the current OS.
-  @spec yt_dlp_cmd() :: String.t()
   defp yt_dlp_cmd do
     case :os.type() do
       {:win32, _} -> "yt-dlp.exe"
@@ -54,27 +136,29 @@ defmodule Synthesis.Fetcher do
     end
   end
 
-  @spec read_and_clean(String.t(), String.t()) :: fetch_result()
   defp read_and_clean(tmp_dir, video_id) do
-    path = Path.join(tmp_dir, "synthesis_#{video_id}.en.vtt")
+    vtt_path = Path.join(tmp_dir, "synthesis_#{video_id}.en.vtt")
+    json_path = Path.join(tmp_dir, "synthesis_#{video_id}.info.json")
 
-    case File.read(path) do
-      {:ok, content} -> {:ok, clean_vtt(content)}
-      {:error, reason} -> {:error, "Could not read transcript: #{reason}"}
+    with {:ok, vtt} <- File.read(vtt_path),
+         {:ok, json} <- File.read(json_path),
+         {:ok, info} <- Jason.decode(json) do
+      title = Map.get(info, "title")
+      {:ok, {title, clean_vtt(vtt)}}
+    else
+      {:error, reason} -> {:error, "Could not read yt-dlp output: #{inspect(reason)}"}
     end
   end
 
-  @spec clean_vtt(String.t()) :: transcript()
   defp clean_vtt(content) do
     content
     |> String.split("\n")
     |> Enum.reject(&vtt_metadata?/1)
     |> Enum.join(" ")
-    |> String.replace(~r/\s+/, " ")
+    |> String.replace(~r/<[^>]+>/, "")
     |> String.trim()
   end
 
-  @spec vtt_metadata?(String.t()) :: boolean()
   defp vtt_metadata?(line) do
     line == "" or
       line =~ ~r/^\d{2}:\d{2}/ or
@@ -83,13 +167,12 @@ defmodule Synthesis.Fetcher do
       line =~ ~r/^Language:/
   end
 
-  @spec cleanup(String.t(), String.t()) :: :ok
   defp cleanup(tmp_dir, video_id) do
     Path.join(tmp_dir, "synthesis_#{video_id}.en.vtt")
     |> File.rm()
     |> case do
       :ok -> :ok
-      {:error, reason} -> IO.warn("Cleanup failed for #{video_id}: #{reason}")
+      {:error, reason} -> IO.warn("Cleanup failed for #{video_id}: #{inspect(reason)}")
     end
   end
 end

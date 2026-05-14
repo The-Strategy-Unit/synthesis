@@ -18,7 +18,7 @@ defmodule Synthesis.CLI do
 
   @spec wait_until_done() :: :ok
   defp wait_until_done do
-    jobs = Synthesis.jobs()
+    jobs = Synthesis.Queue.jobs()
 
     if Enum.all?(jobs, fn {_, j} -> j.status in [:done, :failed] end) do
       summary(jobs)
