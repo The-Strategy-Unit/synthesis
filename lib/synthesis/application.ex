@@ -10,12 +10,11 @@ defmodule Synthesis.Application do
     children =
       if Application.get_env(:synthesis, :start_queue, true) do
         [
-          # Starts a worker by calling: Synthesis.Worker.start_link(arg)
-          # {Synthesis.Worker, arg}
+          Synthesis.Repo,
           Synthesis.Queue
         ]
       else
-        []
+        [Synthesis.Repo]
       end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
