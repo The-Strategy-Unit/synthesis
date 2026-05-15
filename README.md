@@ -74,7 +74,7 @@ Or via Mix tasks:
 
 ```bash
 mix wiki.add https://www.youtube.com/watch?v=<id>
-mix wiki.search "pandemic origins"
+mix wiki.search "<term or phrase>"
 ```
 
 ## Roadmap
