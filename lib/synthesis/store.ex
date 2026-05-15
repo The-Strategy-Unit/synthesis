@@ -90,21 +90,47 @@ defmodule Synthesis.Store do
            ORDER BY e.fetched_at DESC, z.id ASC
          """) do
       {:ok, %{rows: rows}} ->
-        episodes =
-          rows
-          |> Enum.group_by(fn [eid | _] -> eid end)
-          |> Enum.map(fn {_, rows} ->
-            [[eid, title, url, fetched_at | _] | _] = rows
+        {episodes, current_episode} =
+          Enum.reduce(rows, {[], nil}, fn
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, nil} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
 
-            zettels =
-              rows
-              |> Enum.reject(fn [_, _, _, _, zid | _] -> is_nil(zid) end)
-              |> Enum.map(fn [_, _, _, _, _zid, insight, tags] ->
-                %{insight: insight, tags: tags}
-              end)
+              {episodes,
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
 
-            %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}
+            [eid, _title, _url, _fetched_at, zid, insight, tags],
+            {episodes, %{id: eid} = current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  current_episode.zettels
+                else
+                  current_episode.zettels ++ [%{insight: insight, tags: tags}]
+                end
+
+              {episodes, %{current_episode | zettels: zettels}}
+
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
+
+              {[current_episode | episodes],
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
           end)
+
+        episodes =
+          case current_episode do
+            nil -> Enum.reverse(episodes)
+            episode -> Enum.reverse([episode | episodes])
+          end
 
         {:ok, episodes}
 
