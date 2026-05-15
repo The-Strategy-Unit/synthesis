@@ -186,8 +186,9 @@ defmodule Synthesis.Queue do
          {:ok, %{insights: insights, summary: summary}} <- Extractor.extract(transcript),
          {:ok, zettel_ids} <- insert_zettels(episode_id, insights),
          :ok <- insert_links(zettel_ids, insights),
-         :ok <- Writer.write(video_id, %{summary: summary, insights: insights}),
-         :ok <- insert_embeddings(zettel_ids, insights) do
+         :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}),
+         :ok <- insert_embeddings(zettel_ids, insights),
+         :ok <- Writer.write_index() do
       :ok
     end
   end

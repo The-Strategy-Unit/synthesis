@@ -80,6 +80,65 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec all_episodes_with_zettels() :: {:ok, [map()]} | {:error, term()}
+  def all_episodes_with_zettels do
+    case Repo.query("""
+           SELECT e.id, e.title, e.url, e.fetched_at,
+                  z.id, z.insight, z.tags
+           FROM episodes e
+           LEFT JOIN zettels z ON z.episode_id = e.id
+           ORDER BY e.fetched_at DESC, z.id ASC
+         """) do
+      {:ok, %{rows: rows}} ->
+        {episodes, current_episode} =
+          Enum.reduce(rows, {[], nil}, fn
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, nil} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
+
+              {episodes,
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
+
+            [eid, _title, _url, _fetched_at, zid, insight, tags],
+            {episodes, %{id: eid} = current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  current_episode.zettels
+                else
+                  current_episode.zettels ++ [%{insight: insight, tags: tags}]
+                end
+
+              {episodes, %{current_episode | zettels: zettels}}
+
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
+
+              {[current_episode | episodes],
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
+          end)
+
+        episodes =
+          case current_episode do
+            nil -> Enum.reverse(episodes)
+            episode -> Enum.reverse([episode | episodes])
+          end
+
+        {:ok, episodes}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
   # --- Embeddings ---
 
   @spec insert_embedding(integer(), [float()]) :: :ok | {:error, term()}
