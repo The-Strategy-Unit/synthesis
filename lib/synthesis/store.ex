@@ -80,6 +80,39 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec all_episodes_with_zettels() :: {:ok, [map()]} | {:error, term()}
+  def all_episodes_with_zettels do
+    case Repo.query("""
+           SELECT e.id, e.title, e.url, e.fetched_at,
+                  z.id, z.insight, z.tags
+           FROM episodes e
+           LEFT JOIN zettels z ON z.episode_id = e.id
+           ORDER BY e.fetched_at DESC, z.id ASC
+         """) do
+      {:ok, %{rows: rows}} ->
+        episodes =
+          rows
+          |> Enum.group_by(fn [eid | _] -> eid end)
+          |> Enum.map(fn {_, rows} ->
+            [[eid, title, url, fetched_at | _] | _] = rows
+
+            zettels =
+              rows
+              |> Enum.reject(fn [_, _, _, _, zid | _] -> is_nil(zid) end)
+              |> Enum.map(fn [_, _, _, _, _zid, insight, tags] ->
+                %{insight: insight, tags: tags}
+              end)
+
+            %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}
+          end)
+
+        {:ok, episodes}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
   # --- Embeddings ---
 
   @spec insert_embedding(integer(), [float()]) :: :ok | {:error, term()}
