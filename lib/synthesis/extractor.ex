@@ -106,18 +106,21 @@ defmodule Synthesis.Extractor do
 
     Your response must match this exact structure:
     {
-      "summary": "2-3 paragraph overview of the main discussion",
+      "summary": "No more than 3 paragraph overview of the main discussion",
+      "measurements": [
+      {"value": "460", "unit": "mm", "context": "width of the intake manifold"}
+       ],
       "insights": [
         {
           "title": "Short title, max 6 words",
-          "content": "1-2 sentences explaining the insight clearly",
+          "content": "No more than 3 sentences explaining the most important insight clearly",
           "tags": ["relevant", "topic", "keywords"],
           "related": ["Title of related insight", "Another related title"]
         }
       ]
     }
 
-    Extract every distinct, standalone insight from the transcript.
+    Extract every distinct, standalone and important insight from the transcript.
     Before finalising your list, review all insights and merge any that cover the same or highly overlapping concepts into a single, more complete insight. Each insight must be genuinely distinct.
     The "related" field must only reference titles of other insights in your list.
 

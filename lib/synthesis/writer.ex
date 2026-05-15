@@ -1,5 +1,5 @@
 defmodule Synthesis.WriterBehaviour do
-  @callback write(String.t(), String.t(), map()) :: :ok | {:error, String.t()}
+  @callback write(String.t(), String.t() | nil, map()) :: :ok | {:error, String.t()}
 end
 
 defmodule Synthesis.Writer do
@@ -21,10 +21,11 @@ defmodule Synthesis.Writer do
   @type extraction :: %{summary: String.t(), insights: [insight()]}
   @type write_result :: :ok | {:error, String.t()}
 
-  @spec write(video_id(), String.t(), extraction()) :: write_result()
+  @spec write(video_id(), String.t() | nil, extraction()) :: write_result()
   def write(video_id, title, %{summary: summary, insights: insights}) do
     base_dir = Application.fetch_env!(:synthesis, :output_dir)
-    dir_name = if title && title != "", do: Utils.slugify(title), else: video_id
+    slug = Utils.slugify(title || "")
+    dir_name = if slug != "", do: "#{slug}_#{video_id}", else: video_id
     source_dir = Path.join(base_dir, dir_name)
     insight_dir = Path.join(source_dir, "insights")
 
@@ -62,7 +63,13 @@ defmodule Synthesis.Writer do
     #{Enum.join(links, "\n")}
     """
 
-    File.write(Path.join(dir, "summary.md"), content)
+    case File.write(Path.join(dir, "summary.md"), content) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, "Failed to write summary for #{video_id}: #{:file.format_error(reason)}"}
+    end
   end
 
   # --- Insights ---
@@ -105,7 +112,13 @@ defmodule Synthesis.Writer do
     #{if related_links == [], do: "_none_", else: Enum.join(related_links, "\n")}
     """
 
-    File.write(Path.join(dir, "#{Utils.slugify(title)}.md"), note)
+    case File.write(Path.join(dir, "#{Utils.slugify(title)}.md"), note) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, "Failed to write insight '#{title}': #{:file.format_error(reason)}"}
+    end
   end
 
   @spec write_index() :: write_result()
@@ -153,7 +166,6 @@ defmodule Synthesis.Writer do
                 |> String.split("\n")
                 |> Enum.drop(1)
                 |> Enum.join(" ")
-                |> String.slice(0, 100)
 
               "  - **#{first_line}** — #{content}"
             end)

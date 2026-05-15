@@ -87,7 +87,7 @@ defmodule Synthesis.Store do
                   z.id, z.insight, z.tags
            FROM episodes e
            LEFT JOIN zettels z ON z.episode_id = e.id
-           ORDER BY e.fetched_at DESC, z.id ASC
+           ORDER BY e.fetched_at DESC, e.id ASC, z.id ASC
          """) do
       {:ok, %{rows: rows}} ->
         {episodes, current_episode} =
@@ -143,12 +143,15 @@ defmodule Synthesis.Store do
 
   @spec insert_embedding(integer(), [float()]) :: :ok | {:error, term()}
   def insert_embedding(zettel_id, vector) when is_list(vector) do
-    case Repo.query(
-           "INSERT OR REPLACE INTO embeddings (zettel_id, vector) VALUES (?, ?)",
-           [zettel_id, Jason.encode!(vector)]
-         ) do
-      {:ok, _} -> :ok
-      {:error, _} = err -> err
+    with {:ok, encoded} <- Jason.encode(vector),
+         {:ok, _} <-
+           Repo.query(
+             "INSERT OR REPLACE INTO embeddings (zettel_id, vector) VALUES (?, ?)",
+             [zettel_id, encoded]
+           ) do
+      :ok
+    else
+      {:error, reason} -> {:error, "Failed to insert embedding: #{inspect(reason)}"}
     end
   end
 
