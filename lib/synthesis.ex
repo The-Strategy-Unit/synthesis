@@ -5,11 +5,12 @@ defmodule Synthesis do
 
   alias Synthesis.{Fetcher, Queue, Utils}
 
-  @spec process(String.t()) :: :ok
-  def process(url) when is_binary(url), do: process([url])
+  @spec process(String.t() | [String.t()], String.t()) :: :ok
+  def process(url_or_urls, domain \\ "general")
 
-  @spec process([String.t()]) :: :ok
-  def process(urls) when is_list(urls) do
+  def process(url, domain) when is_binary(url), do: process([url], domain)
+
+  def process(urls, domain) when is_list(urls) do
     urls
     |> Enum.map(fn url ->
       Task.async(fn ->
@@ -17,7 +18,7 @@ defmodule Synthesis do
 
         case Fetcher.fetch(url) do
           {:ok, {title, transcript}} ->
-            Queue.enqueue(video_id, url, title, transcript)
+            Queue.enqueue(video_id, url, title, transcript, domain)
             Queue.await(video_id)
 
           {:error, reason} ->

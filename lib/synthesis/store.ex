@@ -8,22 +8,23 @@ defmodule Synthesis.Store do
 
   # --- Episodes ---
 
-  @spec insert_episode(String.t(), String.t(), String.t() | nil, String.t()) ::
+  @spec insert_episode(String.t(), String.t(), String.t() | nil, String.t(), String.t()) ::
           {:ok, integer()} | {:error, term()}
-  def insert_episode(url, video_id, title, raw_transcript) do
+  def insert_episode(url, video_id, title, raw_transcript, domain \\ "general") do
     case Repo.query(
            """
-           INSERT INTO episodes (url, video_id, title, raw_transcript)
-           VALUES (?, ?, ?, ?)
+           INSERT INTO episodes (url, video_id, title, raw_transcript, domain)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (url) DO UPDATE SET
              title = excluded.title,
              raw_transcript = excluded.raw_transcript,
              fetched_at = datetime('now')
            RETURNING id
            """,
-           [url, video_id, title, raw_transcript]
+           [url, video_id, title, raw_transcript, domain]
          ) do
       {:ok, %{rows: [[id]]}} -> {:ok, id}
+      {:error, "UNIQUE constraint failed: " <> _} -> {:error, :already_exists}
       {:error, _} = err -> err
     end
   end
@@ -46,19 +47,22 @@ defmodule Synthesis.Store do
 
   # --- Zettels ---
 
-  @spec insert_zettel(integer(), map()) :: {:ok, integer()} | {:error, term()}
-  def insert_zettel(episode_id, %{title: title, content: content, tags: tags}) do
+  def insert_zettel(
+        episode_id,
+        %{title: title, question: question, content: content, tags: tags},
+        domain \\ "general"
+      ) do
     tags_text = Enum.join(tags, ", ")
-    insight = "#{title}\n#{content}"
 
-    case Repo.query(
-           """
-           INSERT INTO zettels (episode_id, insight, tags)
-           VALUES (?, ?, ?)
-           RETURNING id
-           """,
-           [episode_id, insight, tags_text]
-         ) do
+    Repo.query(
+      """
+      INSERT INTO zettels (episode_id, question, insight, tags, domain)
+      VALUES (?, ?, ?, ?, ?)
+      RETURNING id
+      """,
+      [episode_id, question, "#{title}\n#{content}", tags_text, domain]
+    )
+    |> case do
       {:ok, %{rows: [[id]]}} -> {:ok, id}
       {:error, _} = err -> err
     end
@@ -80,23 +84,89 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec all_episodes_with_zettels(String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  def all_episodes_with_zettels(domain \\ nil) do
+    case Repo.query(
+           """
+             SELECT e.id, e.title, e.url, e.fetched_at,
+                    z.id, z.insight, z.tags
+             FROM episodes e
+             LEFT JOIN zettels z ON z.episode_id = e.id
+             WHERE (? IS NULL OR e.domain = ?)
+             ORDER BY e.fetched_at DESC, z.id ASC
+           """,
+           [domain, domain]
+         ) do
+      {:ok, %{rows: rows}} ->
+        {episodes, current_episode} =
+          Enum.reduce(rows, {[], nil}, fn
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, nil} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
+
+              {episodes,
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
+
+            [eid, _title, _url, _fetched_at, zid, insight, tags],
+            {episodes, %{id: eid} = current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  current_episode.zettels
+                else
+                  current_episode.zettels ++ [%{insight: insight, tags: tags}]
+                end
+
+              {episodes, %{current_episode | zettels: zettels}}
+
+            [eid, title, url, fetched_at, zid, insight, tags], {episodes, current_episode} ->
+              zettels =
+                if is_nil(zid) do
+                  []
+                else
+                  [%{insight: insight, tags: tags}]
+                end
+
+              {[current_episode | episodes],
+               %{id: eid, title: title, url: url, fetched_at: fetched_at, zettels: zettels}}
+          end)
+
+        episodes =
+          case current_episode do
+            nil -> Enum.reverse(episodes)
+            episode -> Enum.reverse([episode | episodes])
+          end
+
+        {:ok, episodes}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
   # --- Embeddings ---
 
   @spec insert_embedding(integer(), [float()]) :: :ok | {:error, term()}
   def insert_embedding(zettel_id, vector) when is_list(vector) do
-    case Repo.query(
-           "INSERT OR REPLACE INTO embeddings (zettel_id, vector) VALUES (?, ?)",
-           [zettel_id, Jason.encode!(vector)]
-         ) do
-      {:ok, _} -> :ok
-      {:error, _} = err -> err
+    with {:ok, encoded} <- Jason.encode(vector),
+         {:ok, _} <-
+           Repo.query(
+             "INSERT OR REPLACE INTO embeddings (zettel_id, vector) VALUES (?, ?)",
+             [zettel_id, encoded]
+           ) do
+      :ok
+    else
+      {:error, reason} -> {:error, "Failed to insert embedding: #{inspect(reason)}"}
     end
   end
 
   # --- Search ---
 
-  @spec search_keyword(String.t()) :: {:ok, [map()]} | {:error, term()}
-  def search_keyword(query) do
+  @spec search_keyword(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  def search_keyword(query, domain \\ nil) do
     term = "%#{query}%"
 
     case Repo.query(
@@ -105,17 +175,21 @@ defmodule Synthesis.Store do
            FROM zettels z
            JOIN episodes e ON e.id = z.episode_id
            WHERE z.insight LIKE ?
+             AND (? IS NULL OR z.domain = ?)
            ORDER BY z.created_at DESC
            """,
-           [term]
+           [term, domain, domain]
          ) do
       {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &row_to_zettel/1)}
       {:error, _} = err -> err
     end
   end
 
-  @spec search_semantic(list(), integer()) :: {:ok, [map()]} | {:error, term()}
-  def search_semantic(vector, limit \\ 10) when is_list(vector) do
+  @spec search_semantic([float()], String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  def search_semantic(query_vector, domain \\ nil) do
+    limit = Application.get_env(:synthesis, :search_limit, 10)
+    vector = query_vector
+
     case Repo.query(
            """
            SELECT z.id, z.insight, z.tags, e.title, e.url, distance
@@ -124,9 +198,10 @@ defmodule Synthesis.Store do
            JOIN episodes e ON e.id = z.episode_id
            WHERE embeddings.vector MATCH ?
              AND k = ?
+             AND (? IS NULL OR z.domain = ?)
            ORDER BY distance
            """,
-           [Jason.encode!(vector), limit]
+           [Jason.encode!(vector), limit, domain, domain]
          ) do
       {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &row_to_zettel_with_distance/1)}
       {:error, _} = err -> err

@@ -1,0 +1,2 @@
+ALTER TABLE episodes ADD COLUMN domain TEXT NOT NULL DEFAULT 'general';
+ALTER TABLE zettels ADD COLUMN domain TEXT NOT NULL DEFAULT 'general';
