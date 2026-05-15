@@ -110,67 +110,69 @@ defmodule Synthesis.Writer do
 
   @spec write_index() :: write_result()
   def write_index do
-    case Synthesis.Store.all_episodes_with_zettels() do
-      {:ok, episodes} ->
-        base_dir = Application.fetch_env!(:synthesis, :output_dir)
-        :ok = File.mkdir_p(base_dir)
+    base_dir = Application.fetch_env!(:synthesis, :output_dir)
 
-        all_tags =
-          episodes
-          |> Enum.flat_map(& &1.zettels)
-          |> Enum.flat_map(fn z -> String.split(z.tags || "", ", ", trim: true) end)
-          |> Enum.frequencies()
-          |> Enum.sort_by(fn {_, count} -> -count end)
-          |> Enum.map(fn {tag, count} -> "#{tag} (#{count})" end)
-          |> Enum.join(", ")
+    with {:ok, episodes} <- Synthesis.Store.all_episodes_with_zettels(),
+         :ok <- File.mkdir_p(base_dir) do
+      all_tags =
+        episodes
+        |> Enum.flat_map(& &1.zettels)
+        |> Enum.flat_map(fn z -> String.split(z.tags || "", ", ", trim: true) end)
+        |> Enum.frequencies()
+        |> Enum.sort_by(fn {_, count} -> -count end)
+        |> Enum.map(fn {tag, count} -> "#{tag} (#{count})" end)
+        |> Enum.join(", ")
 
-        total_zettels = episodes |> Enum.map(&length(&1.zettels)) |> Enum.sum()
+      total_zettels = episodes |> Enum.map(&length(&1.zettels)) |> Enum.sum()
 
-        header = """
-        # Synthesis Index
+      header = """
+      # Synthesis Index
 
-        - **Episodes**: #{length(episodes)}
-        - **Insights**: #{total_zettels}
-        - **Tags**: #{all_tags}
+      - **Episodes**: #{length(episodes)}
+      - **Insights**: #{total_zettels}
+      - **Tags**: #{all_tags}
 
-        ---
+      ---
 
-        """
+      """
 
-        body =
-          Enum.map_join(episodes, "\n\n", fn ep ->
-            ep_tags =
-              ep.zettels
-              |> Enum.flat_map(fn z -> String.split(z.tags || "", ", ", trim: true) end)
-              |> Enum.uniq()
-              |> Enum.join(", ")
+      body =
+        Enum.map_join(episodes, "\n\n", fn ep ->
+          ep_tags =
+            ep.zettels
+            |> Enum.flat_map(fn z -> String.split(z.tags || "", ", ", trim: true) end)
+            |> Enum.uniq()
+            |> Enum.join(", ")
 
-            insight_lines =
-              Enum.map_join(ep.zettels, "\n", fn z ->
-                [first_line | _] = String.split(z.insight, "\n", parts: 2)
+          insight_lines =
+            Enum.map_join(ep.zettels, "\n", fn z ->
+              [first_line | _] = String.split(z.insight, "\n", parts: 2)
 
-                content =
-                  z.insight
-                  |> String.split("\n")
-                  |> Enum.drop(1)
-                  |> Enum.join(" ")
-                  |> String.slice(0, 100)
+              content =
+                z.insight
+                |> String.split("\n")
+                |> Enum.drop(1)
+                |> Enum.join(" ")
+                |> String.slice(0, 100)
 
-                "  - **#{first_line}** — #{content}"
-              end)
+              "  - **#{first_line}** — #{content}"
+            end)
 
-            """
-            ## #{ep.title || ep.url}
-            - **URL**: #{ep.url}
-            - **Added**: #{ep.fetched_at}
-            - **Tags**: #{ep_tags}
-            - **Insights** (#{length(ep.zettels)}):
-            #{insight_lines}
-            """
-          end)
+          """
+          ## #{ep.title || ep.url}
+          - **URL**: #{ep.url}
+          - **Added**: #{ep.fetched_at}
+          - **Tags**: #{ep_tags}
+          - **Insights** (#{length(ep.zettels)}):
+          #{insight_lines}
+          """
+        end)
 
-        File.write(Path.join(base_dir, "index.md"), header <> body)
-
+      case File.write(Path.join(base_dir, "index.md"), header <> body) do
+        :ok -> :ok
+        {:error, reason} -> {:error, "Index generation failed: #{inspect(reason)}"}
+      end
+    else
       {:error, reason} ->
         {:error, "Index generation failed: #{inspect(reason)}"}
     end
