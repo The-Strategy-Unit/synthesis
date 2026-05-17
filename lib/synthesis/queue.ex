@@ -18,6 +18,7 @@ defmodule Synthesis.Queue do
           url: String.t(),
           title: String.t() | nil,
           transcript: String.t(),
+          domain: String.t(),
           status: job_status(),
           error: String.t() | nil,
           queued_at: DateTime.t(),
@@ -35,9 +36,9 @@ defmodule Synthesis.Queue do
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, :ok, [{:name, __MODULE__} | opts])
 
-  @spec enqueue(String.t(), String.t(), String.t() | nil, String.t()) :: :ok
-  def enqueue(video_id, url, title, transcript) do
-    GenServer.cast(__MODULE__, {:enqueue, video_id, url, title, transcript})
+  @spec enqueue(String.t(), String.t(), String.t() | nil, String.t(), String.t()) :: :ok
+  def enqueue(video_id, url, title, transcript, domain \\ "general") do
+    GenServer.cast(__MODULE__, {:enqueue, video_id, url, title, transcript, domain})
   end
 
   @spec jobs() :: %{String.t() => job()}
@@ -79,12 +80,13 @@ defmodule Synthesis.Queue do
   def init(:ok), do: {:ok, %{queue: :queue.new(), jobs: %{}, processing: false}}
 
   @impl true
-  def handle_cast({:enqueue, video_id, url, title, transcript}, state) do
+  def handle_cast({:enqueue, video_id, url, title, transcript, domain}, state) do
     job = %{
       video_id: video_id,
       url: url,
       title: title,
       transcript: transcript,
+      domain: domain,
       status: :pending,
       error: nil,
       queued_at: DateTime.utc_now(),
@@ -162,6 +164,13 @@ defmodule Synthesis.Queue do
           |> put_in([:jobs, video_id, :status], :done)
           |> put_in([:jobs, video_id, :finished_at], DateTime.utc_now())
 
+        {:error, :already_exists} ->
+          Logger.info("⏭  #{video_id} already exists, skipping")
+
+          state
+          |> put_in([:jobs, video_id, :status], :done)
+          |> put_in([:jobs, video_id, :finished_at], DateTime.utc_now())
+
         {:error, reason} ->
           Logger.warning("✗ #{video_id} failed: #{reason}")
 
@@ -181,22 +190,28 @@ defmodule Synthesis.Queue do
 
   # --- Pipeline ---
 
-  defp run_pipeline(%{video_id: video_id, url: url, title: title, transcript: transcript}) do
-    with {:ok, episode_id} <- Store.insert_episode(url, video_id, title, transcript),
+  defp run_pipeline(%{
+         video_id: video_id,
+         url: url,
+         title: title,
+         transcript: transcript,
+         domain: domain
+       }) do
+    with {:ok, episode_id} <- Store.insert_episode(url, video_id, title, transcript, domain),
          {:ok, %{insights: insights, summary: summary}} <- Extractor.extract(transcript),
-         {:ok, zettel_ids} <- insert_zettels(episode_id, insights),
+         {:ok, zettel_ids} <- insert_zettels(episode_id, insights, domain),
          :ok <- insert_links(zettel_ids, insights),
-         :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}),
+         :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}, domain),
          :ok <- insert_embeddings(zettel_ids, insights),
-         :ok <- Writer.write_index() do
+         :ok <- Writer.write_index(domain) do
       :ok
     end
   end
 
-  defp insert_zettels(episode_id, insights) do
+  defp insert_zettels(episode_id, insights, domain) do
     results =
       Enum.map(insights, fn insight ->
-        Store.insert_zettel(episode_id, insight)
+        Store.insert_zettel(episode_id, insight, domain)
       end)
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
@@ -234,7 +249,10 @@ defmodule Synthesis.Queue do
       insights
       |> Enum.zip(zettel_ids)
       |> Enum.map(fn {insight, zettel_id} ->
-        text = "#{insight.title}\n#{insight.content}"
+        text =
+          if insight.question != "",
+            do: insight.question,
+            else: "#{insight.title}\n#{insight.content}"
 
         with {:ok, vector} <- Embedder.embed_document(text) do
           Store.insert_embedding(zettel_id, vector)

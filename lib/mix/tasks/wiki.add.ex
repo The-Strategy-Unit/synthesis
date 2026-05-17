@@ -4,7 +4,16 @@ defmodule Mix.Tasks.Wiki.Add do
   alias Synthesis.Fetcher
 
   @impl Mix.Task
-  def run([url]) do
+  def run(args) do
+    {opts, positional, _} = OptionParser.parse(args, strict: [domain: :string])
+    domain = Keyword.get(opts, :domain, "general")
+
+    url =
+      case positional do
+        [url] -> url
+        _ -> Mix.raise("Usage: mix wiki.add <youtube_url> [--domain <name>]")
+      end
+
     Mix.Task.run("app.start")
 
     urls =
@@ -21,8 +30,6 @@ defmodule Mix.Tasks.Wiki.Add do
         [url]
       end
 
-    Synthesis.process(urls)
+    Synthesis.process(urls, domain)
   end
-
-  def run(_), do: Mix.raise("Usage: mix wiki.add <youtube_url>")
 end
