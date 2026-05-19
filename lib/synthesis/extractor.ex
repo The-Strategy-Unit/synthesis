@@ -171,9 +171,6 @@ defmodule Synthesis.Extractor do
 
     {
       "summary": "Max 3 paragraph overview of the main discussion",
-      "measurements": [
-        {"value": "460", "unit": "mm", "context": "width of the intake manifold"}
-      ],
       "insights": [
         {
           "title": "Short title, max 6 words",
