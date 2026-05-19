@@ -5,27 +5,36 @@ defmodule Mix.Tasks.Wiki.Search do
   alias Synthesis.{Embedder, Store}
 
   @impl Mix.Task
-  def run([query]) do
+  def run(args) do
+    {opts, positional, _} =
+      OptionParser.parse(args, strict: [domain: :string, all_domains: :boolean])
+
+    query =
+      case positional do
+        [query] -> query
+        _ -> Mix.raise("Usage: mix wiki.search <query> [--domain <name>] [--all-domains]")
+      end
+
+    domain =
+      cond do
+        Keyword.get(opts, :all_domains, false) -> nil
+        true -> Keyword.get(opts, :domain, "general")
+      end
+
     Mix.Task.run("app.start")
 
     IO.puts("\n=== Keyword Results ===\n")
-    keyword_results = Store.search_keyword(query)
 
-    case keyword_results do
-      {:ok, []} ->
-        IO.puts("No keyword matches found.")
-
-      {:ok, results} ->
-        results |> Enum.with_index(1) |> Enum.each(&print_keyword_result/1)
-
-      {:error, reason} ->
-        IO.warn("Keyword search failed: #{inspect(reason)}")
+    case Store.search_keyword(query, domain) do
+      {:ok, []} -> IO.puts("No keyword matches found.")
+      {:ok, results} -> results |> Enum.with_index(1) |> Enum.each(&print_keyword_result/1)
+      {:error, reason} -> IO.warn("Keyword search failed: #{inspect(reason)}")
     end
 
     IO.puts("\n=== Semantic Results ===\n")
 
     with {:ok, vector} <- Embedder.embed_query(query),
-         {:ok, results} <- Store.search_semantic(vector) do
+         {:ok, results} <- Store.search_semantic(vector, domain) do
       case results do
         [] -> IO.puts("No semantic matches found.")
         _ -> results |> Enum.with_index(1) |> Enum.each(&print_semantic_result/1)
@@ -34,8 +43,6 @@ defmodule Mix.Tasks.Wiki.Search do
       {:error, reason} -> IO.warn("Semantic search failed: #{inspect(reason)}")
     end
   end
-
-  def run(_), do: Mix.raise("Usage: mix wiki.search <query>")
 
   defp print_keyword_result({result, idx}) do
     IO.puts("[#{idx}] #{result.insight}")
@@ -55,9 +62,6 @@ defmodule Mix.Tasks.Wiki.Search do
   end
 
   defp relevance_bar(distance) do
-    # Cosine distance is in [0, 2]: defined as (1 - cosine_similarity),
-    # where cosine similarity ranges from -1 (opposite) to +1 (identical).
-    # Normalise to [0, 1] by dividing by 2 before converting to a percentage.
     score = round((1 - distance / 2) * 10)
     score = max(0, min(10, score))
     filled = String.duplicate("█", score)

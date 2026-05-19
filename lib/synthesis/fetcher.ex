@@ -175,4 +175,35 @@ defmodule Synthesis.Fetcher do
       {:error, reason} -> IO.warn("Cleanup failed for #{video_id}: #{inspect(reason)}")
     end
   end
+
+  @spec expand_playlist(url()) :: {:ok, [url()]} | {:error, String.t()}
+  def expand_playlist(url) do
+    case System.cmd(yt_dlp_cmd(), ["--flat-playlist", "-j", url], stderr_to_stdout: true) do
+      {output, 0} ->
+        urls =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.flat_map(fn line ->
+            case Jason.decode(line) do
+              {:ok, %{"url" => video_url}} -> [video_url]
+              _ -> []
+            end
+          end)
+
+        {:ok, urls}
+
+      {error, _} ->
+        {:error, "yt-dlp playlist expansion failed: #{error}"}
+    end
+  end
+
+  @spec playlist?(url()) :: boolean()
+  def playlist?(url) do
+    uri = URI.parse(url)
+
+    case uri.query do
+      nil -> false
+      query -> query |> URI.decode_query() |> Map.has_key?("list")
+    end
+  end
 end
