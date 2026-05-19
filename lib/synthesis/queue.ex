@@ -246,10 +246,15 @@ defmodule Synthesis.Queue do
   end
 
   defp insert_embeddings(zettel_ids, insights) do
+    total = length(insights)
+
     results =
       insights
       |> Enum.zip(zettel_ids)
-      |> Enum.map(fn {insight, zettel_id} ->
+      |> Enum.with_index(1)
+      |> Enum.map(fn {{insight, zettel_id}, idx} ->
+        Synthesis.Progress.render(idx, total, "Embedding")
+
         text =
           if is_binary(insight.question) and insight.question != "",
             do: insight.question,
@@ -261,12 +266,7 @@ defmodule Synthesis.Queue do
       end)
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
-
-    if errors == [] do
-      :ok
-    else
-      {:error, "Failed to insert embeddings: #{inspect(errors)}"}
-    end
+    if errors == [], do: :ok, else: {:error, "Failed to insert embeddings: #{inspect(errors)}"}
   end
 
   # --- Helpers ---

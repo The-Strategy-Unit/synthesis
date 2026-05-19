@@ -12,8 +12,6 @@ defmodule Synthesis.Extractor do
 
   require Logger
 
-  alias Synthesis.Chunker
-
   @type transcript :: String.t()
   @type insight :: %{
           title: String.t(),
@@ -27,31 +25,9 @@ defmodule Synthesis.Extractor do
 
   @spec extract(transcript()) :: extract_result()
   def extract(transcript) do
-    chunks = Chunker.chunk(transcript)
-    Logger.info("Extracting #{length(chunks)} chunk(s)...")
-
-    max_concurrency = Application.get_env(:synthesis, :chunk_concurrency, 2)
     max_retries = Application.get_env(:synthesis, :max_retries, 3)
-
-    results =
-      Task.async_stream(
-        chunks,
-        fn chunk -> do_extract(chunk, 0, max_retries) end,
-        max_concurrency: max_concurrency,
-        timeout: :infinity,
-        ordered: false
-      )
-      |> Enum.to_list()
-
-    errors = for {:ok, {:error, reason}} <- results, do: reason
-    if errors != [], do: Logger.warning("Chunk extraction errors: #{inspect(errors)}")
-
-    extractions = for {:ok, {:ok, extraction}} <- results, do: extraction
-
-    case extractions do
-      [] -> {:error, "All chunks failed extraction"}
-      _ -> {:ok, merge(extractions)}
-    end
+    Logger.info("Extracting insights from transcript...")
+    do_extract(transcript, 0, max_retries)
   end
 
   # --- Private ---
@@ -113,23 +89,6 @@ defmodule Synthesis.Extractor do
     Regex.replace(~r/<think>.*?<\/think>/s, response, "") |> String.trim()
   end
 
-  # Merge multiple chunk extractions into one.
-  # Summaries are concatenated; insights are deduplicated by downcased title.
-  @spec merge([extraction()]) :: extraction()
-  defp merge(extractions) do
-    summary =
-      extractions
-      |> Enum.map(& &1.summary)
-      |> Enum.join("\n\n")
-
-    insights =
-      extractions
-      |> Enum.flat_map(& &1.insights)
-      |> Enum.uniq_by(&String.downcase(&1.title))
-
-    %{summary: summary, insights: insights}
-  end
-
   @spec validate(map()) :: extract_result()
   def validate(%{"summary" => summary, "insights" => insights})
       when is_binary(summary) and is_list(insights) do
@@ -155,7 +114,7 @@ defmodule Synthesis.Extractor do
   defp build_prompt(transcript) do
     """
     # Role
-    You are an expert knowledge engineer and scientific curator.
+    You are an expert British knowledge engineer and scientific curator.
     Your job is to carefully study a document and distil every important piece of information a reader should learn from it.
 
     # Task
