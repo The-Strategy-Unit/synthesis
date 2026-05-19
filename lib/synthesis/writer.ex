@@ -185,23 +185,27 @@ defmodule Synthesis.Writer do
   end
 
   defp write_top_level_index(base_dir) do
-    domains =
-      base_dir
-      |> File.ls!()
-      |> Enum.filter(fn entry -> File.dir?(Path.join(base_dir, entry)) end)
-      |> Enum.sort()
+    with {:ok, entries} <- File.ls(base_dir) do
+      domains =
+        entries
+        |> Enum.filter(fn entry -> File.dir?(Path.join(base_dir, entry)) end)
+        |> Enum.sort()
 
-    links = Enum.map_join(domains, "\n", fn d -> "- [[#{d}/index|#{d}]]" end)
+      links = Enum.map_join(domains, "\n", fn d -> "- [[#{d}/index|#{d}]]" end)
 
-    content = """
-    # Synthesis — Knowledge Base
+      content = """
+      # Synthesis — Knowledge Base
 
-    #{links}
-    """
+      #{links}
+      """
 
-    case File.write(Path.join(base_dir, "index.md"), content) do
-      :ok -> :ok
-      {:error, reason} -> {:error, "Top-level index failed: #{inspect(reason)}"}
+      case File.write(Path.join(base_dir, "index.md"), content) do
+        :ok -> :ok
+        {:error, reason} -> {:error, "Top-level index failed: #{inspect(reason)}"}
+      end
+    else
+      {:error, reason} ->
+        {:error, "Top-level index failed to list domains: #{:file.format_error(reason)}"}
     end
   end
 end
