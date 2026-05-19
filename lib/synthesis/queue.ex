@@ -36,6 +36,7 @@ defmodule Synthesis.Queue do
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, :ok, [{:name, __MODULE__} | opts])
 
+  @spec enqueue(String.t(), String.t(), String.t() | nil, String.t()) :: :ok
   @spec enqueue(String.t(), String.t(), String.t() | nil, String.t(), String.t()) :: :ok
   def enqueue(video_id, url, title, transcript, domain \\ "general") do
     GenServer.cast(__MODULE__, {:enqueue, video_id, url, title, transcript, domain})
