@@ -31,9 +31,6 @@ defmodule Synthesis.Chunker do
     |> Enum.reject(&(&1 == ""))
   end
 
-  @spec estimate_tokens(String.t()) :: non_neg_integer()
-  defp estimate_tokens(text), do: div(byte_size(text), 4)
-
   @spec build_chunks([String.t()], non_neg_integer(), non_neg_integer()) :: [String.t()]
   defp build_chunks(sentences, chunk_size, overlap) do
     do_build(sentences, chunk_size, overlap, [], 0, [])
