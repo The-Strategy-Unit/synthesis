@@ -36,40 +36,55 @@ defmodule Synthesis.Chunker do
 
   @spec build_chunks([String.t()], non_neg_integer(), non_neg_integer()) :: [String.t()]
   defp build_chunks(sentences, chunk_size, overlap) do
-    do_build(sentences, chunk_size, overlap, [], [])
+    do_build(sentences, chunk_size, overlap, [], 0, [])
   end
 
-  defp do_build([], _chunk_size, _overlap, current, acc) do
-    case current do
+  defp do_build([], _chunk_size, _overlap, current_rev, _current_bytes, acc) do
+    case current_rev do
       [] -> Enum.reverse(acc)
-      _ -> Enum.reverse([join(current) | acc])
+      _ -> Enum.reverse([join_reversed(current_rev) | acc])
     end
   end
 
-  defp do_build([sentence | rest], chunk_size, overlap, current, acc) do
-    candidate = current ++ [sentence]
+  defp do_build([sentence | rest], chunk_size, overlap, current_rev, current_bytes, acc) do
+    added_bytes = sentence_joined_bytes(sentence, current_rev == [])
+    candidate_rev = [sentence | current_rev]
+    candidate_bytes = current_bytes + added_bytes
 
-    if estimate_tokens(join(candidate)) >= chunk_size do
-      chunk = join(candidate)
-      tail = overlap_sentences(candidate, overlap)
-      do_build(rest, chunk_size, overlap, tail, [chunk | acc])
+    if estimate_tokens_from_bytes(candidate_bytes) >= chunk_size do
+      chunk = join_reversed(candidate_rev)
+      {tail_rev, tail_bytes} = overlap_sentences(candidate_rev, overlap)
+      do_build(rest, chunk_size, overlap, tail_rev, tail_bytes, [chunk | acc])
     else
-      do_build(rest, chunk_size, overlap, candidate, acc)
+      do_build(rest, chunk_size, overlap, candidate_rev, candidate_bytes, acc)
     end
   end
 
   # Take sentences from the end of the current chunk to seed the next one,
   # accumulating until we reach the overlap token budget.
-  @spec overlap_sentences([String.t()], non_neg_integer()) :: [String.t()]
-  defp overlap_sentences(sentences, overlap_tokens) do
-    sentences
-    |> Enum.reverse()
-    |> Enum.reduce_while([], fn s, acc ->
-      next = [s | acc]
-      if estimate_tokens(join(next)) >= overlap_tokens, do: {:halt, next}, else: {:cont, next}
+  @spec overlap_sentences([String.t()], non_neg_integer()) :: {[String.t()], non_neg_integer()}
+  defp overlap_sentences(sentences_rev, overlap_tokens) do
+    sentences_rev
+    |> Enum.reduce_while({[], 0}, fn s, {tail_in_order, bytes} ->
+      added_bytes = sentence_joined_bytes(s, tail_in_order == [])
+      next_tail_in_order = [s | tail_in_order]
+      next_bytes = bytes + added_bytes
+
+      if estimate_tokens_from_bytes(next_bytes) >= overlap_tokens do
+        {:halt, {Enum.reverse(next_tail_in_order), next_bytes}}
+      else
+        {:cont, {next_tail_in_order, next_bytes}}
+      end
     end)
   end
 
-  @spec join([String.t()]) :: String.t()
-  defp join(sentences), do: Enum.join(sentences, " ")
+  @spec estimate_tokens_from_bytes(non_neg_integer()) :: non_neg_integer()
+  defp estimate_tokens_from_bytes(bytes), do: div(bytes, 4)
+
+  @spec sentence_joined_bytes(String.t(), boolean()) :: non_neg_integer()
+  defp sentence_joined_bytes(sentence, true), do: byte_size(sentence)
+  defp sentence_joined_bytes(sentence, false), do: byte_size(sentence) + 1
+
+  @spec join_reversed([String.t()]) :: String.t()
+  defp join_reversed(sentences_rev), do: sentences_rev |> Enum.reverse() |> Enum.join(" ")
 end
