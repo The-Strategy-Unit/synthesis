@@ -250,7 +250,7 @@ defmodule Synthesis.Queue do
       |> Enum.zip(zettel_ids)
       |> Enum.map(fn {insight, zettel_id} ->
         text =
-          if insight.question != "",
+          if is_binary(insight.question) and insight.question != "",
             do: insight.question,
             else: "#{insight.title}\n#{insight.content}"
 
