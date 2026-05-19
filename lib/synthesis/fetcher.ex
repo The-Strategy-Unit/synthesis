@@ -200,6 +200,10 @@ defmodule Synthesis.Fetcher do
   @spec playlist?(url()) :: boolean()
   def playlist?(url) do
     uri = URI.parse(url)
-    uri.query && URI.decode_query(uri.query) |> Map.has_key?("list")
+
+    case uri.query do
+      nil -> false
+      query -> query |> URI.decode_query() |> Map.has_key?("list")
+    end
   end
 end
