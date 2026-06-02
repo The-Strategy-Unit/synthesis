@@ -12,6 +12,8 @@ config :synthesis,
   overlap_tokens: 200,
   # keep low - Ollama is single-threaded per request
   chunk_concurrency: 2,
+  # transcripts shorter than this (tokens) skip chunking
+  single_chunk_threshold: 2500,
   output_dir: "output",
   db_path: "synthesis.db"
 
