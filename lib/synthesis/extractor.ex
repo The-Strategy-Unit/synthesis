@@ -6,35 +6,33 @@ defmodule Synthesis.Extractor do
   @behaviour Synthesis.ExtractorBehaviour
   @moduledoc """
   Sends transcripts to Ollama and extracts structured insights using JSON schema mode.
-  Long transcripts are split into chunks via Synthesis.Chunker, processed in parallel,
-  then merged. Retries on HTTP or validation failure with exponential backoff.
+  Short transcripts are handled in a single call. Long transcripts are split into
+  chunks via Synthesis.Chunker, processed in parallel (bounded by chunk_concurrency),
+  deduplicated by normalised title, then merged into a final result.
   """
 
   require Logger
 
-  @type transcript :: String.t()
-  @type insight :: %{
-          title: String.t(),
-          question: String.t(),
-          content: String.t(),
-          tags: [String.t()],
-          related: [String.t()]
-        }
-  @type extraction :: %{summary: String.t(), insights: [insight()]}
-  @type extract_result :: {:ok, extraction()} | {:error, String.t()}
+  # --- Public ---
 
-  @spec extract(transcript()) :: extract_result()
+  @spec extract(String.t()) :: {:ok, map()} | {:error, String.t()}
   def extract(transcript) do
-    max_retries = Application.get_env(:synthesis, :max_retries, 3)
-    Logger.info("Extracting insights from transcript...")
-    do_extract(transcript, 0, max_retries)
+    threshold = Application.get_env(:synthesis, :single_chunk_threshold, 2500)
+    estimated_tokens = div(byte_size(transcript), 4)
+
+    if estimated_tokens <= threshold do
+      Logger.info("Short transcript (#{estimated_tokens} tokens) — single-call extraction.")
+      do_extract(transcript, 0, Application.get_env(:synthesis, :max_retries, 3))
+    else
+      Logger.info("Long transcript (#{estimated_tokens} tokens) — chunked extraction.")
+      chunked_extract(transcript)
+    end
   end
 
-  # --- Private ---
+  # --- Single-call path (unchanged) ---
 
-  defp do_extract(_transcript, attempt, max) when attempt >= max do
-    {:error, "Extraction failed after #{max} attempts"}
-  end
+  defp do_extract(_transcript, attempt, max) when attempt >= max,
+    do: {:error, "Extraction failed after #{max} attempts"}
 
   defp do_extract(transcript, attempt, max) do
     with {:ok, body} <- call_ollama(transcript),
@@ -48,6 +46,63 @@ defmodule Synthesis.Extractor do
     end
   end
 
+  # --- Chunked map-reduce path ---
+
+  defp chunked_extract(transcript) do
+    concurrency = Application.get_env(:synthesis, :chunk_concurrency, 2)
+    max_retries = Application.get_env(:synthesis, :max_retries, 3)
+    chunks = Synthesis.Chunker.chunk(transcript)
+
+    Logger.info("Split into #{length(chunks)} chunks, concurrency: #{concurrency}")
+
+    results =
+      chunks
+      |> Task.async_stream(
+        fn chunk -> do_extract(chunk, 0, max_retries) end,
+        max_concurrency: concurrency,
+        timeout: Application.get_env(:synthesis, :receive_timeout, 1_200_000)
+      )
+      |> Enum.reduce_while([], fn
+        {:ok, {:ok, result}}, acc -> {:cont, [result | acc]}
+        {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
+        {:exit, reason}, _acc -> {:halt, {:error, "Chunk task crashed: #{inspect(reason)}"}}
+      end)
+
+    case results do
+      {:error, _} = err -> err
+      chunk_results -> {:ok, merge_results(Enum.reverse(chunk_results))}
+    end
+  end
+
+  defp merge_results(results) do
+    all_insights =
+      results
+      |> Enum.flat_map(& &1.insights)
+      |> deduplicate_insights()
+
+    summary =
+      results
+      |> Enum.map(& &1.summary)
+      |> Enum.join(" ")
+
+    %{summary: summary, insights: all_insights}
+  end
+
+  # Normalise title → downcase, strip punctuation, collapse whitespace.
+  # Keep the first occurrence of any duplicate.
+  defp deduplicate_insights(insights) do
+    insights
+    |> Enum.uniq_by(fn %{title: t} ->
+      t
+      |> String.downcase()
+      |> String.replace(~r/[^\w\s]/, "")
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
+    end)
+  end
+
+  # --- Ollama call + validation (unchanged) ---
+
   defp call_ollama(transcript) do
     url = Application.fetch_env!(:synthesis, :ollama_url)
     model = Application.fetch_env!(:synthesis, :ollama_model)
@@ -60,21 +115,20 @@ defmodule Synthesis.Extractor do
              prompt: build_prompt(transcript),
              stream: false,
              format: "json",
-             options: %{
-               temperature: temperature,
-               num_predict: 4096
-             }
+             options: %{temperature: temperature, num_predict: 4096}
            },
            receive_timeout: receive_timeout
          ) do
       {:ok, %{status: 200, body: body}} ->
-        response = Map.get(body, "response", "")
-        thinking = Map.get(body, "thinking", "")
-        text = if response == "", do: thinking, else: response
+        text =
+          Map.get(body, "response", "")
+          |> then(fn r ->
+            if r == "", do: Map.get(body, "thinking", ""), else: r
+          end)
 
         case text |> strip_thinking() |> Jason.decode() do
           {:ok, parsed} -> {:ok, parsed}
-          {:error, reason} -> {:error, "JSON decode failed: #{inspect(reason)}"}
+          {:error, r} -> {:error, "JSON decode failed: #{inspect(r)}"}
         end
 
       {:ok, %{status: status}} ->
@@ -85,18 +139,12 @@ defmodule Synthesis.Extractor do
     end
   end
 
-  defp strip_thinking(response) do
-    Regex.replace(~r/<think>.*?<\/think>/s, response, "") |> String.trim()
-  end
+  defp strip_thinking(response),
+    do: Regex.replace(~r/<think>.*?<\/think>/s, response, "") |> String.trim()
 
-  @spec validate(map()) :: extract_result()
   def validate(%{"summary" => summary, "insights" => insights})
       when is_binary(summary) and is_list(insights) do
-    {:ok,
-     %{
-       summary: summary,
-       insights: Enum.map(insights, &normalise_insight/1)
-     }}
+    {:ok, %{summary: summary, insights: Enum.map(insights, &normalise_insight/1)}}
   end
 
   def validate(_), do: {:error, "Response missing required fields"}
