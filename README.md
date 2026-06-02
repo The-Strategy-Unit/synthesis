@@ -53,7 +53,7 @@ output/            # Generated markdown notes
 See `config/config.exs`. Key settings:
 
 | Setting            | Default                    |
-|------              |------                      |
+|---|---|
 | `ollama_url`       | `http://localhost:11434`   |
 | `ollama_model`     | `qwen3.6:35b`              |
 | `ollama_model_embed` | `qwen3-embedding:8b`     |
@@ -80,13 +80,21 @@ mix wiki.search "<term or phrase>"
 ## Roadmap
 
 - [x] Phase 1 — CLI pipeline
-- [ ] Phase 2 — Web UI (Bandit + Plug, plain HTML)
-- [ ] Phase 3 — Burrito binary distribution
-- [ ] Swappable LLM backend (Azure OpenAI)
-- [ ] Submission queue + curator approval (multi-user)
-- [ ] Role-based access control
-- [ ] Azure hosted deployment
+- [ ] Phase 2 — Multi‑source ingest (PDF, HTML, FHIR)
+- [ ] Phase 3 — Web UI (Bandit + Plug) with drag‑and‑drop upload
+- [ ] Phase 4 — Demo & funding
+  - `mix demo.seed` (synthetic healthcare wiki)
+  - `mix demo.start` (one‑button demo mode)
+  - GitHub Actions CI on every PR
+- [ ] Phase 5 — Healthcare compliance
+  - HIPAA mode (PHI redaction + encryption at rest)
+  - Healthcare FHIR adapter
+  - Documentation & deployment guide
+- [ ] Phase 6 — Release
+  - Burrito binary distribution
+  - Azure hosted deployment
 
+---
 
 ## License
 
