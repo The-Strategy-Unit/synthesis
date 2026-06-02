@@ -48,19 +48,50 @@ priv/migrations/   # SQL schema files
 output/            # Generated markdown notes
 ```
 
+## Usage
+
+### 1. Add content to your wiki
+
+Ingest a YouTube video into a named domain (topic area):
+
+```bash
+mix wiki.add https://www.youtube.com/watch?v=<id> --domain agentic
+mix wiki.add https://www.youtube.com/watch?v=<id> --domain robotics
+```
+
+Omit `--domain` to use the default `general` domain. You can keep enriching
+the same domain over time — each new video adds to the existing pool of Zettels.
+
+### 2. Search within a domain
+
+```bash
+mix wiki.search "memory architecture" --domain agentic
+```
+
+> **Note:** if you omit `--domain`, the search defaults to `general`. Make sure
+> to pass the domain you used when adding content, or use `--all-domains`.
+
+### 3. Search across all domains
+
+Surface cross-domain relationships and unexpected connections:
+
+```bash
+mix wiki.search "energy efficiency" --all-domains
+```
+
 ## Configuration
 
 See `config/config.exs`. Key settings:
 
-| Setting            | Default                    |
-|---|---|
-| `ollama_url`       | `http://localhost:11434`   |
-| `ollama_model`     | `qwen3.6:35b`              |
+| Setting              | Default                  |
+|----------------------|--------------------------|
+| `ollama_url`         | `http://localhost:11434` |
+| `ollama_model`       | `qwen3.6:35b`            |
 | `ollama_model_embed` | `qwen3-embedding:8b`     |
-| `max_retries`      | `3`   (extraction) |
-| `max_fetch_retries`| `3`   (fetcher) |
-| `output_dir`       | `output`                   |
-| `db_path`          | `synthesis.db`             |
+| `max_retries`        | `3` (extraction)         |
+| `max_fetch_retries`  | `3` (fetcher)            |
+| `output_dir`         | `output`                 |
+| `db_path`            | `synthesis.db`           |
 
 ## Distribution
 
