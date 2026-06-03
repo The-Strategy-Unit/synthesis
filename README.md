@@ -86,7 +86,7 @@ See `config/config.exs`. Key settings:
 | Setting              | Default                  |
 |----------------------|--------------------------|
 | `ollama_url`         | `http://localhost:11434` |
-| `ollama_model`       | `qwen3.6:35b`            |
+| `ollama_model`       | `qwen3.6:27b`            |
 | `ollama_model_embed` | `qwen3-embedding:8b`     |
 | `max_retries`        | `3` (extraction)         |
 | `max_fetch_retries`  | `3` (fetcher)            |
