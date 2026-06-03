@@ -60,7 +60,7 @@ defmodule Synthesis.Extractor do
       |> Task.async_stream(
         fn chunk -> do_extract(chunk, 0, max_retries) end,
         max_concurrency: concurrency,
-        timeout: Application.get_env(:synthesis, :receive_timeout, 1_200_000)
+        timeout: :infinity
       )
       |> Enum.reduce_while([], fn
         {:ok, {:ok, result}}, acc -> {:cont, [result | acc]}
