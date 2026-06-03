@@ -1,16 +1,43 @@
 # Synthesis ⚗️
 
-A personal knowledge distillation tool. Feed it YouTube URLs; it extracts
-atomic insights, stores them as a Zettelkasten, and lets you query across
-everything you've ever processed.
+A **privacy-first** knowledge distillation pipeline built for capturing, 
+connecting and searching institutional knowledge, using approved infrastructure. 
+
+Feed it a video, audio or playlist URL to produce a fully-linked,
+semantically-searchable **Zettelkasten** knowledge base, stored locally and
+rendered as Obsidian-compatible markdown.
+
+---
+
+## Why it matters
+
+| Challenge | How Synthesis helps |
+|---|---|
+| Staff watch hours of webinars and conference talks | Transcripts are auto-extracted and distilled into atomic, citable insights |
+| Knowledge is siloed across teams and domains | Every insight is tagged, cross-linked and indexed across the whole base |
+| Sensitive content must stay within approved infrastructure | Runs fully locally via Ollama, or on approved cloud infrastructure |
+| Analysts need to query across a large body of evidence | Dual keyword + **semantic vector search** surfaces the right insight, even without exact term matches |
+| Staff turnover erodes institutional memory | Structured summaries and a growing index outlive any individual contributor |
+
+---
 
 ## What it does
 
-1. Downloads transcripts via `yt-dlp`
-2. Extracts atomic insights and a summary via a local LLM (Ollama)
-3. Stores everything in SQLite with vector embeddings (`sqlite-vec`)
-4. Writes Obsidian-ready markdown notes
-5. Lets you search by keyword or semantic similarity
+1. **Fetches** transcripts from video, audio or full playlist URLs via `yt-dlp`
+2. **Chunks & extracts** - long transcripts are split, processed in parallel,
+   then merged into atomic insights with a 3-paragraph summary, using a local
+   LLM (Ollama) in structured JSON mode
+3. **Embeds** each insight as a vector for semantic search
+4. **Stores** everything in SQLite with `sqlite-vec` - a single portable file
+5. **Writes** Obsidian-ready markdown: one note per insight, fully cross-linked,
+   plus a per-domain index
+6. **Searches** by keyword or natural-language semantic query
+
+Each insight is self-contained and fully explicit - the LLM is instructed to
+name every subject, never use ambiguous pronouns, and cross-reference related
+insights by title.
+
+---
 
 ## Stack
 
@@ -18,12 +45,14 @@ everything you've ever processed.
 |---|---|
 | Runtime | Elixir / OTP |
 | Transcripts | `yt-dlp` (system dep) |
-| LLM | Ollama — default: `qwen3.6:35b` |
-| Embeddings | Ollama — default: `qwen3-embedding:8b` |
+| LLM | Local or approved cloud backend (default: Ollama) |
+| Embeddings | Local or approved cloud backend (default: Ollama) |
 | Database | SQLite + `sqlite-vec` |
 | Notes output | Markdown (Obsidian-compatible) |
-| Distribution | Burrito binary (no BEAM install required) |
-| HTTP client | `Req` (used by LLM & embeddings) |
+| Distribution | Escript binary (no BEAM install required) |
+| HTTP client | `Req` |
+
+---
 
 ## Project structure
 
@@ -32,15 +61,16 @@ lib/synthesis/
   application.ex   # OTP supervisor
   repo.ex          # SQLite GenServer
   migrations.ex    # Raw SQL schema runner
-  fetcher.ex       # yt-dlp wrapper
-  extractor.ex     # Ollama LLM client
+  fetcher.ex       # yt-dlp wrapper (URL validation, playlist expansion)
+  chunker.ex       # Splits long transcripts for parallel extraction
+  extractor.ex     # Ollama LLM client - structured insight extraction
   embedder.ex      # Ollama embeddings client
-  store.ex         # DB reads/writes
-  writer.ex        # Markdown/Obsidian output
-  queue.ex         # Pipeline GenServer
+  store.ex         # DB reads/writes (episodes, zettels, links, embeddings)
+  writer.ex        # Markdown/Obsidian output + index generation
+  queue.ex         # OTP GenServer pipeline (extract → embed → store)
+  progress.ex      # CLI progress rendering
   utils.ex         # Shared helpers
-  synthesis.ex     # Top-level orchestrator
-  cli.ex           # CLI entrypoint (escript main)
+  cli.ex           # CLI entrypoint
 mix/tasks/
   wiki.add.ex      # mix wiki.add <youtube_url>
   wiki.search.ex   # mix wiki.search <query>
@@ -48,82 +78,54 @@ priv/migrations/   # SQL schema files
 output/            # Generated markdown notes
 ```
 
-## Usage
-
-### 1. Add content to your wiki
-
-Ingest a YouTube video into a named domain (topic area):
-
-```bash
-mix wiki.add https://www.youtube.com/watch?v=<id> --domain agentic
-mix wiki.add https://www.youtube.com/watch?v=<id> --domain robotics
-```
-
-Omit `--domain` to use the default `general` domain. You can keep enriching
-the same domain over time — each new video adds to the existing pool of Zettels.
-
-### 2. Search within a domain
-
-```bash
-mix wiki.search "memory architecture" --domain agentic
-```
-
-> **Note:** if you omit `--domain`, the search defaults to `general`. Make sure
-> to pass the domain you used when adding content, or use `--all-domains`.
-
-### 3. Search across all domains
-
-Surface cross-domain relationships and unexpected connections:
-
-```bash
-mix wiki.search "energy efficiency" --all-domains
-```
+---
 
 ## Configuration
 
 See `config/config.exs`. Key settings:
 
-| Setting              | Default                  |
-|----------------------|--------------------------|
-| `ollama_url`         | `http://localhost:11434` |
-| `ollama_model`       | `qwen3.6:35b`            |
-| `ollama_model_embed` | `qwen3-embedding:8b`     |
-| `max_retries`        | `3` (extraction)         |
-| `max_fetch_retries`  | `3` (fetcher)            |
-| `output_dir`         | `output`                 |
-| `db_path`            | `synthesis.db`           |
+| Setting | Default |
+|---|---|
+| `ollama_url` | `http://localhost:11434` |
+| `ollama_model` | `qwen3:35b` |
+| `ollama_model_embed` | `qwen3-embedding:8b` |
+| `max_retries` | `3` (extraction) |
+| `max_fetch_retries` | `3` (fetcher) |
+| `output_dir` | `output` |
+| `db_path` | `synthesis.db` |
 
-## Distribution
+---
 
-The project ships as an escript. Run it directly:
+## Usage
+
+```bash
+# Add a single video
+mix wiki.add https://www.youtube.com/watch?v=<id>
+
+# Add an entire playlist
+mix wiki.add https://www.youtube.com/playlist?list=<id>
+
+# Search (keyword or semantic)
+mix wiki.search "antimicrobial resistance surveillance"
+```
+
+Or via the compiled escript:
 
 ```bash
 ./synthesis https://www.youtube.com/watch?v=<id>
 ```
 
-Or via Mix tasks:
-
-```bash
-mix wiki.add https://www.youtube.com/watch?v=<id>
-mix wiki.search "<term or phrase>"
-```
+---
 
 ## Roadmap
 
-- [x] Phase 1 — CLI pipeline
-- [ ] Phase 2 — Multi‑source ingest (PDF, HTML, FHIR)
-- [ ] Phase 3 — Web UI (Bandit + Plug) with drag‑and‑drop upload
-- [ ] Phase 4 — Demo & funding
-  - `mix demo.seed` (synthetic healthcare wiki)
-  - `mix demo.start` (one‑button demo mode)
-  - GitHub Actions CI on every PR
-- [ ] Phase 5 — Healthcare compliance
-  - HIPAA mode (PHI redaction + encryption at rest)
-  - Healthcare FHIR adapter
-  - Documentation & deployment guide
-- [ ] Phase 6 — Release
-  - Burrito binary distribution
-  - Azure hosted deployment
+- [x] Phase 1 - CLI pipeline (fetch → extract → embed → store → write)
+- [ ] Phase 2 - Web UI (Bandit + Plug, plain HTML)
+- [ ] Phase 3 - Burrito binary distribution
+- [ ] Swappable LLM backend (local or approved cloud, e.g. Azure OpenAI)
+- [ ] Submission queue + curator approval (multi-user)
+- [ ] Role-based access control
+- [ ] Azure hosted deployment
 
 ---
 
