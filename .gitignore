@@ -6,6 +6,7 @@
 
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
+/docs/
 
 # Temporary files, for example, from tests.
 /tmp/
@@ -27,5 +28,5 @@ synthesis-*.tar
 .env
 .env.*
 
-# Local docs (ISSUES, healthcare guide) — not committed to the repo
-/docs/
+# Local deps - download with mix deps.get 
+/deps/
