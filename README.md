@@ -115,11 +115,27 @@ Or via the compiled escript:
 ./synthesis https://www.youtube.com/watch?v=<id>
 ```
 
+
+### Cross-link existing zettels
+
+Once you have zettels across multiple domains, run this once to discover and
+write cross-domain connections:
+
+```bash
+mix wiki.link
+```
+
+This queries the semantic vector index to find related insights across domains,
+and appends a `## Cross-domain` section with Obsidian wikilinks to each zettel.
+It is safe to re-run — files that already have a `## Cross-domain` section are
+skipped.
+
 ---
 
 ## Roadmap
 
 - [x] Phase 1 - CLI pipeline (fetch → extract → embed → store → write)
+    - [x] Automatic cross-domain zettel linking (`mix wiki.link`)
 - [ ] Phase 2 - Web UI (Bandit + Plug, plain HTML)
 - [ ] Phase 3 - Burrito binary distribution
 - [ ] Swappable LLM backend (local or approved cloud, e.g. Azure OpenAI)
