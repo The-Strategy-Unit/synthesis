@@ -4,6 +4,8 @@ defmodule Synthesis.CLI do
   Supports optional --concurrency N flag (falls back to config.exs).
   """
 
+  alias Synthesis.Fetcher
+
   @spec run([String.t()]) :: :ok | {:error, String.t()}
   def run([]) do
     {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
@@ -11,16 +13,28 @@ defmodule Synthesis.CLI do
 
   def run(args) do
     case parse_args(args) do
-      {_, []} ->
+      {_, _, []} ->
         {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
 
-      {concurrency, urls} ->
+      {concurrency, domain, urls} ->
         if concurrency do
           Application.put_env(:synthesis, :chunk_concurrency, concurrency)
         end
 
         IO.puts("Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}]...")
-        Synthesis.process(urls)
+
+        urls =
+          Enum.flat_map(urls, fn url ->
+            if Fetcher.playlist?(url) do
+              {:ok, expanded} = Fetcher.expand_playlist(url)
+              expanded
+            else
+              [url]
+            end
+          end)
+
+        Synthesis.process(urls, domain)
+
         :ok = wait_until_done()
     end
   end
@@ -58,7 +72,8 @@ defmodule Synthesis.CLI do
       System.halt(1)
     end
 
-    {concurrency, urls}
+    domain = Keyword.get(opts, :domain, "general")
+    {concurrency, domain, urls}
   end
 
   defp effective_concurrency do
