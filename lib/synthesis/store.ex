@@ -230,4 +230,64 @@ defmodule Synthesis.Store do
       distance: distance
     }
   end
+
+  @spec cross_domain_neighbours(integer(), String.t(), float(), integer()) ::
+          {:ok, [map()]} | {:error, term()}
+  def cross_domain_neighbours(zettel_id, source_domain, threshold \\ 0.15, limit \\ 3) do
+    # sqlite-vec cosine distance is 0–2. threshold 0.15 = ~92.5% similarity 
+    # i.e. tight enough to avoid noise, permissive enough to catch cross-domain links
+    case Repo.query(
+           """
+           SELECT z.id, z.insight, z.domain, z.episode_id, distance
+           FROM embeddings
+           JOIN zettels z ON z.id = embeddings.zettel_id
+           WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?)
+             AND k = ?
+             AND z.domain != ?
+           ORDER BY distance
+           """,
+           # k = limit + 20: k filter runs before domain !=. Need a larger initial window
+           [zettel_id, limit + 20, source_domain, threshold]
+         ) do
+      {:ok, %{rows: rows}} ->
+        results =
+          rows
+          |> Enum.filter(fn [_, _, _, _, d] -> d < threshold end)
+          |> Enum.take(limit)
+          |> Enum.map(fn [id, insight, domain, ep_id, dist] ->
+            %{id: id, insight: insight, domain: domain, episode_id: ep_id, distance: dist}
+          end)
+
+        {:ok, results}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  def all_zettels do
+    case Repo.query("SELECT id, insight, domain, episode_id FROM zettels", []) do
+      {:ok, %{rows: rows}} ->
+        {:ok,
+         Enum.map(rows, fn [id, insight, domain, ep_id] ->
+           %{id: id, insight: insight, domain: domain, episode_id: ep_id}
+         end)}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  def get_zettel(id) do
+    case Repo.query("SELECT id, insight, domain, episode_id FROM zettels WHERE id = ?", [id]) do
+      {:ok, %{rows: [[id, insight, domain, ep_id]]}} ->
+        {:ok, %{id: id, insight: insight, domain: domain, episode_id: ep_id}}
+
+      {:ok, %{rows: []}} ->
+        {:error, :not_found}
+
+      {:error, _} = err ->
+        err
+    end
+  end
 end
