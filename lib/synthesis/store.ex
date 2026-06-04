@@ -244,7 +244,6 @@ defmodule Synthesis.Store do
            WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?)
              AND k = ?
              AND z.domain != ?
-             AND distance < ?
            ORDER BY distance
            """,
            # k = limit + 20: k filter runs before domain !=. Need a larger initial window
