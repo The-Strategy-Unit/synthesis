@@ -4,36 +4,45 @@ defmodule Synthesis.CLI do
   Supports optional --concurrency N flag (falls back to config.exs).
   """
 
-  @spec main([String.t()]) :: :ok
-  def main([]) do
-    IO.puts("Usage: synthesis [--concurrency N] <url> [url ...]")
-    System.halt(1)
+  @spec run([String.t()]) :: :ok | {:error, String.t()}
+  def run([]) do
+    {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
+  end
+
+  def run(args) do
+    case parse_args(args) do
+      {_, []} ->
+        {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
+
+      {concurrency, urls} ->
+        if concurrency do
+          Application.put_env(:synthesis, :chunk_concurrency, concurrency)
+        end
+
+        IO.puts("Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}]...")
+        Synthesis.process(urls)
+        :ok = wait_until_done()
+    end
   end
 
   def main(args) do
-    {concurrency, urls} = parse_args(args)
-
-    if urls == [] do
-      IO.puts("Usage: synthesis [--concurrency N] <url> [url ...]")
-      System.halt(1)
-    end
-
-    if concurrency do
-      # Intentional: it mutates app env before the supervised tree starts, 
-      # so Extractor picks it up naturally without any extra plumbing.
-      Application.put_env(:synthesis, :chunk_concurrency, concurrency)
-    end
-
     {:ok, _} = Application.ensure_all_started(:synthesis)
-    IO.puts("Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}]...")
-    Synthesis.process(urls)
-    wait_until_done()
+
+    case run(args) do
+      {:error, reason} ->
+        IO.puts(reason)
+        System.halt(1)
+
+      :ok ->
+        :ok
+    end
   end
 
   # --- Private ---
 
   defp parse_args(args) do
-    {opts, urls, invalid} = OptionParser.parse(args, strict: [concurrency: :integer])
+    {opts, urls, invalid} =
+      OptionParser.parse(args, strict: [concurrency: :integer, domain: :string])
 
     if invalid != [],
       do:
