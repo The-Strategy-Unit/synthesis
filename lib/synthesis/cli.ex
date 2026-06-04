@@ -13,6 +13,11 @@ defmodule Synthesis.CLI do
   def main(args) do
     {concurrency, urls} = parse_args(args)
 
+    if urls == [] do
+      IO.puts("Usage: synthesis [--concurrency N] <url> [url ...]")
+      System.halt(1)
+    end
+
     if concurrency do
       # Intentional: it mutates app env before the supervised tree starts, 
       # so Extractor picks it up naturally without any extra plumbing.
@@ -28,20 +33,23 @@ defmodule Synthesis.CLI do
   # --- Private ---
 
   defp parse_args(args) do
-    case args do
-      ["--concurrency", n_str | rest] ->
-        case Integer.parse(n_str) do
-          {n, ""} when n > 0 ->
-            {n, rest}
+    {opts, urls, invalid} = OptionParser.parse(args, strict: [concurrency: :integer])
 
-          _ ->
-            IO.puts("Invalid --concurrency value: #{n_str}")
-            System.halt(1)
-        end
+    if invalid != [],
+      do:
+        (
+          IO.puts("Unknown flags: #{inspect(invalid)}")
+          System.halt(1)
+        )
 
-      _ ->
-        {nil, args}
+    concurrency = Keyword.get(opts, :concurrency)
+
+    if concurrency && concurrency <= 0 do
+      IO.puts("--concurrency must be a positive integer")
+      System.halt(1)
     end
+
+    {concurrency, urls}
   end
 
   defp effective_concurrency do
