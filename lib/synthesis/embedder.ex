@@ -18,8 +18,12 @@ defmodule Synthesis.Embedder do
   defp embed(text) do
     url = Application.fetch_env!(:synthesis, :ollama_url)
     model = Application.fetch_env!(:synthesis, :ollama_model_embed)
+    receive_timeout = Application.fetch_env!(:synthesis, :receive_timeout)
 
-    case Req.post("#{url}/api/embeddings", json: %{model: model, prompt: text}) do
+    case Req.post("#{url}/api/embeddings",
+           json: %{model: model, prompt: text},
+           receive_timeout: receive_timeout
+         ) do
       {:ok, %{status: 200, body: %{"embedding" => vector}}} ->
         {:ok, vector}
 

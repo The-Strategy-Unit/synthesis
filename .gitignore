@@ -4,17 +4,15 @@
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 
-# The directory Mix downloads your dependencies sources to.
-/deps/
-
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
+/docs/
 
 # Temporary files, for example, from tests.
 /tmp/
 /output/
 
-# If the VM crashes, it generates a dump, let's ignore it too.
+# If the VM crashes, it generated a dump, let's ignore it too.
 erl_crash.dump
 
 # Also ignore archive artifacts (built via "mix archive.build").
@@ -25,3 +23,10 @@ synthesis-*.tar
 
 # Ignore database
 *.db*
+
+# Environment-specific secrets
+.env
+.env.*
+
+# Local deps - download with mix deps.get 
+/deps/

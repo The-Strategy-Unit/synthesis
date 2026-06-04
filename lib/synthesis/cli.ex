@@ -1,19 +1,83 @@
 defmodule Synthesis.CLI do
   @moduledoc """
   CLI entrypoint. Accepts one or more YouTube URLs as arguments.
+  Supports optional --concurrency N flag (falls back to config.exs).
   """
 
-  @spec main([String.t()]) :: :ok
-  def main([]) do
-    IO.puts("Usage: synthesis <url> [url ...]")
-    System.halt(1)
+  alias Synthesis.Fetcher
+
+  @spec run([String.t()]) :: :ok | {:error, String.t()}
+  def run([]) do
+    {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
   end
 
-  def main(urls) do
+  def run(args) do
+    case parse_args(args) do
+      {_, _, []} ->
+        {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
+
+      {concurrency, domain, urls} ->
+        if concurrency do
+          Application.put_env(:synthesis, :chunk_concurrency, concurrency)
+        end
+
+        IO.puts("Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}]...")
+
+        urls =
+          Enum.flat_map(urls, fn url ->
+            if Fetcher.playlist?(url) do
+              {:ok, expanded} = Fetcher.expand_playlist(url)
+              expanded
+            else
+              [url]
+            end
+          end)
+
+        Synthesis.process(urls, domain)
+
+        :ok = wait_until_done()
+    end
+  end
+
+  def main(args) do
     {:ok, _} = Application.ensure_all_started(:synthesis)
-    IO.puts("Processing #{length(urls)} URL(s)...")
-    Synthesis.process(urls)
-    wait_until_done()
+
+    case run(args) do
+      {:error, reason} ->
+        IO.puts(reason)
+        System.halt(1)
+
+      :ok ->
+        :ok
+    end
+  end
+
+  # --- Private ---
+
+  defp parse_args(args) do
+    {opts, urls, invalid} =
+      OptionParser.parse(args, strict: [concurrency: :integer, domain: :string])
+
+    if invalid != [],
+      do:
+        (
+          IO.puts("Unknown flags: #{inspect(invalid)}")
+          System.halt(1)
+        )
+
+    concurrency = Keyword.get(opts, :concurrency)
+
+    if concurrency && concurrency <= 0 do
+      IO.puts("--concurrency must be a positive integer")
+      System.halt(1)
+    end
+
+    domain = Keyword.get(opts, :domain, "general")
+    {concurrency, domain, urls}
+  end
+
+  defp effective_concurrency do
+    Application.get_env(:synthesis, :chunk_concurrency, 2)
   end
 
   @spec wait_until_done() :: :ok
