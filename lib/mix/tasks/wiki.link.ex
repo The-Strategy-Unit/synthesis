@@ -26,10 +26,15 @@ defmodule Mix.Tasks.Wiki.Link do
 
     zettels
     |> Enum.group_by(& &1.domain)
-    |> Enum.each(fn {domain, zs} ->
-      Synthesis.Linker.link_zettels(Enum.map(zs, & &1.id), domain, threshold)
+    |> Enum.reduce_while(:ok, fn {domain, zs}, :ok ->
+      case Synthesis.Linker.link_zettels(Enum.map(zs, & &1.id), domain, threshold) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
     end)
-
-    IO.puts("Done.")
+    |> case do
+      :ok -> IO.puts("Done.")
+      {:error, reason} -> Mix.raise("Cross-linking failed: #{inspect(reason)}")
+    end
   end
 end
