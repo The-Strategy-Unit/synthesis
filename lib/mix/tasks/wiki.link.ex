@@ -9,13 +9,16 @@ defmodule Mix.Tasks.Wiki.Link do
   @impl Mix.Task
   def run(args) do
     t =
-      args
-      |> List.first()
-      |> then(
-        &if &1,
-          do: String.to_float(&1),
-          else: Application.fetch_env!(:synthesis, :cross_link_threshold)
-      )
+      case List.first(args) do
+        nil ->
+          Application.fetch_env!(:synthesis, :cross_link_threshold)
+
+        raw ->
+          case Float.parse(raw) do
+            {t, ""} -> t
+            _ -> raise ArgumentError, "threshold must be a float in [0, 2]"
+          end
+      end
 
     threshold = valid_threshold!(t)
     Mix.Task.run("app.start")
