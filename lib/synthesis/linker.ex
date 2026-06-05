@@ -48,12 +48,15 @@ defmodule Synthesis.Linker do
         "- [[#{slug}|#{title}]] _(#{n.domain})_"
       end)
 
-    with {:ok, content} <- File.read(path) do
-      if String.contains?(content, "## Cross-domain") do
-        :ok
-      else
-        File.write(path, content <> "\n## Cross-domain\n\n#{links}\n")
-      end
+    with {:ok, content} <- File.read(path),
+         false <- String.contains?(content, "## Cross-domain"),
+         :ok <- File.write(path, content <> "\n## Cross-domain\n\n#{links}\n") do
+      :ok
+    else
+      # section already present, idempotent
+      true -> :ok
+      # read or write failure
+      {:error, reason} -> {:error, reason}
     end
   end
 end
