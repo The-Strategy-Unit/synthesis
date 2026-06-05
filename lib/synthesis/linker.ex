@@ -9,20 +9,26 @@ defmodule Synthesis.Linker do
   def link_zettels(zettel_ids, domain, threshold) do
     base_dir = Application.fetch_env!(:synthesis, :output_dir)
 
-    Enum.each(zettel_ids, fn id ->
+    Enum.reduce_while(zettel_ids, :ok, fn id, _acc ->
       with {:ok, zettels} <- Store.cross_domain_neighbours(id, domain, threshold),
-           false <- Enum.empty?(zettels) do
-        # find the .md file for this zettel
-        {:ok, z} = Store.get_zettel(id)
+           false <- Enum.empty?(zettels),
+           {:ok, z} <- Store.get_zettel(id) do
         [title | _] = String.split(z.insight, "\n", parts: 2)
         slug = Utils.slugify(title)
-
         pattern = Path.join([base_dir, "**", "#{slug}.md"])
 
         case Path.wildcard(pattern) do
           [path | _] -> patch_markdown(path, zettels)
           [] -> :ok
         end
+        |> case do
+          :ok -> {:cont, :ok}
+          {:error, _} = err -> {:halt, err}
+        end
+      else
+        # Enum.empty? returned true, skip
+        true -> {:cont, :ok}
+        {:error, _} = err -> {:halt, err}
       end
     end)
   end
@@ -42,10 +48,12 @@ defmodule Synthesis.Linker do
         "- [[#{slug}|#{title}]] _(#{n.domain})_"
       end)
 
-    content = File.read!(path)
-
-    unless String.contains?(content, "## Cross-domain") do
-      File.write!(path, content <> "\n## Cross-domain\n\n#{links}\n")
+    with {:ok, content} <- File.read(path) do
+      if String.contains?(content, "## Cross-domain") do
+        :ok
+      else
+        File.write(path, content <> "\n## Cross-domain\n\n#{links}\n")
+      end
     end
   end
 end
