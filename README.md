@@ -130,6 +130,11 @@ and appends a `## Cross-domain` section with Obsidian wikilinks to each zettel.
 It is safe to re-run — files that already have a `## Cross-domain` section are
 skipped.
 
+
+## Why Elixir?
+
+We need a technology choice that lends itself to writing software that is reliable, private-first, and shippable to diverse environments including on-premise and self-hosted servers. Elixir gives us fault-tolerant concurrency by design, a consistent functional codebase that resists fragmentation, and Burrito for distributing self-contained binaries - without shipping and dependency headaches. In our domain, reliability and auditability matter more than ecosystem breadth. Elixir is the right tradeoff.
+
 ---
 
 ## Roadmap
