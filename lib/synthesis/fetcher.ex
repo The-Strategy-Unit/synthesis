@@ -168,11 +168,15 @@ defmodule Synthesis.Fetcher do
   end
 
   defp cleanup(tmp_dir, video_id) do
-    Path.join(tmp_dir, "synthesis_#{video_id}.en.vtt")
-    |> File.rm()
-    |> case do
-      :ok -> :ok
-      {:error, reason} -> IO.warn("Cleanup failed for #{video_id}: #{inspect(reason)}")
+    for ext <- [".en.vtt", ".info.json"] do
+      path = Path.join(tmp_dir, "synthesis_#{video_id}#{ext}")
+
+      case File.rm(path) do
+        :ok -> :ok
+        # never created, fine
+        {:error, :enoent} -> :ok
+        {:error, reason} -> IO.warn("Cleanup failed for #{video_id}: #{inspect(reason)}")
+      end
     end
   end
 

@@ -14,6 +14,7 @@ config :synthesis,
   chunk_concurrency: 2,
   # transcripts shorter than this (tokens) skip chunking
   single_chunk_threshold: 2500,
+  cross_link_threshold: 0.3,
   output_dir: "output",
   db_path: "synthesis.db"
 

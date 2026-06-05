@@ -10,7 +10,7 @@ defmodule Synthesis.Queue do
   use GenServer
   require Logger
 
-  alias Synthesis.{Embedder, Extractor, Store, Writer}
+  alias Synthesis.{Embedder, Extractor, Store, Writer, Linker}
 
   @type job_status :: :pending | :processing | :done | :failed
   @type job :: %{
@@ -198,12 +198,15 @@ defmodule Synthesis.Queue do
          transcript: transcript,
          domain: domain
        }) do
+    threshold = Application.fetch_env!(:synthesis, :cross_link_threshold)
+
     with {:ok, episode_id} <- Store.insert_episode(url, video_id, title, transcript, domain),
          {:ok, %{insights: insights, summary: summary}} <- Extractor.extract(transcript),
          {:ok, zettel_ids} <- insert_zettels(episode_id, insights, domain),
          :ok <- insert_links(zettel_ids, insights),
          :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}, domain),
          :ok <- insert_embeddings(zettel_ids, insights),
+         :ok <- Linker.link_zettels(zettel_ids, domain, threshold),
          :ok <- Writer.write_index(domain) do
       :ok
     end
