@@ -234,8 +234,8 @@ defmodule Synthesis.Store do
   @spec cross_domain_neighbours(integer(), String.t(), float(), integer()) ::
           {:ok, [map()]} | {:error, term()}
   def cross_domain_neighbours(zettel_id, source_domain, threshold \\ 0.15, limit \\ 3) do
-    # sqlite-vec cosine distance is 0–2. threshold 0.15 = ~92.5% similarity 
-    # i.e. tight enough to avoid noise, permissive enough to catch cross-domain links
+    # sqlite-vec cosine distance is 0–2 (0 = identical, 2 = opposite)
+    # similarity (%) = (1 - distance / 2) * 100
     case Repo.query(
            """
            SELECT z.id, z.insight, z.domain, z.episode_id, distance
