@@ -144,7 +144,10 @@ defmodule Synthesis.Extractor do
 
   def validate(%{"summary" => summary, "insights" => insights})
       when is_binary(summary) and is_list(insights) do
-    {:ok, %{summary: summary, insights: Enum.map(insights, &normalise_insight/1)}}
+    valid = Enum.filter(insights, &is_map/1)
+    invalid_count = length(insights) - length(valid)
+    if invalid_count > 0, do: Logger.warning("Dropped #{invalid_count} malformed insight(s)")
+    {:ok, %{summary: summary, insights: Enum.map(valid, &normalise_insight/1)}}
   end
 
   def validate(_), do: {:error, "Response missing required fields"}
