@@ -1,5 +1,21 @@
 defmodule Mix.Tasks.Wiki.Search do
   @shortdoc "Search the knowledge base by keyword and semantic similarity"
+
+  @moduledoc """
+  Search the knowledge base by keyword and semantic similarity.
+
+  Usage:
+    mix wiki.search <query> [options]
+
+  Options:
+    --domain       Restrict search to a specific domain (default: "general")
+    --all-domains  Search across all domains
+
+  Examples:
+    mix wiki.search "durable servers"
+    mix wiki.search "process state management" --domain elixir
+    mix wiki.search "fault tolerance" --all-domains
+  """
   use Mix.Task
 
   alias Synthesis.{Embedder, Store}
