@@ -6,11 +6,11 @@ defmodule Synthesis.Linker do
   alias Synthesis.{Store, Utils}
   require Logger
 
-  def link_zettels(zettel_ids, domain, threshold) do
+  def link_zettels(zettel_ids, threshold) do
     base_dir = Application.fetch_env!(:synthesis, :output_dir)
 
     Enum.reduce_while(zettel_ids, :ok, fn id, _acc ->
-      with {:ok, zettels} <- Store.cross_domain_neighbours(id, domain, threshold),
+      with {:ok, zettels} <- Store.similar_neighbours(id, threshold),
            false <- Enum.empty?(zettels),
            {:ok, z} <- Store.get_zettel(id) do
         [title | _] = String.split(z.insight, "\n", parts: 2)
@@ -42,21 +42,17 @@ defmodule Synthesis.Linker do
         slug = Utils.slugify(title)
 
         Logger.info(
-          "Cross-linking [[#{slug}]] → #{n.domain} (#{Float.round(to_similarity(n.distance), 1)}% similar)"
+          "Linking [[#{slug}]] → #{n.domain} (#{Float.round(to_similarity(n.distance), 1)}% similar)"
         )
 
         "- [[#{slug}|#{title}]] _(#{n.domain})_"
       end)
 
-    with {:ok, content} <- File.read(path),
-         false <- String.contains?(content, "## Cross-domain"),
-         :ok <- File.write(path, content <> "\n## Cross-domain\n\n#{links}\n") do
-      :ok
-    else
-      # section already present, idempotent
-      true -> :ok
-      # read or write failure
-      {:error, reason} -> {:error, reason}
+    with {:ok, content} <- File.read(path) do
+      cleaned =
+        Regex.replace(~r/\n## (Cross-domain|Related)\n[\s\S]*$/, content, "")
+
+      File.write(path, cleaned <> "\n## Related\n\n#{links}\n")
     end
   end
 end

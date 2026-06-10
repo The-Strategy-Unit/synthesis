@@ -13,18 +13,14 @@ defmodule Synthesis.Store do
   def insert_episode(url, video_id, title, raw_transcript, domain \\ "general") do
     case Repo.query(
            """
-           INSERT INTO episodes (url, video_id, title, raw_transcript, domain)
+           INSERT OR IGNORE INTO episodes (url, video_id, title, raw_transcript, domain)
            VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT (url) DO UPDATE SET
-             title = excluded.title,
-             raw_transcript = excluded.raw_transcript,
-             fetched_at = datetime('now')
            RETURNING id
            """,
            [url, video_id, title, raw_transcript, domain]
          ) do
       {:ok, %{rows: [[id]]}} -> {:ok, id}
-      {:error, "UNIQUE constraint failed: " <> _} -> {:error, :already_exists}
+      {:ok, %{rows: []}} -> {:error, :already_exists}
       {:error, _} = err -> err
     end
   end
@@ -231,24 +227,22 @@ defmodule Synthesis.Store do
     }
   end
 
-  @spec cross_domain_neighbours(integer(), String.t(), float(), integer()) ::
+  @spec similar_neighbours(integer(), float(), integer()) ::
           {:ok, [map()]} | {:error, term()}
-  def cross_domain_neighbours(zettel_id, source_domain, threshold \\ 0.15, limit \\ 3) do
-    # sqlite-vec cosine distance is 0–2 (0 = identical, 2 = opposite)
-    # similarity (%) = (1 - distance / 2) * 100
+  def similar_neighbours(zettel_id, threshold \\ 0.15, limit \\ 3) do
     case Repo.query(
            """
-           SELECT z.id, z.insight, z.domain, z.episode_id, distance
-           FROM embeddings
+           SELECT z.id, z.insight, z.domain, z.episode_id, embeddings.distance
+           FROM embeddings AS src
+           JOIN embeddings ON embeddings.vector MATCH src.vector
            JOIN zettels z ON z.id = embeddings.zettel_id
-           WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?)
-             AND k = ?
-             AND z.domain != ?
-             AND distance < ?
-           ORDER BY distance
+           WHERE src.zettel_id = ?
+             AND embeddings.k = ?
+             AND z.id != ?
+             AND embeddings.distance < ?
+           ORDER BY embeddings.distance
            """,
-           # k = limit + 20: k filter runs before domain !=. Need a larger initial window
-           [zettel_id, limit + 20, source_domain, threshold]
+           [zettel_id, limit + 20, zettel_id, threshold]
          ) do
       {:ok, %{rows: rows}} ->
         results =
