@@ -1,57 +1,96 @@
 # Synthesis ⚗️
 
-Turn long YouTube videos/playlists into a searchable Obsidian knowledge base in minutes.
+Turn any video or audio source into a searchable Obsidian knowledge base in minutes.
+
+Paste a URL — YouTube, Vimeo, podcast feed, or [any of the 1,000+ sources yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) — and Synthesis extracts the transcript, distils it into atomic insights, and writes them as fully cross-linked Obsidian notes you can search instantly.
 
 **Why this helps immediately:**
-- **Save hours:** auto-extracts key insights from transcripts
-- **Find answers fast:** keyword + semantic search over everything you’ve ingested
+- **Save hours:** auto-extracts key insights from transcripts — no manual note-taking
+- **Find answers fast:** keyword + semantic search over everything you've ingested
 - **Keep control:** runs on your own approved infrastructure (local Ollama by default)
 
-## Quick start (non-power users)
+## Quick start
 
 ### 1) Install prerequisites
-- Elixir (1.19+)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [Ollama](https://ollama.com/)
 
-Then pull the default models:
+| Tool | Purpose | Install |
+|---|---|---|
+| [Obsidian](https://obsidian.md/) | View and navigate your notes | Download from obsidian.md |
+| [Elixir](https://elixir-lang.org/) 1.19+ | Runs Synthesis | See below |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Fetches transcripts | `pip install yt-dlp` or via package manager |
+| [Ollama](https://ollama.com/) | Local AI (LLM + embeddings) | Download from ollama.com |
+
+<details>
+<summary>Installing Elixir (recommended: Mise)</summary>
+
+The easiest cross-platform way to install Elixir is **[Mise](https://mise.jdx.dev/)**, a single tool that manages language runtimes:
+
+**macOS / Linux:**
+```bash
+curl https://mise.run | sh
+mise install elixir@latest
+```
+
+**Windows (PowerShell):**
+```powershell
+winget install jdx.mise
+mise install elixir@latest
+```
+
+After installation, open a new terminal and confirm with:
+```bash
+elixir --version
+```
+
+> Alternatively: see the [official Elixir install guide](https://elixir-lang.org/install.html) for package-manager options (Homebrew, apt, chocolatey, asdf, etc.).
+
+</details>
+
+### 2) Pull the AI models
 
 ```bash
 ollama pull qwen3.6:35b
 ollama pull qwen3-embedding:8b
 ```
 
-### 2) Start Ollama
+> **Note:** These models are large. `qwen3.6:35b` requires a GPU with ~22 GB VRAM or a machine with ~40 GB RAM for comfortable use. See the [Configuration](#configuration) section for lighter alternatives.
+
+### 3) Start Ollama
 ```bash
 ollama serve
 ```
 
-### 3) Run Synthesis
-From this repository:
+### 4) Run Synthesis
+From inside this repository:
 
 ```bash
 mix deps.get
-mix wiki.add https://www.youtube.com/watch?v=<video_id>
+mix wiki.add <url>
 ```
 
-### 4) Search your knowledge base
+Replace `<url>` with any supported video or audio URL, for example:
+```bash
+mix wiki.add https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+### 5) Search your knowledge base
 ```bash
 mix wiki.search "your query"
 ```
 
-### 5) Open notes in Obsidian
+### 6) Open notes in Obsidian
 Synthesis writes markdown notes to `output/` and stores its database in `synthesis.db`.
-Open `output/` as (or inside) your Obsidian vault.
+Open `output/` as (or inside) your Obsidian vault to browse and navigate your notes.
 
 ---
 
 ## Most-used commands
 
 ```bash
-# Add one YouTube video
-mix wiki.add https://www.youtube.com/watch?v=<id>
+# Add one video / audio source
+mix wiki.add <url>
 
-# Add a full playlist
+# Add an entire playlist
 mix wiki.add https://www.youtube.com/playlist?list=<id>
 
 # Search within default domain (general)
@@ -72,19 +111,19 @@ mix wiki.link
 You can run the compiled binary directly for ingestion:
 
 ```bash
-./synthesis https://www.youtube.com/watch?v=<id>
+./synthesis <url>
 ```
 
 Useful flags:
 
 ```bash
-./synthesis --domain health --concurrency 2 https://www.youtube.com/watch?v=<id>
+./synthesis --domain health --concurrency 2 <url>
 ```
 
 </details>
 
 <details>
-<summary>Configuration (power users / developers)</summary>
+<summary id="configuration">Configuration (power users / developers)</summary>
 
 Main settings are in `config/config.exs`.
 
@@ -103,10 +142,10 @@ Main settings are in `config/config.exs`.
 <details>
 <summary>Troubleshooting</summary>
 
-- **`mix: command not found`** → install Elixir and ensure it is on your PATH.
-- **`yt-dlp` errors** → install/update yt-dlp and retry.
-- **No semantic results** → confirm Ollama is running and both models are installed.
-- **No transcript extracted** → verify the YouTube URL is valid and has subtitles available.
+- **`mix: command not found`** → Elixir is not installed or not on your PATH. Follow the [Elixir install steps](#installing-elixir-recommended-mise) above.
+- **`yt-dlp` errors** → install/update yt-dlp (`pip install -U yt-dlp`) and retry.
+- **No semantic results** → confirm Ollama is running (`ollama serve`) and both models are pulled.
+- **No transcript extracted** → check that the source URL has subtitles/captions available; yt-dlp requires these to be present.
 
 </details>
 
