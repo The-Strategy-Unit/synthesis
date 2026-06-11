@@ -68,7 +68,7 @@ mix deps.get
 mix wiki.add <url>
 ```
 
-Replace `<url>` with any supported video or audio URL, for example:
+Replace `<url>` with a YouTube URL, for example:
 ```bash
 mix wiki.add https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
@@ -87,7 +87,7 @@ Open `output/` as (or inside) your Obsidian vault to browse and navigate your no
 ## Most-used commands
 
 ```bash
-# Add one video / audio source
+# Add one YouTube video
 mix wiki.add <url>
 
 # Add an entire playlist
