@@ -2,7 +2,7 @@
 
 Turn any video or audio source into a searchable Obsidian knowledge base in minutes.
 
-Paste a URL — YouTube, Vimeo, podcast feed, or [any of the 1,000+ sources yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) — and Synthesis extracts the transcript, distils it into atomic insights, and writes them as fully cross-linked Obsidian notes you can search instantly.
+Paste a YouTube URL and Synthesis extracts the transcript, distils it into atomic insights, and writes them as fully cross-linked Obsidian notes you can search instantly.
 
 **Why this helps immediately:**
 - **Save hours:** auto-extracts key insights from transcripts — no manual note-taking
