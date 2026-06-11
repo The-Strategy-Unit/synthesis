@@ -21,7 +21,7 @@ Paste a URL — YouTube, Vimeo, podcast feed, or [any of the 1,000+ sources yt-d
 | [Ollama](https://ollama.com/download) | Local AI (LLM + embeddings) | [ollama.com/download](https://ollama.com/download) |
 
 <details>
-<summary>Installing Elixir (recommended: Mise)</summary>
+<summary id="installing-elixir-recommended-mise">Installing Elixir (recommended: Mise)</summary>
 
 The easiest cross-platform way to install Elixir is **[Mise](https://mise.jdx.dev/)**, a single tool that manages language runtimes:
 
