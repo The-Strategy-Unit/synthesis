@@ -6,12 +6,13 @@ defmodule Synthesis.Linker do
   alias Synthesis.{Store, Utils}
   require Logger
 
+  @related_section_regex ~r/\n## (Cross-domain|Related)\n[\s\S]*?(?=\n## |\z)/
+
   def link_zettels(zettel_ids, threshold) do
     base_dir = Application.fetch_env!(:synthesis, :output_dir)
 
     Enum.reduce_while(zettel_ids, :ok, fn id, _acc ->
       with {:ok, zettels} <- Store.similar_neighbours(id, threshold),
-           false <- Enum.empty?(zettels),
            {:ok, z} <- Store.get_zettel(id) do
         [title | _] = String.split(z.insight, "\n", parts: 2)
         slug = Utils.slugify(title)
@@ -26,14 +27,19 @@ defmodule Synthesis.Linker do
           {:error, _} = err -> {:halt, err}
         end
       else
-        # Enum.empty? returned true, skip
-        true -> {:cont, :ok}
         {:error, _} = err -> {:halt, err}
       end
     end)
   end
 
   defp to_similarity(distance), do: (1 - distance / 2) * 100
+
+  defp patch_markdown(path, []) do
+    with {:ok, content} <- File.read(path) do
+      cleaned = Regex.replace(@related_section_regex, content, "")
+      File.write(path, cleaned <> "\n## Related\n\n_none_\n")
+    end
+  end
 
   defp patch_markdown(path, neighbours) do
     links =
@@ -49,9 +55,7 @@ defmodule Synthesis.Linker do
       end)
 
     with {:ok, content} <- File.read(path) do
-      cleaned =
-        Regex.replace(~r/\n## (Cross-domain|Related)\n[\s\S]*?(?=\n## |\z)/, content, "")
-
+      cleaned = Regex.replace(@related_section_regex, content, "")
       File.write(path, cleaned <> "\n## Related\n\n#{links}\n")
     end
   end
