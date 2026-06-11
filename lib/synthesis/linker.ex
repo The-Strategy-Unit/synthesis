@@ -50,7 +50,7 @@ defmodule Synthesis.Linker do
 
     with {:ok, content} <- File.read(path) do
       cleaned =
-        Regex.replace(~r/\n## (Cross-domain|Related)\n[\s\S]*$/, content, "")
+        Regex.replace(~r/\n## (Cross-domain|Related)\n[\s\S]*?(?=\n## |\z)/, content, "")
 
       File.write(path, cleaned <> "\n## Related\n\n#{links}\n")
     end
