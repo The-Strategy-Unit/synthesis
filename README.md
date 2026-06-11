@@ -15,10 +15,10 @@ Paste a URL — YouTube, Vimeo, podcast feed, or [any of the 1,000+ sources yt-d
 
 | Tool | Purpose | Install |
 |---|---|---|
-| [Obsidian](https://obsidian.md/) | View and navigate your notes | Download from obsidian.md |
-| [Elixir](https://elixir-lang.org/) 1.19+ | Runs Synthesis | See below |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Fetches transcripts | `pip install yt-dlp` or via package manager |
-| [Ollama](https://ollama.com/) | Local AI (LLM + embeddings) | Download from ollama.com |
+| [Obsidian](https://obsidian.md/download) | View and navigate your notes | [obsidian.md/download](https://obsidian.md/download) |
+| [Elixir](https://elixir-lang.org/install.html) 1.19+ | Runs Synthesis | See below |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Installation) | Fetches transcripts | `pip install yt-dlp` or [see options](https://github.com/yt-dlp/yt-dlp/wiki/Installation) |
+| [Ollama](https://ollama.com/download) | Local AI (LLM + embeddings) | [ollama.com/download](https://ollama.com/download) |
 
 <details>
 <summary>Installing Elixir (recommended: Mise)</summary>
@@ -123,7 +123,7 @@ Useful flags:
 </details>
 
 <details>
-<summary id="configuration">Configuration (power users / developers)</summary>
+<summary id="configuration">Configuration (developers)</summary>
 
 Main settings are in `config/config.exs`.
 
