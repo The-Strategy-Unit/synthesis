@@ -135,7 +135,7 @@ Edit `config/config.exs` or set environment variables via `.env`.
 | Setting | Default | Notes |
 |---|---|---|
 | `ollama_url` | `http://localhost:11434` | Change if Ollama runs on a different host |
-| `ollama_model` | `qwen3.27b` | Lighter alternative: `qwen3:8b` |
+| `ollama_model` | `qwen3.6:27b` | Lighter alternative: `qwen3:8b` |
 | `ollama_model_embed` | `qwen3-embedding:8b` | |
 | `chunk_concurrency` | `2` | Parallel chunks for long transcripts |
 | `single_chunk_threshold` | `2500` tokens | Below this, processed in one call |
