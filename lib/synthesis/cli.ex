@@ -2,13 +2,14 @@ defmodule Synthesis.CLI do
   @moduledoc """
   CLI entrypoint. Accepts one or more YouTube URLs as arguments.
   Supports optional --concurrency N flag (falls back to config.exs).
+  Supports optional --model <model> flag (falls back to config.exs).
   """
 
   alias Synthesis.Fetcher
 
   @spec run([String.t()]) :: :ok | {:error, String.t()}
   def run([]) do
-    {:error, "Usage: synthesis [--concurrency N] <url> [url ...]"}
+    {:error, "Usage: synthesis [--concurrency N] [--model <model>] <url> [url ...]"}
   end
 
   def run(args) do
@@ -21,7 +22,9 @@ defmodule Synthesis.CLI do
           Application.put_env(:synthesis, :chunk_concurrency, concurrency)
         end
 
-        IO.puts("Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}]...")
+        IO.puts(
+          "Processing #{length(urls)} URL(s) [concurrency: #{effective_concurrency()}, model: #{effective_model()}]..."
+        )
 
         urls =
           Enum.flat_map(urls, fn url ->
@@ -56,7 +59,7 @@ defmodule Synthesis.CLI do
 
   defp parse_args(args) do
     {opts, urls, invalid} =
-      OptionParser.parse(args, strict: [concurrency: :integer, domain: :string])
+      OptionParser.parse(args, strict: [concurrency: :integer, domain: :string, model: :string])
 
     if invalid != [],
       do:
@@ -72,12 +75,19 @@ defmodule Synthesis.CLI do
       System.halt(1)
     end
 
+    model = Keyword.get(opts, :model)
+    if model, do: Application.put_env(:synthesis, :ollama_model, model)
+
     domain = Keyword.get(opts, :domain, "general")
     {concurrency, domain, urls}
   end
 
   defp effective_concurrency do
     Application.get_env(:synthesis, :chunk_concurrency, 2)
+  end
+
+  defp effective_model do
+    Application.get_env(:synthesis, :ollama_model)
   end
 
   @spec wait_until_done() :: :ok
