@@ -241,7 +241,7 @@ defmodule Synthesis.Store do
            SELECT z.id, z.insight, z.domain, z.episode_id, distance
            FROM embeddings
            JOIN zettels z ON z.id = embeddings.zettel_id
-           WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?)
+           WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?) AND distance < ?
              AND k = ?
              AND z.domain != ?
            ORDER BY distance
