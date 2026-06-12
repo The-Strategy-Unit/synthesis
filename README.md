@@ -106,10 +106,10 @@ pip install yt-dlp
 Download Ollama from [ollama.com/download](https://ollama.com/download), then:
 
 ```bash
-ollama pull qwen3:8b
+ollama pull qwen3.6:27b
+ollama pull qwen3:8b           # optional lighter alternative
 ollama pull qwen3-embedding:8b
 ollama serve
-```
 
 ### 3. Clone and run
 
