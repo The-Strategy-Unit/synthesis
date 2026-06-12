@@ -47,8 +47,7 @@ Synthesis is **local-first by design**, and supports approved enterprise AI prov
 
 - **Runs locally** - all processing via [Ollama](https://ollama.com) on your own machine;
   no API keys, no data egress, no cloud dependency
-- **Azure OpenAI** - configuration-ready for organisations where Azure OpenAI is an
-  approved provider; point Synthesis at your Azure endpoint in `config.exs`
+- **Azure OpenAI** - planned support (not yet implemented; see roadmap below)
 - Suitable for information-governance-constrained environments
   (NHS trusts, public sector organisations)
 
