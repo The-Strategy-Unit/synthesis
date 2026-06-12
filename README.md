@@ -199,4 +199,4 @@ Synthesis handles complex medical knowledge.
 
 ## Licence
 
-[MIT](LICENSE)
+MIT
