@@ -123,6 +123,7 @@ ollama pull qwen3.6:27b
 ollama pull qwen3:8b           # optional lighter alternative
 ollama pull qwen3-embedding:8b
 ollama serve
+```
 
 ### 3. Clone and run
 
@@ -143,6 +144,7 @@ mix wiki.urls                          # all domains
 mix wiki.urls --domain general         # one domain
 mix wiki.urls | cut -f1 | xargs -I {} mix wiki.add {} --model qwen3.6:35b
 </details>
+```
 
 ---
 
@@ -153,6 +155,7 @@ mix wiki.urls | cut -f1 | xargs -I {} mix wiki.add {} --model qwen3.6:35b
 
 Edit `config/config.exs` or set environment variables via `.env`.
 
+```markdown
 | Setting | Default | Notes |
 |---|---|---|
 | `ollama_url` | `http://localhost:11434` | Change if Ollama runs on a different host |
@@ -163,6 +166,7 @@ Edit `config/config.exs` or set environment variables via `.env`.
 | `max_retries` | `3` | Retry attempts on LLM failure |
 | `output_dir` | `output/` | Where markdown notes are written |
 | `db_path` | `synthesis.db` | SQLite database location |
+```
 
 </details>
 
@@ -173,7 +177,7 @@ Edit `config/config.exs` or set environment variables via `.env`.
 <details>
 <summary>Codebase layout</summary>
 
-```
+```console
 lib/synthesis.ex     # Top-level orchestrator
 lib/synthesis/
   cli.ex             # CLI entrypoint
