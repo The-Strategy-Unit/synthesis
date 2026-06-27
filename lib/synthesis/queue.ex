@@ -156,7 +156,7 @@ defmodule Synthesis.Queue do
   def handle_info({ref, {video_id, result}}, state) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
     job = state.jobs[video_id]
-    label = if(job.title, do: "#{video_id} — #{job.title}", else: video_id)
+    label = if(job.title, do: "#{video_id} - #{job.title}", else: video_id)
 
     finished_state =
       case result do
