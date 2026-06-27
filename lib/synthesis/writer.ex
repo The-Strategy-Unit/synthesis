@@ -184,6 +184,37 @@ defmodule Synthesis.Writer do
     end
   end
 
+  @spec write_global_index() :: write_result()
+  def write_global_index do
+    base_dir = Application.fetch_env!(:synthesis, :output_dir)
+
+    with {:ok, domains} <- Synthesis.Store.list_domains(),
+         :ok <- File.mkdir_p(base_dir) do
+      total_episodes = Enum.sum(Enum.map(domains, fn {_, count} -> count end))
+
+      header = """
+      # Synthesis Index
+
+      - **Domains**: #{length(domains)}
+      - **Episodes**: #{total_episodes}
+
+      ---
+
+      """
+
+      body =
+        Enum.map_join(domains, "\n\n", fn {domain, count} ->
+          """
+          ## [[#{domain}/index|#{domain}]]
+
+          - **Episodes**: #{count}
+          """
+        end)
+
+      File.write(Path.join(base_dir, "index.md"), header <> body <> "\n")
+    end
+  end
+
   defp write_top_level_index(base_dir) do
     with {:ok, entries} <- File.ls(base_dir) do
       domains =
