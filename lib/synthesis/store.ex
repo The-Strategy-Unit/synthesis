@@ -64,6 +64,25 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec list_domains() :: {:ok, [{String.t(), integer()}]} | {:error, term()}
+  def list_domains do
+    case Repo.query(
+           """
+           SELECT domain, COUNT(*) AS episode_count
+           FROM episodes
+           GROUP BY domain
+           ORDER BY domain
+           """,
+           []
+         ) do
+      {:ok, %{rows: rows}} ->
+        {:ok, Enum.map(rows, fn [domain, count] -> {domain, count} end)}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
   # --- Zettels ---
 
   def insert_zettel(
