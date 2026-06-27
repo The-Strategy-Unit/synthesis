@@ -59,7 +59,15 @@ defmodule Synthesis.CLI do
 
   defp parse_args(args) do
     {opts, urls, invalid} =
-      OptionParser.parse(args, strict: [concurrency: :integer, domain: :string, model: :string])
+      OptionParser.parse(args,
+        strict: [
+          concurrency: :integer,
+          domain: :string,
+          model: :string,
+          quiet: :boolean,
+          verbose: :boolean
+        ]
+      )
 
     if invalid != [],
       do:
@@ -77,6 +85,17 @@ defmodule Synthesis.CLI do
 
     model = Keyword.get(opts, :model)
     if model, do: Application.put_env(:synthesis, :ollama_model, model)
+
+    quiet = Keyword.get(opts, :quiet, false)
+    verbose = Keyword.get(opts, :verbose, false)
+
+    if quiet && verbose do
+      IO.puts("--quiet and --verbose cannot be used together")
+      System.halt(1)
+    end
+
+    Application.put_env(:synthesis, :quiet, quiet)
+    Application.put_env(:synthesis, :verbose, verbose)
 
     domain = Keyword.get(opts, :domain, "general")
     {concurrency, domain, urls}
