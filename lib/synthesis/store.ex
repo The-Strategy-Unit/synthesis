@@ -45,6 +45,25 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec list_episode_urls(String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  def list_episode_urls(domain \\ nil) do
+    case Repo.query(
+           """
+           SELECT DISTINCT url, title
+           FROM episodes
+           WHERE (? IS NULL OR domain = ?)
+           ORDER BY fetched_at DESC
+           """,
+           [domain, domain]
+         ) do
+      {:ok, %{rows: rows}} ->
+        {:ok, Enum.map(rows, fn [url, title] -> %{url: url, title: title} end)}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
   # --- Zettels ---
 
   def insert_zettel(
