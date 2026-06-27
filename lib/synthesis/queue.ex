@@ -155,25 +155,27 @@ defmodule Synthesis.Queue do
 
   def handle_info({ref, {video_id, result}}, state) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
+    job = state.jobs[video_id]
+    label = if(job.title, do: "#{video_id} — #{job.title}", else: video_id)
 
     finished_state =
       case result do
         :ok ->
-          Logger.info("✓ #{video_id} processed successfully")
+          Logger.info("✓ #{label} processed successfully")
 
           state
           |> put_in([:jobs, video_id, :status], :done)
           |> put_in([:jobs, video_id, :finished_at], DateTime.utc_now())
 
         {:error, :already_exists} ->
-          Logger.info("⏭  #{video_id} already exists, skipping")
+          Logger.info("⏭  #{label} already exists, skipping")
 
           state
           |> put_in([:jobs, video_id, :status], :done)
           |> put_in([:jobs, video_id, :finished_at], DateTime.utc_now())
 
         {:error, reason} ->
-          Logger.warning("✗ #{video_id} failed: #{reason}")
+          Logger.warning("✗ #{label} failed: #{reason}")
 
           state
           |> put_in([:jobs, video_id, :status], :failed)
