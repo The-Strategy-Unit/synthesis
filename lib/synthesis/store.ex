@@ -4,7 +4,7 @@ defmodule Synthesis.Store do
   All database access goes through Synthesis.Repo.
   """
 
-  alias Synthesis.Repo
+  alias Synthesis.{Repo, Utils}
 
   # --- Episodes ---
 
@@ -244,6 +244,94 @@ defmodule Synthesis.Store do
       {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &row_to_zettel_with_distance/1)}
       {:error, _} = err -> err
     end
+  end
+
+  # --- Delete ---
+
+  @spec get_episode_by_video_id(String.t()) :: {:ok, map()} | {:error, :not_found}
+  def get_episode_by_video_id(video_id) do
+    case Repo.query(
+           """
+           SELECT id, url, video_id, title, domain, fetched_at
+           FROM episodes
+           WHERE video_id = ?
+           """,
+           [video_id]
+         ) do
+      {:ok, %{rows: [[id, url, video_id, title, domain, fetched_at]]}} ->
+        {:ok,
+         %{
+           id: id,
+           url: url,
+           video_id: video_id,
+           title: title,
+           domain: domain,
+           fetched_at: fetched_at
+         }}
+
+      {:ok, %{rows: []}} ->
+        {:error, :not_found}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @spec find_episodes_by_title(String.t()) :: {:ok, [map()]} | {:error, term()}
+  def find_episodes_by_title(title_contains) do
+    pattern = "%#{String.replace(title_contains, "%", "\\%")}%"
+
+    case Repo.query(
+           """
+           SELECT id, url, video_id, title, domain, fetched_at
+           FROM episodes
+           WHERE title LIKE ? ESCAPE '\\'
+           """,
+           [pattern]
+         ) do
+      {:ok, %{rows: rows}} ->
+        {:ok,
+         Enum.map(rows, fn [id, url, video_id, title, domain, fetched_at] ->
+           %{
+             id: id,
+             url: url,
+             video_id: video_id,
+             title: title,
+             domain: domain,
+             fetched_at: fetched_at
+           }
+         end)}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @spec get_zettels_for_episode(integer()) :: {:ok, [map()]} | {:error, term()}
+  def get_zettels_for_episode(episode_id) do
+    case Repo.query(
+           "SELECT id, insight FROM zettels WHERE episode_id = ?",
+           [episode_id]
+         ) do
+      {:ok, %{rows: rows}} ->
+        {:ok,
+         Enum.map(rows, fn [id, insight] ->
+           [title | _] = String.split(insight, "\n", parts: 2)
+           %{id: id, title: title, slug: Utils.slugify(title)}
+         end)}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @spec delete_episode(integer()) :: :ok | {:error, term()}
+  def delete_episode(episode_id) do
+    Repo.transaction([
+      {"DELETE FROM embeddings WHERE zettel_id IN (SELECT id FROM zettels WHERE episode_id = ?)",
+       [episode_id]},
+      {"DELETE FROM episodes WHERE id = ?", [episode_id]}
+    ])
   end
 
   # --- Private ---

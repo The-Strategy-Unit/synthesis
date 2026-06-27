@@ -37,6 +37,11 @@ defmodule Synthesis.Repo do
     end
   end
 
+  @spec transaction([{String.t(), list()}]) :: :ok | {:error, term()}
+  def transaction(queries) do
+    GenServer.call(__MODULE__, {:transaction, queries})
+  end
+
   # --- GenServer callbacks ---
 
   @impl true
@@ -67,6 +72,22 @@ defmodule Synthesis.Repo do
       else
         error ->
           # stmt may or may not exist here, but release is safe to skip if prepare failed
+          error
+      end
+
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:transaction, queries}, _from, %{db: db} = state) do
+    result =
+      with :ok <- Exqlite.Sqlite3.execute(db, "BEGIN"),
+           :ok <- run_transaction_queries(db, queries),
+           :ok <- Exqlite.Sqlite3.execute(db, "COMMIT") do
+        :ok
+      else
+        error ->
+          Exqlite.Sqlite3.execute(db, "ROLLBACK")
           error
       end
 
@@ -108,6 +129,24 @@ defmodule Synthesis.Repo do
       {:row, row} -> collect_rows(db, stmt, [row | acc])
       :done -> {:ok, Enum.reverse(acc)}
       {:error, _} = err -> err
+    end
+  end
+
+  defp run_transaction_queries(db, queries) do
+    Enum.reduce_while(queries, :ok, fn {sql, params}, :ok ->
+      case run_transaction_query(db, sql, params) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp run_transaction_query(db, sql, params) do
+    with {:ok, stmt} <- Exqlite.Sqlite3.prepare(db, sql),
+         :ok <- Exqlite.Sqlite3.bind(stmt, params),
+         :done <- Exqlite.Sqlite3.step(db, stmt),
+         :ok <- Exqlite.Sqlite3.release(db, stmt) do
+      :ok
     end
   end
 end
