@@ -56,13 +56,27 @@ Synthesis is **local-first by design**, and supports approved enterprise AI prov
 
 ---
 
+## Why Elixir?
+
+Synthesis is built in Elixir because its runtime - the BEAM - is specifically designed for the kind of work this application does:
+
+- **Reliable, concurrent processing.** Multiple sources can be fetched in parallel, while the LLM pipeline runs them through extraction, embedding, and storage one at a time. A failure in one source does not affect others.
+- **Local-first deployment.** We use Burrito to ship a single cross-platform binary. Users do not need to install Elixir, Erlang, or manage a Python environment.
+- **Fault tolerance by design.** The OTP supervision model means the system can recover from transient failures - such as an LLM timeout - without manual intervention.
+- **Low operational footprint.** Synthesis runs on a single machine with SQLite and Ollama. No Docker, no Kubernetes, no cloud dependencies.
+- **Long-term maintainability.** Elixir code tends toward explicit, functional modules with clear boundaries, which matters for a tool whose users rely on it for complex, high-stakes cases.
+
+These properties make Elixir a pragmatic choice for a privacy-first knowledge management tool, not merely a personal preference.
+
+---
+
 ## Get started
 
 <details>
 <summary><strong>For clinicians and non-technical users</strong> (coming soon)</summary>
 
 A one-click installer requiring no coding is on the roadmap. In the meantime,
-Synthesis can be set up with a small amount of terminal use — the steps below
+Synthesis can be set up with a small amount of terminal use - the steps below
 take around 10–15 minutes and only need to be done once.
 
 Follow the **developer setup** below, then use:
@@ -120,6 +134,14 @@ mix wiki.add https://www.youtube.com/watch?v=<id>
 mix wiki.search "your query"
 ```
 
+### 4. List processed URLs
+
+See what you've already ingested, or pipe them back for reprocessing with a different model:
+
+```bash
+mix wiki.urls                          # all domains
+mix wiki.urls --domain general         # one domain
+mix wiki.urls | cut -f1 | xargs -I {} mix wiki.add {} --model qwen3.6:35b
 </details>
 
 ---
@@ -152,26 +174,31 @@ Edit `config/config.exs` or set environment variables via `.env`.
 <summary>Codebase layout</summary>
 
 ```
+lib/synthesis.ex     # Top-level orchestrator
 lib/synthesis/
-  synthesis.ex     # Top-level orchestrator
-  cli.ex           # CLI entrypoint
-  fetcher.ex       # yt-dlp wrapper
-  extractor.ex     # LLM client - insight extraction
-  chunker.ex       # Long transcript splitter
-  embedder.ex      # Embeddings client
-  store.ex         # DB reads/writes
-  writer.ex        # Markdown/Obsidian output
-  queue.ex         # Pipeline GenServer
-  repo.ex          # SQLite GenServer
-  migrations.ex    # Schema runner
-  application.ex   # OTP supervisor
+  cli.ex             # CLI entrypoint
+  fetcher.ex         # yt-dlp wrapper
+  extractor.ex       # LLM client - insight extraction
+  chunker.ex         # Long transcript splitter
+  embedder.ex        # Embeddings client
+  linker.ex          # Cross-episode insight linking
+  store.ex           # DB reads/writes
+  writer.ex          # Markdown/Obsidian output
+  progress.ex        # Progress bar display
+  utils.ex           # Shared helpers (URL parsing, slugify)
+  queue.ex           # Pipeline GenServer
+  repo.ex            # SQLite GenServer
+  migrations.ex      # Schema runner
+  application.ex     # OTP supervisor
 
-mix/tasks/
-  wiki.add.ex      # mix wiki.add <url>
-  wiki.search.ex   # mix wiki.search <query>
+lib/mix/tasks/
+  wiki.add.ex        # mix wiki.add <url>
+  wiki.search.ex     # mix wiki.search <query>
+  wiki.link.ex       # mix wiki.link
+  wiki.urls.ex       # mix wiki.urls [--domain]
 
-priv/migrations/   # SQL schema files
-output/            # Generated notes (gitignored)
+priv/migrations/     # SQL schema files
+output/              # Generated notes (gitignored)
 ```
 
 </details>

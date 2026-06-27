@@ -107,11 +107,11 @@ defmodule Synthesis.CLI do
     IO.puts("\n--- Results ---")
 
     Enum.each(jobs, fn {id, job} ->
-      label = if(job.title, do: "#{id} — #{job.title}", else: id)
+      label = if(job.title, do: "#{id} - #{job.title}", else: id)
 
       case job.status do
         :done -> IO.puts("✓ #{label}")
-        :failed -> IO.puts("✗ #{label} — #{job.error}")
+        :failed -> IO.puts("✗ #{label} - #{job.error}")
         _ -> :ok
       end
     end)
