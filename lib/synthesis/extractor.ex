@@ -21,10 +21,10 @@ defmodule Synthesis.Extractor do
     estimated_tokens = div(byte_size(transcript), 4)
 
     if estimated_tokens <= threshold do
-      Logger.info("Short transcript (#{estimated_tokens} tokens) — single-call extraction.")
+      Synthesis.Progress.stage("Extracting insights... single call (#{estimated_tokens} tokens)")
       do_extract(transcript, 0, Application.get_env(:synthesis, :max_retries, 3))
     else
-      Logger.info("Long transcript (#{estimated_tokens} tokens) — chunked extraction.")
+      Logger.info("Long transcript (#{estimated_tokens} tokens) - chunked extraction.")
       chunked_extract(transcript)
     end
   end
@@ -52,8 +52,9 @@ defmodule Synthesis.Extractor do
     concurrency = Application.get_env(:synthesis, :chunk_concurrency, 2)
     max_retries = Application.get_env(:synthesis, :max_retries, 3)
     chunks = Synthesis.Chunker.chunk(transcript)
+    total = length(chunks)
 
-    Logger.info("Split into #{length(chunks)} chunks, concurrency: #{concurrency}")
+    Synthesis.Progress.stage("Extracting insights... #{total} chunks, #{concurrency} at a time")
 
     results =
       chunks
@@ -62,15 +63,22 @@ defmodule Synthesis.Extractor do
         max_concurrency: concurrency,
         timeout: Application.get_env(:synthesis, :receive_timeout, 1_200_000)
       )
-      |> Enum.reduce_while([], fn
-        {:ok, {:ok, result}}, acc -> {:cont, [result | acc]}
-        {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
-        {:exit, reason}, _acc -> {:halt, {:error, "Chunk task crashed: #{inspect(reason)}"}}
+      |> Enum.reduce_while({0, []}, fn
+        {:ok, {:ok, result}}, {count, acc} ->
+          new_count = count + 1
+          Synthesis.Progress.render(new_count, total, "Extracting")
+          {:cont, {new_count, [result | acc]}}
+
+        {:ok, {:error, reason}}, _acc ->
+          {:halt, {:error, reason}}
+
+        {:exit, reason}, _acc ->
+          {:halt, {:error, "Chunk task crashed: #{inspect(reason)}"}}
       end)
 
     case results do
       {:error, _} = err -> err
-      chunk_results -> {:ok, merge_results(Enum.reverse(chunk_results))}
+      {_count, chunk_results} -> {:ok, merge_results(Enum.reverse(chunk_results))}
     end
   end
 
@@ -171,7 +179,7 @@ defmodule Synthesis.Extractor do
     Each insight must be fully self-contained: name all subjects explicitly, never use pronouns like "it", "this", or "they" without a clear referent.
     Before finalising, review all insights and merge any that cover the same or highly overlapping concepts into a single, more complete insight.
     The "related" field must only reference titles of other insights in your list.
-    A reader should be able to faithfully reconstruct the full substance of the transcript by studying all zettels, the summary, and the index — without access to the original.
+    A reader should be able to faithfully reconstruct the full substance of the transcript by studying all zettels, the summary, and the index - without access to the original.
 
     # Output format
     You MUST respond with valid JSON only. No explanation, no markdown, no code fences.
