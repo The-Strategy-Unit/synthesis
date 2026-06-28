@@ -357,49 +357,70 @@ defmodule Synthesis.Store do
     }
   end
 
-  @spec cross_domain_neighbours(integer(), String.t(), float(), integer()) ::
-          {:ok, [map()]} | {:error, term()}
-  def cross_domain_neighbours(zettel_id, source_domain, threshold \\ 0.15, limit \\ 3) do
-    # sqlite-vec cosine distance is 0–2. threshold 0.15 = ~92.5% similarity 
-    # i.e. tight enough to avoid noise, permissive enough to catch cross-domain links
-    case Repo.query(
-           """
-           SELECT z.id, z.insight, z.domain, z.episode_id, distance
-           FROM embeddings
-           JOIN zettels z ON z.id = embeddings.zettel_id
-           WHERE embeddings.vector MATCH (SELECT vector FROM embeddings WHERE zettel_id = ?) AND distance < ?
-             AND k = ?
-             AND z.domain != ?
-           ORDER BY distance
-           """,
-           # k = limit + 20: k filter runs before domain !=. Need a larger initial window
-           [zettel_id, limit + 20, source_domain, threshold]
-         ) do
-      {:ok, %{rows: rows}} ->
-        results =
-          rows
-          |> Enum.filter(fn [_, _, _, _, d] -> d < threshold end)
-          |> Enum.take(limit)
-          |> Enum.map(fn [id, insight, domain, ep_id, dist] ->
-            %{id: id, insight: insight, domain: domain, episode_id: ep_id, distance: dist}
-          end)
-
-        {:ok, results}
-
-      {:error, _} = err ->
-        err
+  def get_zettel_embedding(zettel_id) do
+    case Repo.query("SELECT vec_to_json(vector) FROM embeddings WHERE zettel_id = ?", [zettel_id]) do
+      {:ok, %{rows: [[json]]}} -> Jason.decode(json)
+      {:ok, %{rows: []}} -> {:error, :not_found}
+      err -> err
     end
   end
 
+  def nearest_neighbours(zettel_id, query_vector, exclude_episode_id, k) do
+    vector_json = Jason.encode!(query_vector)
+
+    sql = """
+      SELECT zettel_id, distance
+      FROM embeddings
+      WHERE vector MATCH ? AND k = ?
+      ORDER BY distance
+    """
+
+    with {:ok, %{rows: rows}} <- Repo.query(sql, [vector_json, k * 5]),
+         {:ok, %{rows: episode_rows}} <-
+           Repo.query(
+             "SELECT id, episode_id FROM zettels WHERE id IN (" <>
+               Enum.map_join(1..length(rows), ", ", fn _ -> "?" end) <> ")",
+             Enum.map(rows, fn [id, _] -> id end)
+           ) do
+      episode_by_id = Map.new(episode_rows, fn [id, ep_id] -> {id, ep_id} end)
+
+      neighbours =
+        rows
+        |> Enum.reject(fn [id, _] -> id == zettel_id end)
+        |> Enum.reject(fn [id, _] -> episode_by_id[id] == exclude_episode_id end)
+        |> Enum.take(k)
+        |> Enum.map(fn [id, dist] -> %{id: id, strength: max(0.0, 1.0 - dist)} end)
+
+      {:ok, neighbours}
+    end
+  end
+
+  def insert_zettel_link(zettel_id, related_zettel_id, strength, source) do
+    Repo.query(
+      """
+      INSERT INTO zettel_links (zettel_id, related_zettel_id, strength, source)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT (zettel_id, related_zettel_id) DO UPDATE SET
+        strength = excluded.strength,
+        source = excluded.source
+      """,
+      [zettel_id, related_zettel_id, strength, source]
+    )
+  end
+
+  def clear_links(source) do
+    Repo.query("DELETE FROM zettel_links WHERE source = ?", [source])
+  end
+
   def all_zettels do
-    case Repo.query("SELECT id, insight, domain, episode_id FROM zettels", []) do
+    case Repo.query("SELECT id, episode_id, insight, tags, domain FROM zettels", []) do
       {:ok, %{rows: rows}} ->
         {:ok,
-         Enum.map(rows, fn [id, insight, domain, ep_id] ->
-           %{id: id, insight: insight, domain: domain, episode_id: ep_id}
+         Enum.map(rows, fn [id, episode_id, insight, tags, domain] ->
+           %{id: id, episode_id: episode_id, insight: insight, tags: tags, domain: domain}
          end)}
 
-      {:error, _} = err ->
+      err ->
         err
     end
   end

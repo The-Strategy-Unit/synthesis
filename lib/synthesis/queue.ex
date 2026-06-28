@@ -206,7 +206,7 @@ defmodule Synthesis.Queue do
          :ok <- insert_links(zettel_ids, insights),
          :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}, domain),
          :ok <- insert_embeddings(zettel_ids, insights),
-         :ok <- Linker.link_zettels(zettel_ids, domain),
+         :ok <- Linker.link_all(),
          :ok <- Writer.write_index(domain) do
       :ok
     end
