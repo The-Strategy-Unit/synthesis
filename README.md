@@ -1,6 +1,8 @@
 # Synthesis ⚗️
 
-Turn videos, audio, and text into a structured, semantically searchable knowledge base - entirely on your own machine.
+Turn videos, audio, and text into a structured, semantically searchable knowledge base - entirely on your own machine.  
+
+**Pipeline:** ingest → transcribe → distil → embed → search
 
 **[Install](#install)** · **[Quick start](#quick-start)** · **[How it works](#how-it-works)** · **[Roadmap](#roadmap)**
 
