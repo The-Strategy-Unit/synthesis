@@ -1,43 +1,42 @@
 defmodule Synthesis.Linker do
   @moduledoc """
-  Cross-links zettels across domains by finding semantically similar neighbours
-  and appending wikilinks to their markdown files.
+  Builds semantic links between zettels using stored embeddings.
+  Links are stored in zettel_links; summaries are not graph nodes.
   """
-  alias Synthesis.{Store, Utils}
 
-  def link_zettels(zettel_ids, domain) do
-    base_dir = Application.fetch_env!(:synthesis, :output_dir)
+  alias Synthesis.Store
 
-    Enum.each(zettel_ids, fn id ->
-      with {:ok, zettels} <- Store.cross_domain_neighbours(id, domain),
-           false <- Enum.empty?(zettels) do
-        # find the .md file for this zettel
-        {:ok, z} = Store.get_zettel(id)
-        [title | _] = String.split(z.insight, "\n", parts: 2)
-        slug = Utils.slugify(title)
+  @default_k 5
 
-        pattern = Path.join([base_dir, "**", "#{slug}.md"])
+  @spec link_all(non_neg_integer()) :: :ok
+  def link_all(k \\ @default_k) do
+    Store.clear_links("auto")
 
-        case Path.wildcard(pattern) do
-          [path | _] -> patch_markdown(path, zettels)
-          [] -> :ok
+    {:ok, zettels} = Store.all_zettels()
+
+    top_k =
+      zettels
+      |> Enum.map(fn z ->
+        case Store.get_zettel_embedding(z.id) do
+          {:ok, vector} ->
+            {:ok, neighbours} = Store.nearest_neighbours(z.id, vector, z.episode_id, k)
+            {z.id, neighbours}
+
+          {:error, :not_found} ->
+            IO.warn("No embedding for zettel #{z.id}; skipping")
+            {z.id, []}
         end
-      end
-    end)
-  end
-
-  defp patch_markdown(path, neighbours) do
-    links =
-      Enum.map_join(neighbours, "\n", fn n ->
-        [title | _] = String.split(n.insight, "\n", parts: 2)
-        slug = Utils.slugify(title)
-        "- [[#{slug}|#{title}]] _(#{n.domain})_"
       end)
+      |> Map.new()
 
-    content = File.read!(path)
-
-    unless String.contains?(content, "## Cross-domain") do
-      File.write!(path, content <> "\n## Cross-domain\n\n#{links}\n")
+    for {a, neighbours} <- top_k,
+        %{id: b, strength: s} <- neighbours,
+        a in Enum.map(Map.get(top_k, b, []), & &1.id),
+        a < b do
+      Store.insert_zettel_link(a, b, s, "auto")
+      Store.insert_zettel_link(b, a, s, "auto")
     end
+
+    :ok
   end
 end

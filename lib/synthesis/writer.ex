@@ -28,10 +28,11 @@ defmodule Synthesis.Writer do
     dir_name = if slug != "", do: "#{slug}_#{video_id}", else: video_id
     source_dir = Path.join([base_dir, domain, dir_name])
     insight_dir = Path.join(source_dir, "insights")
+    vault_prefix = Path.join([domain, dir_name, "insights"])
 
     with :ok <- File.mkdir_p(insight_dir),
-         :ok <- write_summary(source_dir, video_id, summary, insights),
-         :ok <- write_insights(insight_dir, video_id, insights) do
+         :ok <- write_summary(source_dir, video_id, summary),
+         :ok <- write_insights(insight_dir, vault_prefix, video_id, insights) do
       :ok
     else
       {:error, reason} -> {:error, "Write failed: #{inspect(reason)}"}
@@ -40,12 +41,7 @@ defmodule Synthesis.Writer do
 
   # --- Summary ---
 
-  defp write_summary(dir, video_id, summary, insights) do
-    links =
-      Enum.map(insights, fn %{title: t} ->
-        "- [[insights/#{Utils.slugify(t)}|#{t}]]"
-      end)
-
+  defp write_summary(dir, video_id, summary) do
     content = """
     ---
     id: #{video_id}
@@ -57,10 +53,6 @@ defmodule Synthesis.Writer do
     # Summary
 
     #{summary}
-
-    ## Insights
-
-    #{Enum.join(links, "\n")}
     """
 
     case File.write(Path.join(dir, "summary.md"), content) do
@@ -74,28 +66,35 @@ defmodule Synthesis.Writer do
 
   # --- Insights ---
 
-  defp write_insights(dir, video_id, insights) do
+  defp write_insights(dir, vault_prefix, video_id, insights) do
     Enum.reduce_while(insights, :ok, fn insight, :ok ->
-      case write_insight(dir, video_id, insight) do
+      case write_insight(dir, vault_prefix, video_id, insight) do
         :ok -> {:cont, :ok}
         {:error, _} = e -> {:halt, e}
       end
     end)
   end
 
-  defp write_insight(dir, video_id, %{
+  defp write_insight(dir, vault_prefix, video_id, %{
          title: title,
          content: content,
          tags: tags,
          related: related
        }) do
-    related_links = Enum.map(related, fn r -> "- [[#{Utils.slugify(r)}|#{r}]]" end)
+    slug = Utils.slugify(title)
+
+    related_links =
+      Enum.map(related, fn r ->
+        r_slug = Utils.slugify(r)
+        "- [[#{vault_prefix}/#{r_slug}|#{r}]]"
+      end)
+
     tags_str = tags |> Enum.map(&Utils.slugify/1) |> Enum.join(", ")
     related_str = related |> Enum.map(&Utils.slugify/1) |> Enum.join(", ")
 
     note = """
     ---
-    id: #{Utils.slugify(title)}
+    id: #{slug}
     source: #{video_id}
     date: #{Date.utc_today()}
     tags: [#{tags_str}]
@@ -112,7 +111,7 @@ defmodule Synthesis.Writer do
     #{if related_links == [], do: "_none_", else: Enum.join(related_links, "\n")}
     """
 
-    case File.write(Path.join(dir, "#{Utils.slugify(title)}.md"), note) do
+    case File.write(Path.join(dir, "#{slug}.md"), note) do
       :ok ->
         :ok
 
