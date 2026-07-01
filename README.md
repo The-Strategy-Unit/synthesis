@@ -46,6 +46,20 @@ mix wiki.link         # recompute semantic links in the database
 mix wiki.update_links # rewrite Related sections in all markdown notes
 ```
 
+### Publish your wiki with an interactive graph
+
+Host your generated wiki as a static site with an Obsidian-like graph view using [Quartz](https://quartz.jzhao.xyz/):
+
+```bash
+git clone https://github.com/jackyzha0/quartz.git
+cd quartz
+npm i
+npx quartz create -s ./../output/
+npx quartz build --serve  # preview locally at localhost:8080
+```
+
+Deploy the `public/` output to Azure Static Web Apps (free tier) or GitHub Pages.
+
 ## How it works
 
 1. **Ingest** - paste a YouTube URL, audio file, or text.
