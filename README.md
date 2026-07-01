@@ -34,6 +34,16 @@ Built for clinicians, clinical teams, public-sector analysts, and anyone navigat
    mix wiki.search "your query"
    ```
 
+### Refreshing links in an existing wiki
+
+If you generated notes before the cross-presentation linking feature, or you
+want to refresh links after changing settings:
+
+```bash
+mix wiki.link         # recompute semantic links in the database
+mix wiki.update_links # rewrite Related sections in all markdown notes
+```
+
 ## How it works
 
 1. **Ingest** - paste a YouTube URL, audio file, or text.
