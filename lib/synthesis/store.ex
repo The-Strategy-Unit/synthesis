@@ -412,6 +412,29 @@ defmodule Synthesis.Store do
     Repo.query("DELETE FROM zettel_links WHERE source = ?", [source])
   end
 
+  @spec zettels_without_embeddings() :: {:ok, [map()]} | {:error, term()}
+  def zettels_without_embeddings do
+    case Repo.query("SELECT id, question, insight FROM zettels", [], 30000) do
+      {:ok, %{rows: rows}} ->
+        zettels =
+          Enum.map(rows, fn [id, question, insight] ->
+            %{id: id, question: question, insight: insight}
+          end)
+
+        case Repo.query("SELECT zettel_id FROM embeddings", []) do
+          {:ok, %{rows: emb_rows}} ->
+            emb_ids = MapSet.new(Enum.map(emb_rows, fn [id] -> id end))
+            {:ok, Enum.filter(zettels, fn %{id: id} -> not MapSet.member?(emb_ids, id) end)}
+
+          err ->
+            err
+        end
+
+      err ->
+        err
+    end
+  end
+
   def all_zettels do
     case Repo.query("SELECT id, episode_id, insight, tags, domain FROM zettels", []) do
       {:ok, %{rows: rows}} ->

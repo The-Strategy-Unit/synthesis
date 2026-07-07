@@ -27,6 +27,15 @@ defmodule Synthesis.Repo do
   end
 
   @doc """
+  Executes a SQL query with optional parameter bindings and a custom timeout.
+  Returns `{:ok, %{rows: [...], columns: [...]}}` or `{:error, reason}`.
+  """
+  @spec query(String.t(), list(), non_neg_integer()) :: {:ok, map()} | {:error, term()}
+  def query(sql, params, timeout) when is_integer(timeout) and timeout > 0 do
+    GenServer.call(__MODULE__, {:query, sql, params}, timeout)
+  end
+
+  @doc """
   Like `query/2` but raises on error.
   """
   @spec query!(String.t(), list()) :: map()
