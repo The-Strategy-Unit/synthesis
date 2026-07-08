@@ -114,9 +114,9 @@ defmodule Synthesis.Extractor do
   defp call_ollama(transcript) do
     url = Application.fetch_env!(:synthesis, :ollama_url)
     model = Application.fetch_env!(:synthesis, :ollama_model)
-    temperature = Application.fetch_env!(:synthesis, :temperature, 0.1)
-    receive_timeout = Application.fetch_env!(:synthesis, :receive_timeout, 1_200_000)
-    num_predict = Application.get_env(:synthesis, :num_predict, 4096)
+    temperature = Application.fetch_env!(:synthesis, :temperature)
+    receive_timeout = Application.fetch_env!(:synthesis, :receive_timeout)
+    num_predict = Application.fetch_env!(:synthesis, :num_predict)
 
     case Req.post("#{url}/api/generate",
            json: %{
