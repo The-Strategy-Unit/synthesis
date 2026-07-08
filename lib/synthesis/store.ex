@@ -15,16 +15,13 @@ defmodule Synthesis.Store do
            """
            INSERT INTO episodes (url, video_id, title, raw_transcript, domain)
            VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT (url) DO UPDATE SET
-             title = excluded.title,
-             raw_transcript = excluded.raw_transcript,
-             fetched_at = datetime('now')
+           ON CONFLICT (url) DO NOTHING
            RETURNING id
            """,
            [url, video_id, title, raw_transcript, domain]
          ) do
       {:ok, %{rows: [[id]]}} -> {:ok, id}
-      {:error, "UNIQUE constraint failed: " <> _} -> {:error, :already_exists}
+      {:ok, %{rows: []}} -> {:error, :already_exists}
       {:error, _} = err -> err
     end
   end
@@ -116,6 +113,21 @@ defmodule Synthesis.Store do
            VALUES (?, ?)
            """,
            [zettel_id, related_zettel_id]
+         ) do
+      {:ok, _} -> :ok
+      {:error, _} = err -> err
+    end
+  end
+
+  @spec insert_zettel_link(integer(), integer(), term(), term()) :: :ok | {:error, term()}
+  def insert_zettel_link(zettel_id, related_zettel_id, strength, source) do
+    case Repo.query(
+           """
+           INSERT INTO zettel_links (zettel_id, related_zettel_id, strength, source)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (zettel_id, related_zettel_id) DO NOTHING
+           """,
+           [zettel_id, related_zettel_id, strength, source]
          ) do
       {:ok, _} -> :ok
       {:error, _} = err -> err
@@ -393,19 +405,6 @@ defmodule Synthesis.Store do
 
       {:ok, neighbours}
     end
-  end
-
-  def insert_zettel_link(zettel_id, related_zettel_id, strength, source) do
-    Repo.query(
-      """
-      INSERT INTO zettel_links (zettel_id, related_zettel_id, strength, source)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT (zettel_id, related_zettel_id) DO UPDATE SET
-        strength = excluded.strength,
-        source = excluded.source
-      """,
-      [zettel_id, related_zettel_id, strength, source]
-    )
   end
 
   def clear_links(source) do
