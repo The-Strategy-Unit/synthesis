@@ -8,6 +8,7 @@ config :synthesis,
   # 20min
   receive_timeout: 1_200_000,
   temperature: 0.1,
+  num_predict: 8192,
   chunk_tokens: 2000,
   overlap_tokens: 200,
   # keep low - Ollama is single-threaded per request
