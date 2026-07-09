@@ -103,6 +103,56 @@ defmodule Synthesis.Store do
     end
   end
 
+  @spec update_zettel(integer(), String.t() | nil, String.t() | nil) :: :ok | {:error, term()}
+  def update_zettel(id, tags, insight) do
+    sets =
+      []
+      |> then(fn s -> if tags, do: ["tags = ?" | s], else: s end)
+      |> then(fn s -> if insight, do: ["insight = ?" | s], else: s end)
+
+    if sets == [] do
+      :ok
+    else
+      set_clause = Enum.join(sets, ", ")
+      params = Enum.filter([insight, tags], & &1) ++ [id]
+
+      Repo.query("UPDATE zettels SET #{set_clause} WHERE id = ?", params)
+      |> case do
+        {:ok, _} -> :ok
+        {:error, _} = err -> err
+      end
+    end
+  end
+
+  @spec delete_zettel(integer()) :: :ok | {:error, term()}
+  def delete_zettel(id) do
+    with {:ok, _} <-
+           Repo.query("DELETE FROM zettel_links WHERE zettel_id = ? OR related_zettel_id = ?", [
+             id,
+             id
+           ]),
+         {:ok, _} <- Repo.query("DELETE FROM embeddings WHERE zettel_id = ?", [id]),
+         {:ok, _} <- Repo.query("DELETE FROM zettels WHERE id = ?", [id]) do
+      :ok
+    end
+  end
+
+  @spec rewire_links(integer(), integer()) :: :ok | {:error, term()}
+  def rewire_links(old_id, new_id) do
+    with {:ok, _} <-
+           Repo.query(
+             "UPDATE zettel_links SET zettel_id = ? WHERE zettel_id = ? AND related_zettel_id != ?",
+             [new_id, old_id, new_id]
+           ),
+         {:ok, _} <-
+           Repo.query(
+             "UPDATE zettel_links SET related_zettel_id = ? WHERE related_zettel_id = ? AND zettel_id != ?",
+             [new_id, old_id, new_id]
+           ) do
+      :ok
+    end
+  end
+
   # --- Zettel Links ---
 
   @spec insert_zettel_link(integer(), integer()) :: :ok | {:error, term()}
