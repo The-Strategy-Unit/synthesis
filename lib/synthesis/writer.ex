@@ -31,7 +31,7 @@ defmodule Synthesis.Writer do
     vault_prefix = Path.join([domain, dir_name, "insights"])
 
     with :ok <- File.mkdir_p(insight_dir),
-         :ok <- write_summary(source_dir, video_id, summary),
+         :ok <- write_summary(source_dir, video_id, summary, title),
          :ok <- write_insights(insight_dir, vault_prefix, video_id, insights) do
       :ok
     else
@@ -41,10 +41,11 @@ defmodule Synthesis.Writer do
 
   # --- Summary ---
 
-  defp write_summary(dir, video_id, summary) do
+  defp write_summary(dir, video_id, summary, title) do
     content = """
     ---
     id: #{video_id}
+    title: #{title || video_id}
     source: https://www.youtube.com/watch?v=#{video_id}
     date: #{Date.utc_today()}
     type: summary
@@ -52,7 +53,7 @@ defmodule Synthesis.Writer do
 
     # Summary
 
-    #{summary}
+    # #{title || "Summary"}
     """
 
     case File.write(Path.join(dir, "summary.md"), content) do
