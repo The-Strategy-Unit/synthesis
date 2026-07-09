@@ -1,7 +1,8 @@
+# wiki_updater.ex
 defmodule Synthesis.WikiUpdater do
   @moduledoc """
   Rewrites the `## Related` sections in all insight markdown files from the
-  current `zettel_links` table.
+  current `zettel_links` table. Also patches `title:` into summary frontmatter.
 
   Called automatically after new ingest, or manually via `mix wiki.update_links`.
   """
@@ -23,6 +24,7 @@ defmodule Synthesis.WikiUpdater do
         entry_dir = Path.join(domain_dir, entry),
         File.dir?(entry_dir) do
       update_source_dir(entry_dir, links, zettels, video_to_episode, domain, entry)
+      rewrite_summary(Path.join(entry_dir, "summary.md"), video_to_episode, entry)
       clean_summary(Path.join(entry_dir, "summary.md"))
     end
 
@@ -42,7 +44,10 @@ defmodule Synthesis.WikiUpdater do
 
   defp load_links do
     {:ok, %{rows: rows}} =
-      Repo.query("SELECT zettel_id, related_zettel_id, strength FROM zettel_links WHERE source = 'auto'", [])
+      Repo.query(
+        "SELECT zettel_id, related_zettel_id, strength FROM zettel_links WHERE source = 'auto'",
+        []
+      )
 
     Enum.group_by(rows, fn [id, _, _] -> id end, fn [_, rel_id, s] -> {rel_id, s} end)
   end
@@ -123,6 +128,29 @@ defmodule Synthesis.WikiUpdater do
       |> Enum.join("\n")
 
     "## Related\n\n#{links_md}"
+  end
+
+  defp rewrite_summary(path, video_to_episode, entry) do
+    unless not File.exists?(path) do
+      video_id = video_id_from_entry(entry)
+      episode_id = Map.get(video_to_episode, video_id)
+
+      if episode_id do
+        {:ok, %{rows: [[title, _video_id]]}} =
+          Repo.query("SELECT title, video_id FROM episodes WHERE id = ?", [episode_id])
+
+        content = File.read!(path)
+
+        rewritten =
+          if String.contains?(content, "title:") do
+            String.replace(content, ~r/^title:.*$/m, "title: #{title || video_id}")
+          else
+            String.replace(content, "type: summary", "title: #{title || video_id}\ntype: summary")
+          end
+
+        File.write!(path, rewritten)
+      end
+    end
   end
 
   defp clean_summary(path) do
