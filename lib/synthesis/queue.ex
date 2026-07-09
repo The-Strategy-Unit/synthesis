@@ -10,7 +10,7 @@ defmodule Synthesis.Queue do
   use GenServer
   require Logger
 
-  alias Synthesis.{Embedder, Extractor, Store, Writer, Linker}
+  alias Synthesis.{Embedder, Extractor, Store, Writer, Linker, Deduplicator}
 
   @type job_status :: :pending | :processing | :done | :failed
   @type job :: %{
@@ -206,6 +206,7 @@ defmodule Synthesis.Queue do
          :ok <- insert_links(zettel_ids, insights),
          :ok <- Writer.write(video_id, title, %{summary: summary, insights: insights}, domain),
          :ok <- insert_embeddings(zettel_ids, insights),
+         {:ok, _} <- Deduplicator.run(),
          :ok <- Linker.link_all(),
          :ok <- Synthesis.WikiUpdater.run(),
          :ok <- Writer.write_index(domain) do
