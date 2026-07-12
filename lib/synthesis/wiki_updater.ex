@@ -1,4 +1,3 @@
-# wiki_updater.ex
 defmodule Synthesis.WikiUpdater do
   @moduledoc """
   Rewrites the `## Related` sections in all insight markdown files from the
@@ -113,21 +112,26 @@ defmodule Synthesis.WikiUpdater do
     links_md =
       links
       |> Enum.sort_by(fn {_, strength} -> strength end, :desc)
+      |> Enum.filter(fn {rel_id, _} -> Map.has_key?(zettels, rel_id) end)
       |> Enum.map(fn {rel_id, strength} ->
         %{title: title, episode_id: episode_id} = Map.fetch!(zettels, rel_id)
 
-        {:ok, %{rows: [[episode_title, video_id]]}} =
-          Repo.query("SELECT title, video_id FROM episodes WHERE id = ?", [episode_id])
+        case Repo.query("SELECT title, video_id FROM episodes WHERE id = ?", [episode_id]) do
+          {:ok, %{rows: [[episode_title, video_id]]}} ->
+            ep_slug = Utils.slugify(episode_title || "")
+            ep_dir = if ep_slug != "", do: "#{ep_slug}_#{video_id}", else: video_id
+            r_slug = Utils.slugify(title)
 
-        ep_slug = Utils.slugify(episode_title || "")
-        ep_dir = if ep_slug != "", do: "#{ep_slug}_#{video_id}", else: video_id
-        r_slug = Utils.slugify(title)
+            "- [[#{domain}/#{ep_dir}/insights/#{r_slug}|#{title}]] _(#{Float.round(strength, 3)})_"
 
-        "- [[#{domain}/#{ep_dir}/insights/#{r_slug}|#{title}]] _(#{Float.round(strength, 3)})_"
+          _ ->
+            nil
+        end
       end)
+      |> Enum.filter(&(&1 != nil))
       |> Enum.join("\n")
 
-    "## Related\n\n#{links_md}"
+    if links_md == "", do: "## Related\n\n_none_", else: "## Related\n\n#{links_md}"
   end
 
   defp rewrite_summary(path, video_to_episode, entry) do

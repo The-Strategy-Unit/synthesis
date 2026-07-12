@@ -52,8 +52,8 @@ defmodule Synthesis.Deduplicator do
 
         {new_count, new_deleted} =
           Enum.reduce(dupes, {count, deleted}, fn n, {c, d} ->
-            # keep = oldest (lowest ID), kill = newest (highest ID)
-            {keep, kill} = if z.id < n.id, do: {z, n}, else: {n, z}
+            {:ok, full_n} = Store.get_zettel(n.id)
+            {keep, kill} = if z.id < n.id, do: {z, full_n}, else: {full_n, z}
             merge_zettels(keep, kill)
             {c + 1, MapSet.put(d, kill.id)}
           end)
@@ -67,7 +67,7 @@ defmodule Synthesis.Deduplicator do
   end
 
   defp merge_zettels(keep, kill) do
-    merged_tags = union_tags(keep.tags, kill.tags)
+    merged_tags = union_tags(keep[:tags], kill[:tags])
     merged_insight = longer_insight(keep.insight, kill.insight)
 
     Store.update_zettel(keep.id, merged_tags, merged_insight)
