@@ -1,0 +1,26 @@
+{
+  "name": "synthesis",
+  "version": "0.1.0",
+  "tasks": {
+    "setup": "mkdir -p ${HOME}/Synthesis",
+    "dev": "deno run --watch --allow-all main.ts",
+    "dev:full": "deno run --watch --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
+    "start": "deno run --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
+    "start": "deno run --allow-net --allow-read=web,${HOME}/Synthesis --allow-write=${HOME}/Synthesis --allow-run=yt-dlp --allow-env main.ts",
+    "desktop:dev": "deno desktop dev",
+    "desktop:start": "deno desktop start",
+    "build:windows": "deno desktop build --target x86_64-pc-windows-msvc",
+    "build:macos": "deno desktop build --target aarch64-apple-darwin",
+    "build:linux": "deno desktop build --target x86_64-unknown-linux-gnu",
+    "test": "deno test --allow-net --allow-read=web,${HOME}/Synthesis --allow-write=${HOME}/Synthesis --allow-run=yt-dlp --allow-env"
+  },
+
+  "imports": {
+    "d3-force": "https://esm.sh/d3-force@3",
+    "d3-selection": "https://esm.sh/d3-selection@3",
+    "d3-drag": "https://esm.sh/d3-drag@3"
+  },
+  "exports": "./main.ts",
+
+  "exclude": ["web/"]
+}

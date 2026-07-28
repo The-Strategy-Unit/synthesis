@@ -1,0 +1,18 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@types/d3-drag@~3.0.7/index.d.ts": "https://esm.sh/@types/d3-drag@3.0.7/index.d.ts",
+    "https://esm.sh/@types/d3-force@~3.0.10/index.d.ts": "https://esm.sh/@types/d3-force@3.0.10/index.d.ts",
+    "https://esm.sh/@types/d3-selection@~3.0.11/index.d.ts": "https://esm.sh/@types/d3-selection@3.0.11/index.d.ts",
+    "https://esm.sh/d3-drag@3": "https://esm.sh/d3-drag@3.0.0",
+    "https://esm.sh/d3-force@3": "https://esm.sh/d3-force@3.0.0",
+    "https://esm.sh/d3-selection@3": "https://esm.sh/d3-selection@3.0.0"
+  },
+  "remote": {
+    "https://cdn.jsdelivr.net/npm/katex/dist/katex.mjs": "8e5ec76631a31181d57ed8af5611b2fa15f776e67b6ead5ed3c7639c95208238",
+    "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js": "fd52a4d9a8eb652477ec1ddea2c48677bf46fcfc82e3801e46ca54359c57164f",
+    "https://esm.sh/d3-drag@3.0.0": "29c825b72b51c1c60cf5221266d2b2c4a494d25448a62af8d66a4f228957e899",
+    "https://esm.sh/d3-force@3.0.0": "1a35f3dd1ff127dc27f2b009574d90304693b0a516eac9583df8d0333d61fd8e",
+    "https://esm.sh/d3-selection@3.0.0": "996ecb6a540d57da331d836611fe42cb10b9df82633a04f4ddc1528e566384a6"
+  }
+}
