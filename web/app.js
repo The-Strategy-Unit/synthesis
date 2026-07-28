@@ -8,6 +8,8 @@ import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
 
+const LABEL_ZOOM_THRESHOLD = 1.5;
+
 // --- Search input ---
 function setSearchStatus(text) {
   const input = document.getElementById("search-input");
@@ -41,11 +43,42 @@ async function loadNoteList() {
   currentNotes = data.notes ?? [];
   const list = document.getElementById("note-list");
   list.innerHTML = "";
+
+  // Group notes by source_url
+  const groups = new Map();
   for (const note of currentNotes) {
+    const key = note.source_url || "Text notes";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(note);
+  }
+
+  for (const [source, notes] of groups) {
     const li = document.createElement("li");
-    li.textContent = note.title;
-    li.dataset.id = note.id;
-    li.addEventListener("click", () => loadNote(note.id, li));
+    li.className = "tree-group";
+    const label = document.createElement("span");
+    label.className = "tree-label";
+    label.textContent = "▸ " + (notes[0].title?.split(" — ")[0] || source);
+    label.style.cursor = "pointer";
+    li.appendChild(label);
+
+    const ul = document.createElement("ul");
+    ul.className = "tree-children";
+    ul.style.display = "none";
+
+    label.addEventListener("click", () => {
+      const open = ul.style.display !== "none";
+      ul.style.display = open ? "none" : "block";
+      label.textContent = (open ? "▸ " : "▾ ") + label.textContent.slice(2);
+    });
+
+    for (const note of notes) {
+      const child = document.createElement("li");
+      child.textContent = note.title;
+      child.dataset.id = note.id;
+      child.addEventListener("click", () => loadNote(note.id, child));
+      ul.appendChild(child);
+    }
+    li.appendChild(ul);
     list.appendChild(li);
   }
 }
@@ -228,6 +261,8 @@ async function loadGraph() {
   renderGraph();
 }
 
+const tooltip = select("#graph-tooltip");
+
 function renderGraph() {
   const svg = select("#graph");
   const panel = document.getElementById("graph-panel");
@@ -247,12 +282,22 @@ function renderGraph() {
   }
 
   const g = svg.append("g");
+  let currentZoom = 1;
+  const sims = graphData.links.map((l) => l.similarity ?? 0.6);
+  const minSim = sims.length ? Math.min(...sims) : 0.6;
+  const maxSim = sims.length ? Math.max(...sims) : 0.6;
 
   svg.call(
     zoom()
       .extent([[0, 0], [width, height]])
       .scaleExtent([0.1, 4])
-      .on("zoom", (event) => g.attr("transform", event.transform)),
+      .on("zoom", (event) => {
+        currentZoom = event.transform.k;
+        g.attr("transform", event.transform);
+        const showLabels = currentZoom > LABEL_ZOOM_THRESHOLD;
+        label.style("display", showLabels ? null : "none");
+        if (showLabels) tooltip.classed("hidden", true);
+      }),
   );
 
   const link = g.append("g")
@@ -261,16 +306,65 @@ function renderGraph() {
     .data(graphData.links)
     .join("line")
     .attr("class", "link")
-    .attr("stroke-width", 1.5);
+    .attr("stroke", (d) => {
+      const sim = d.similarity ?? 0.6;
+      const t = (sim - minSim) / ((maxSim - minSim) || 1);
+      // Interpolate from faint grey to muted blue-grey
+      const r = Math.round(90 + (80 - 90) * t);
+      const gVal = Math.round(95 + (95 - 95) * t);
+      const b = Math.round(110 + (130 - 110) * t);
+      return `rgb(${r}, ${gVal}, ${b})`;
+    })
+    .attr("stroke-width", (d) => {
+      const sim = d.similarity ?? 0.6;
+      return 0.5 + 2 * ((sim - minSim) / ((maxSim - minSim) || 1));
+    })
+    .attr("stroke-opacity", (d) => {
+      const sim = d.similarity ?? 0.6;
+      return 0.12 + 0.55 * ((sim - minSim) / ((maxSim - minSim) || 1));
+    });
+
+  // Compute degree and radius for each node
+  const degree = new Map();
+  for (const n of graphData.nodes) degree.set(n.id, 0);
+  for (const l of graphData.links) {
+    degree.set(
+      l.source.id ?? l.source,
+      (degree.get(l.source.id ?? l.source) ?? 0) + 1,
+    );
+    degree.set(
+      l.target.id ?? l.target,
+      (degree.get(l.target.id ?? l.target) ?? 0) + 1,
+    );
+  }
+
+  function nodeRadius(d) {
+    const ddeg = degree.get(d.id) ?? 0;
+    return Math.min(14, Math.max(6, 6 + Math.sqrt(ddeg) * 1.5));
+  }
 
   const node = g.append("g")
     .selectAll("circle")
     .data(graphData.nodes)
     .join("circle")
     .attr("class", "node")
-    .attr("r", 8)
+    .attr("r", nodeRadius)
     .style("cursor", "pointer")
-    .on("click", (_event, d) => loadNote(d.id));
+    .style("cursor", "pointer")
+    .on("click", (_event, d) => loadNote(d.id))
+    .on("mouseover", (event, d) => {
+      if (currentZoom <= LABEL_ZOOM_THRESHOLD) {
+        tooltip.classed("hidden", false).text(d.title);
+      }
+    })
+    .on("mousemove", (event) => {
+      tooltip
+        .style("left", `${event.clientX + 12}px`)
+        .style("top", `${event.clientY - 10}px`);
+    })
+    .on("mouseout", () => {
+      tooltip.classed("hidden", true);
+    });
 
   const label = g.append("g")
     .selectAll("text")

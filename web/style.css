@@ -143,6 +143,47 @@ body {
   color: #ffffff;
 }
 
+#note-list .tree-group {
+  list-style: none;
+  padding: 0.25rem 0;
+}
+
+.tree-label {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.tree-label:hover {
+  color: var(--text-muted);
+}
+
+.tree-children {
+  list-style: none;
+  margin-left: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.tree-children li {
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.tree-children li:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tree-children li.active {
+  background: var(--accent-strong);
+  color: #fff;
+}
+
 #viewer {
   overflow-y: auto;
   padding: 1.5rem 2rem;
@@ -270,7 +311,6 @@ body {
 
 #graph circle {
   fill: var(--accent);
-  r: 8;
 }
 
 #graph text {
@@ -281,6 +321,23 @@ body {
 #graph circle:hover {
   r: 11;
   fill: var(--accent-soft);
+}
+
+#graph-tooltip {
+  position: fixed;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text);
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+}
+
+#graph-tooltip.hidden {
+  display: none;
 }
 
 #ingest-bar {
