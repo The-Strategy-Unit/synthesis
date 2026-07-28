@@ -1,5 +1,7 @@
 // Distil: transcript → atomic notes via OpenAI-compatible LLM
 
+import { config } from "./config.ts";
+
 export interface DistilNote {
   title: string;
   body: string;
@@ -27,9 +29,6 @@ You MUST respond with ONLY a JSON object, no markdown fences, no commentary. The
 
 {"summary": "2-3 sentence overview of the source", "notes": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
 
-const MAX_CHARS = 12000; // ~3000 tokens, safe for context window
-const OVERLAP = 500;
-
 export async function distil(
   transcript: string,
   _title: string,
@@ -38,7 +37,11 @@ export async function distil(
   apiKey: string,
   model: string,
 ): Promise<DistilResult> {
-  const chunks = chunkText(transcript, MAX_CHARS, OVERLAP);
+  const chunks = chunkText(
+    transcript,
+    config.ingest.maxChars,
+    config.ingest.overlap,
+  );
 
   if (chunks.length === 1) {
     return await distilChunk(chunks[0], apiBase, apiKey, model);

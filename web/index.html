@@ -53,6 +53,11 @@
       <!-- Graph panel -->
       <aside id="graph-panel">
         <h3>Connections</h3>
+        <div class="threshold-control">
+          <label>Min similarity: <span id="threshold-value">0.55</span></label>
+          <input type="range" id="similarity-slider" min="0" max="1" step="0.05"
+            value="0.55" />
+        </div>
         <svg id="graph"></svg>
       </aside>
       </main>

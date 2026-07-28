@@ -1,5 +1,6 @@
 // Search: combine keyword (FTS5) and semantic (cosine similarity) results
 
+import { config } from "./config.ts";
 import type { DB } from "./db.ts";
 import { embedText } from "./embed.ts";
 
@@ -16,7 +17,7 @@ export async function search(
   apiBase: string,
   apiKey: string,
   embedModel: string,
-  limit = 20,
+  limit = config.search.resultLimit,
 ): Promise<SearchResult[]> {
   // Run both searches in parallel
   const [keywordResults, queryEmbedding] = await Promise.all([
@@ -26,7 +27,7 @@ export async function search(
 
   const scores = new Map<number, { score: number; matchType: string }>();
 
-  // Keyword results — FTS5 rank is negative (lower = better), normalize to 0-1
+  // Keyword results - FTS5 rank is negative (lower = better), normalize to 0-1
   for (const r of keywordResults) {
     const normalized = 1 / (1 + Math.abs(r.rank));
     scores.set(r.id, { score: normalized, matchType: "keyword" });

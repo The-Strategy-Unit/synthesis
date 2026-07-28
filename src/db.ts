@@ -162,4 +162,22 @@ export class DB {
     ).get(noteId) as { embedding: string } | undefined;
     return row ? JSON.parse(row.embedding) : null;
   }
+
+  getRelatedNotes(
+    noteId: number,
+    limit = 5,
+  ): Array<{ id: number; title: string; similarity: number }> {
+    return this.db.prepare(
+      `SELECT target_note_id as id, n.title, l.similarity
+     FROM links l JOIN notes n ON n.id = l.target_note_id
+     WHERE l.source_note_id = ?
+     UNION
+     SELECT source_note_id as id, n.title, l.similarity
+     FROM links l JOIN notes n ON n.id = l.source_note_id
+     WHERE l.target_note_id = ?
+     ORDER BY similarity DESC LIMIT ?`,
+    ).all(noteId, noteId, limit) as Array<
+      { id: number; title: string; similarity: number }
+    >;
+  }
 }

@@ -30,6 +30,8 @@ async function api(path, opts = {}) {
 
 let currentNotes = [];
 let graphData = { nodes: [], links: [] };
+let rawGraphData = { nodes: [], links: [] };
+
 let simulation = null;
 
 // --- Note list ---
@@ -90,37 +92,85 @@ async function loadNote(id, liEl) {
     .replace(/^/, "<p>")
     .replace(/$/, "</p>");
 
-  viewer.innerHTML = html;
+  // Related notes
+  let relatedHtml = "";
+  if (data.related && data.related.length > 0) {
+    relatedHtml = '<hr style="border-color:#333;margin:1rem 0">' +
+      '<p style="color:#888;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem">Related</p>' +
+      '<ul style="list-style:none">' +
+      data.related.map((r) =>
+        `<li style="padding:0.3rem 0;cursor:pointer;color:#4ea8de" data-id="${r.id}" class="related-link">${r.title}</li>`
+      ).join("") +
+      "</ul>";
+  }
+
+  viewer.innerHTML = html + relatedHtml;
+
+  // Wire up related note clicks
+  viewer.querySelectorAll(".related-link").forEach((el) => {
+    el.addEventListener("click", () => {
+      const relId = parseInt(el.dataset.id);
+      loadNote(relId);
+    });
+  });
+
   openModal();
 }
 
 // --- Search ---
 
-let searchTimeout;
-document.getElementById("search-input").addEventListener("input", (e) => {
-  clearTimeout(searchTimeout);
-  const q = e.target.value.trim();
-  if (q.length < 2) {
-    loadNoteList();
-    return;
+// let searchTimeout;
+// document.getElementById("search-input").addEventListener("input", (e) => {
+//   clearTimeout(searchTimeout);
+//   const q = e.target.value.trim();
+//   if (q.length < 2) {
+//     loadNoteList();
+//     return;
+//   }
+//   setSearchStatus("searching...");
+//   searchTimeout = setTimeout(async () => {
+//     const mode = document.getElementById("search-mode").value;
+//     const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
+//     setSearchStatus("");
+//     const list = document.getElementById("note-list");
+//     list.innerHTML = "";
+//     for (const result of data.results ?? []) {
+//       const li = document.createElement("li");
+//       li.textContent = result.title;
+//       li.dataset.id = result.id;
+//       li.addEventListener("click", () => loadNote(result.id, li));
+//       list.appendChild(li);
+//     }
+//   }, 800);
+// });
+
+const searchInput = document.getElementById("search-input");
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const q = e.target.value.trim();
+    if (q.length < 2) return;
+    doSearch(q);
   }
-  setSearchStatus("searching...");
-  searchTimeout = setTimeout(async () => {
-    const mode = document.getElementById("search-mode").value;
-    const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
-    setSearchStatus("");
-    const list = document.getElementById("note-list");
-    list.innerHTML = "";
-    for (const result of data.results ?? []) {
-      const li = document.createElement("li");
-      li.textContent = result.title;
-      li.dataset.id = result.id;
-      li.addEventListener("click", () => loadNote(result.id, li));
-      list.appendChild(li);
-    }
-  }, 800);
+  if (e.key === "Escape") {
+    e.target.value = "";
+    loadNoteList();
+  }
 });
 
+async function doSearch(q) {
+  const mode = document.getElementById("search-mode").value;
+  const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
+  const list = document.getElementById("note-list");
+  list.innerHTML = "";
+  for (const result of data.results ?? []) {
+    const li = document.createElement("li");
+    li.textContent = result.title;
+    li.dataset.id = result.id;
+    li.addEventListener("click", () => loadNote(result.id, li));
+    list.appendChild(li);
+  }
+}
 // --- Ingest ---
 
 document.getElementById("ingest-btn").addEventListener("click", async () => {
@@ -166,7 +216,15 @@ document.getElementById("ingest-input").addEventListener("keydown", (e) => {
 
 async function loadGraph() {
   const data = await api("graph");
-  graphData = { nodes: data.nodes ?? [], links: data.links ?? [] };
+  rawGraphData = {
+    nodes: data.nodes ?? [],
+    links: (data.links ?? []).map((l) => ({
+      source: l.source,
+      target: l.target,
+      similarity: l.similarity,
+    })),
+  };
+  graphData = JSON.parse(JSON.stringify(rawGraphData));
   renderGraph();
 }
 
@@ -176,7 +234,6 @@ function renderGraph() {
   const width = panel.clientWidth - 10;
   const height = panel.clientHeight - 40;
   svg.attr("viewBox", `0 0 ${width} ${height}`);
-
   svg.selectAll("*").remove();
 
   if (graphData.nodes.length === 0) {
@@ -184,8 +241,7 @@ function renderGraph() {
       .attr("x", width / 2)
       .attr("y", height / 2)
       .attr("text-anchor", "middle")
-      .attr("fill", "#555")
-      .attr("font-size", "12px")
+      .attr("class", "placeholder-text")
       .text("No notes yet");
     return;
   }
@@ -200,21 +256,19 @@ function renderGraph() {
   );
 
   const link = g.append("g")
-    .attr("stroke", "#6a7a8a")
-    .attr("stroke-opacity", 0.7)
+    .attr("class", "links")
     .selectAll("line")
     .data(graphData.links)
     .join("line")
+    .attr("class", "link")
     .attr("stroke-width", 1.5);
 
   const node = g.append("g")
     .selectAll("circle")
     .data(graphData.nodes)
     .join("circle")
+    .attr("class", "node")
     .attr("r", 8)
-    .attr("fill", "#4ea8de")
-    .attr("stroke", "#fff")
-    .attr("stroke-width", 1.5)
     .style("cursor", "pointer")
     .on("click", (_event, d) => loadNote(d.id));
 
@@ -222,9 +276,8 @@ function renderGraph() {
     .selectAll("text")
     .data(graphData.nodes)
     .join("text")
+    .attr("class", "label")
     .text((d) => d.title.length > 20 ? d.title.slice(0, 17) + "…" : d.title)
-    .attr("font-size", "10px")
-    .attr("fill", "#ccc")
     .attr("dx", 10)
     .attr("dy", 3)
     .style("pointer-events", "none");
@@ -264,6 +317,40 @@ function renderGraph() {
         .attr("x", (d) => d.x)
         .attr("y", (d) => d.y);
     });
+}
+
+// --- Similarity threshold slider ---
+
+const slider = document.getElementById("similarity-slider");
+const thresholdLabel = document.getElementById("threshold-value");
+
+slider.addEventListener("input", () => {
+  const threshold = parseFloat(slider.value);
+  thresholdLabel.textContent = threshold.toFixed(2);
+  renderGraphFiltered(threshold);
+});
+
+function renderGraphFiltered(threshold) {
+  const filteredLinks = rawGraphData.links
+    .filter((l) => (l.similarity ?? 0.6) >= threshold)
+    .map((l) => ({
+      source: l.source,
+      target: l.target,
+      similarity: l.similarity,
+    }));
+
+  const connectedIds = new Set();
+  for (const l of filteredLinks) {
+    connectedIds.add(l.source);
+    connectedIds.add(l.target);
+  }
+
+  const filteredNodes = rawGraphData.nodes
+    .filter((n) => connectedIds.has(n.id))
+    .map((n) => ({ id: n.id, title: n.title }));
+
+  graphData = { nodes: filteredNodes, links: filteredLinks };
+  renderGraph();
 }
 
 // --- Init ---
