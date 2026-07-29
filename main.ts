@@ -106,7 +106,7 @@ Deno.serve({ port: config.port }, async (req: Request) => {
       }
 
       try {
-        await computeLinks(db);
+        await computeLinks(db, config.link.similarityThreshold);
       } catch (err) {
         console.error(`Link computation failed: ${errMsg(err)}`);
       }
@@ -183,7 +183,7 @@ Deno.serve({ port: config.port }, async (req: Request) => {
       }
 
       try {
-        await computeLinks(db);
+        await computeLinks(db, config.link.similarityThreshold);
       } catch (err) {
         console.error(`Link computation failed: ${errMsg(err)}`);
       }
@@ -213,7 +213,11 @@ Deno.serve({ port: config.port }, async (req: Request) => {
       const links = db.getLinks();
       return json({
         nodes: notes.map((n) => ({ id: n.id, title: n.title })),
-        links: links.map((l) => ({ source: l.source, target: l.target })),
+        links: links.map((l) => ({
+          source: l.source,
+          target: l.target,
+          similarity: l.similarity,
+        })),
       });
     }
 
