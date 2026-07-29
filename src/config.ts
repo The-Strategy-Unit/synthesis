@@ -44,6 +44,7 @@ export const config = {
 
   link: {
     similarityThreshold: envFloat("SYNTHESIS_LINK_THRESHOLD", 0.75),
+    k: envInt("SYNTHESIS_LINK_K", 50),
   },
 
   search: {
