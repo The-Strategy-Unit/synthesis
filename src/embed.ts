@@ -1,6 +1,7 @@
 // Embed: generate embeddings via OpenAI-compatible API + compute semantic links
 
 import type { DB } from "./db.ts";
+import { config } from "./config.ts";
 
 export async function embedText(
   text: string,
@@ -37,41 +38,43 @@ export async function embedAndStore(
 ): Promise<number[]> {
   const text = `${title}\n${body}`;
   const embedding = await embedText(text, apiBase, apiKey, model);
-  db.upsertEmbedding(noteId, model, embedding);
+  db.upsertEmbedding(noteId, embedding);
   return embedding;
 }
 
 // Compute semantic links between all notes for the graph view
 export function computeLinks(
   db: DB,
-  threshold = 0.55,
+  threshold = config.link.similarityThreshold,
+  k = 50,
 ): number {
   const notes = db.getAllNotes();
   let linkCount = 0;
+  const seen = new Set<string>();
 
-  for (let i = 0; i < notes.length; i++) {
-    for (let j = i + 1; j < notes.length; j++) {
-      const embA = db.getEmbedding(notes[i].id);
-      const embB = db.getEmbedding(notes[j].id);
-      if (!embA || !embB) continue;
+  for (const note of notes) {
+    const embedding = db.getEmbedding(note.id);
+    if (!embedding) continue;
 
-      const sim = cosineSimilarity(embA, embB);
-      if (sim >= threshold) {
-        db.upsertLink(notes[i].id, notes[j].id, sim);
-        linkCount++;
-      }
+    const neighbours = db.findNearest(note.id, embedding, k);
+
+    for (const n of neighbours) {
+      if (n.id === note.id) continue;
+      const similarity = n.similarity;
+      if (similarity < threshold) continue;
+
+      const key = `${Math.min(note.id, n.id)}-${Math.max(note.id, n.id)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      db.upsertLink(
+        Math.min(note.id, n.id),
+        Math.max(note.id, n.id),
+        similarity,
+      );
+      linkCount++;
     }
   }
 
   return linkCount;
-}
-
-export function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }

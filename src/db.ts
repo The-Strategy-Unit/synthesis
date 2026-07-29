@@ -1,5 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { cosineSimilarity } from "./embed.ts";
+
+import { load } from "sqlite-vec";
+import { config } from "./config.ts";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS notes (
@@ -11,16 +13,10 @@ CREATE TABLE IF NOT EXISTS notes (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS embeddings (
-  note_id INTEGER NOT NULL,
-  model TEXT NOT NULL,
-  embedding TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now')),
-  FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
+  note_id INTEGER PRIMARY KEY,
+  vector FLOAT[4096] distance_metric=cosine
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_note_model
-  ON embeddings(note_id, model);
 
 CREATE TABLE IF NOT EXISTS links (
   source_note_id INTEGER NOT NULL,
@@ -38,7 +34,8 @@ export class DB {
   private db: DatabaseSync;
 
   constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath);
+    this.db = new DatabaseSync(dbPath, { allowExtension: true });
+    load(this.db);
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(SCHEMA);
@@ -57,12 +54,10 @@ export class DB {
     return Number(info.lastInsertRowid);
   }
 
-  upsertEmbedding(noteId: number, model: string, embedding: number[]): void {
-    const stmt = this.db.prepare(
-      "INSERT INTO embeddings (note_id, model, embedding) VALUES (?, ?, ?) " +
-        "ON CONFLICT(note_id, model) DO UPDATE SET embedding = excluded.embedding",
-    );
-    stmt.run(noteId, model, JSON.stringify(embedding));
+  upsertEmbedding(noteId: number, embedding: number[]): void {
+    this.db.prepare(
+      "INSERT OR REPLACE INTO embeddings (note_id, vector) VALUES (?, ?)",
+    ).run(noteId, new Float32Array(embedding));
   }
 
   indexNote(noteId: number, title: string, content: string): void {
@@ -76,7 +71,7 @@ export class DB {
 
   searchKeyword(
     query: string,
-    limit = 20,
+    limit = config.search.resultLimit,
   ): Array<{ id: number; title: string; rank: number }> {
     const stmt = this.db.prepare(
       "SELECT rowid as id, title, rank FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?",
@@ -88,19 +83,23 @@ export class DB {
 
   searchSemantic(
     queryEmbedding: number[],
-    limit = 20,
+    limit = config.search.resultLimit,
   ): Array<{ note_id: number; title: string; similarity: number }> {
     const rows = this.db.prepare(
-      "SELECT e.note_id, n.title, e.embedding FROM embeddings e JOIN notes n ON n.id = e.note_id",
-    ).all() as Array<{ note_id: number; title: string; embedding: string }>;
+      `SELECT n.id as note_id, n.title, e.distance
+     FROM embeddings e
+     JOIN notes n ON n.id = e.note_id
+     WHERE e.vector MATCH ? AND e.k = ?
+     ORDER BY e.distance`,
+    ).all(new Float32Array(queryEmbedding), limit) as Array<
+      { note_id: number; title: string; distance: number }
+    >;
 
-    const results = rows.map((r) => ({
+    return rows.map((r) => ({
       note_id: r.note_id,
       title: r.title,
-      similarity: cosineSimilarity(queryEmbedding, JSON.parse(r.embedding)),
+      similarity: 1 - r.distance,
     }));
-
-    return results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
   getLinks(): Array<{ source: number; target: number; similarity: number }> {
@@ -158,26 +157,61 @@ export class DB {
 
   getEmbedding(noteId: number): number[] | null {
     const row = this.db.prepare(
-      "SELECT embedding FROM embeddings WHERE note_id = ? ORDER BY created_at DESC LIMIT 1",
-    ).get(noteId) as { embedding: string } | undefined;
-    return row ? JSON.parse(row.embedding) : null;
+      "SELECT vector FROM embeddings WHERE note_id = ?",
+    ).get(noteId) as { vector: Uint8Array } | undefined;
+    if (!row) return null;
+    return Array.from(new Float32Array(row.vector.buffer));
   }
 
   getRelatedNotes(
     noteId: number,
-    limit = 5,
+    limit?: number,
   ): Array<{ id: number; title: string; similarity: number }> {
-    return this.db.prepare(
-      `SELECT target_note_id as id, n.title, l.similarity
+    const sql = `SELECT target_note_id as id, n.title, l.similarity
      FROM links l JOIN notes n ON n.id = l.target_note_id
      WHERE l.source_note_id = ?
      UNION
      SELECT source_note_id as id, n.title, l.similarity
      FROM links l JOIN notes n ON n.id = l.source_note_id
      WHERE l.target_note_id = ?
-     ORDER BY similarity DESC LIMIT ?`,
-    ).all(noteId, noteId, limit) as Array<
+     ORDER BY similarity DESC`;
+
+    if (limit === undefined) {
+      return this.db.prepare(sql).all(noteId, noteId) as Array<
+        { id: number; title: string; similarity: number }
+      >;
+    }
+
+    return this.db.prepare(sql + " LIMIT ?").all(
+      noteId,
+      noteId,
+      limit,
+    ) as Array<
       { id: number; title: string; similarity: number }
     >;
+  }
+
+  clearLinks(): void {
+    this.db.exec("DELETE FROM links");
+  }
+
+  findNearest(
+    excludeId: number,
+    embedding: number[],
+    k: number,
+  ): Array<{ id: number; title: string; similarity: number }> {
+    const rows = this.db.prepare(
+      `SELECT n.id, n.title, e.distance
+     FROM embeddings e
+     JOIN notes n ON n.id = e.note_id
+     WHERE e.vector MATCH ? AND e.k = ?
+     ORDER BY e.distance`,
+    ).all(new Float32Array(embedding), k) as Array<
+      { id: number; title: string; distance: number }
+    >;
+
+    return rows
+      .filter((r) => r.id !== excludeId)
+      .map((r) => ({ id: r.id, title: r.title, similarity: 1 - r.distance }));
   }
 }
