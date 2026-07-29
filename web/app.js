@@ -258,6 +258,13 @@ async function loadGraph() {
     })),
   };
   graphData = JSON.parse(JSON.stringify(rawGraphData));
+  const nodeIds = new Set(graphData.nodes.map((n) => n.id));
+  graphData.links = graphData.links.filter((l) => {
+    const s = l.source.id ?? l.source;
+    const t = l.target.id ?? l.target;
+    return nodeIds.has(s) && nodeIds.has(t);
+  });
+
   renderGraph();
 }
 
@@ -267,7 +274,7 @@ function renderGraph() {
   const svg = select("#graph");
   const panel = document.getElementById("graph-panel");
   const width = panel.clientWidth - 10;
-  const height = panel.clientHeight - 40;
+  const height = panel.clientHeight || panel.parentElement.clientHeight;
   svg.attr("viewBox", `0 0 ${width} ${height}`);
   svg.selectAll("*").remove();
 
@@ -309,19 +316,19 @@ function renderGraph() {
     .attr("stroke", (d) => {
       const sim = d.similarity ?? 0.6;
       const t = (sim - minSim) / ((maxSim - minSim) || 1);
-      // Interpolate from faint grey to muted blue-grey
-      const r = Math.round(90 + (80 - 90) * t);
-      const gVal = Math.round(95 + (95 - 95) * t);
-      const b = Math.round(110 + (130 - 110) * t);
-      return `rgb(${r}, ${gVal}, ${b})`;
+      // accent blue
+      const r = Math.round(130 - 50 * t);
+      const g = Math.round(140 - 50 * t);
+      const b = Math.round(155 + 45 * t);
+      return `rgb(${r}, ${g}, ${b})`;
     })
     .attr("stroke-width", (d) => {
       const sim = d.similarity ?? 0.6;
-      return 0.5 + 2 * ((sim - minSim) / ((maxSim - minSim) || 1));
+      return 1.0 + 2.0 * ((sim - minSim) / ((maxSim - minSim) || 1));
     })
     .attr("stroke-opacity", (d) => {
       const sim = d.similarity ?? 0.6;
-      return 0.12 + 0.55 * ((sim - minSim) / ((maxSim - minSim) || 1));
+      return 0.28 + 0.50 * ((sim - minSim) / ((maxSim - minSim) || 1));
     });
 
   // Compute degree and radius for each node

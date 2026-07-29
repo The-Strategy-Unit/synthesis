@@ -19,7 +19,7 @@
   <body>
     <div id="app">
       <div id="graph-tooltip" class="hidden"></div>
-      <!-- Top bar -->
+
       <header id="topbar">
         <span class="logo">Synthesis</span>
         <div class="search-box">
@@ -32,44 +32,36 @@
         </div>
       </header>
 
-      <!-- Three-panel layout -->
       <main id="main">
         <aside id="sidebar">
           <h3>Notes</h3>
           <ul id="note-list"></ul>
         </aside>
-        <section id="graph-panel">
+
+        <aside id="graph-panel">
+          <h3>Connections</h3>
+          <div class="threshold-control">
+            <label>Min similarity: <span id="threshold-value">0.70</span></label>
+            <input type="range" id="similarity-slider" min="0" max="1"
+              step="0.025" value="0.70" />
+          </div>
           <svg id="graph"></svg>
-        </section>
+        </aside>
       </main>
 
-      <!-- Note modal -->
-      <div id="note-modal" class="modal hidden">
-        <div class="modal-content">
-          <button id="modal-close">&times;</button>
-          <div id="note-content"></div>
-        </div>
-      </div>
-
-      <!-- Graph panel -->
-      <aside id="graph-panel">
-        <h3>Connections</h3>
-        <div class="threshold-control">
-          <label>Min similarity: <span id="threshold-value">0.55</span></label>
-          <input type="range" id="similarity-slider" min="0" max="1" step="0.05"
-            value="0.55" />
-        </div>
-        <svg id="graph"></svg>
-      </aside>
-      </main>
-
-      <!-- Ingest bar -->
       <footer id="ingest-bar">
         <input type="text" id="ingest-input"
           placeholder="Paste a YouTube URL or text..." />
         <button id="ingest-btn">Ingest</button>
         <span id="ingest-status"></span>
       </footer>
+    </div>
+
+    <div id="note-modal" class="modal hidden">
+      <div class="modal-content">
+        <button id="modal-close">&times;</button>
+        <div id="note-content"></div>
+      </div>
     </div>
 
     <script type="module" src="/app.js"></script>
