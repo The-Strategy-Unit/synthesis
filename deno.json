@@ -2,7 +2,8 @@
   "name": "synthesis",
   "version": "0.1.0",
   "tasks": {
-    "setup": "mkdir -p ${HOME}/Synthesis",
+    "setup": "mkdir -p $HOME/Synthesis",
+    "migrate": "deno run --allow-all src/migrate.ts ./output/synthesis.db ~/Synthesis/synthesis.db",
     "dev": "deno run --watch --allow-all main.ts",
     "dev:full": "deno run --watch --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
     "start": "deno run --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
@@ -16,7 +17,8 @@
   "imports": {
     "d3-force": "https://esm.sh/d3-force@3",
     "d3-selection": "https://esm.sh/d3-selection@3",
-    "d3-drag": "https://esm.sh/d3-drag@3"
+    "d3-drag": "https://esm.sh/d3-drag@3",
+    "sqlite-vec": "npm:sqlite-vec@^0.1.9"
   },
   "exports": "./main.ts",
   "exclude": ["web/"]

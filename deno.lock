@@ -1,18 +1,80 @@
 {
   "version": "5",
+  "specifiers": {
+    "npm:sqlite-vec@~0.1.9": "0.1.9"
+  },
+  "npm": {
+    "sqlite-vec-darwin-arm64@0.1.9": {
+      "integrity": "sha512-jSsZpE42OfBkGL/ItyJTVCUwl6o6Ka3U5rc4j+UBDIQzC1ulSSKMEhQLthsOnF/MdAf1MuAkYhkdKmmcjaIZQg==",
+      "os": ["darwin"],
+      "cpu": ["arm64"]
+    },
+    "sqlite-vec-darwin-x64@0.1.9": {
+      "integrity": "sha512-KDlVyqQT7pnOhU1ymB9gs7dMbSoVmKHitT+k1/xkjarcX8bBqPxWrGlK/R+C5WmWkfvWwyq5FfXfiBYCBs6PlA==",
+      "os": ["darwin"],
+      "cpu": ["x64"]
+    },
+    "sqlite-vec-linux-arm64@0.1.9": {
+      "integrity": "sha512-5wXVJ9c9kR4CHm/wVqXb/R+XUHTdpZ4nWbPHlS+gc9qQFVHs92Km4bPnCKX4rtcPMzvNis+SIzMJR1SCEwpuUw==",
+      "os": ["linux"],
+      "cpu": ["arm64"]
+    },
+    "sqlite-vec-linux-x64@0.1.9": {
+      "integrity": "sha512-w3tCH8xK2finW8fQJ/m8uqKodXUZ9KAuAar2UIhz4BHILfpE0WM/MTGCRfa7RjYbrYim5Luk3guvMOGI7T7JQA==",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    },
+    "sqlite-vec-windows-x64@0.1.9": {
+      "integrity": "sha512-y3gEIyy/17bq2QFPQOWLE68TYWcRZkBQVA2XLrTPHNTOp55xJi/BBBmOm40tVMDMjtP+Elpk6UBUXdaq+46b0Q==",
+      "os": ["win32"],
+      "cpu": ["x64"]
+    },
+    "sqlite-vec@0.1.9": {
+      "integrity": "sha512-L7XJWRIBNvR9O5+vh1FQ+IGkh/3D2AzVksW5gdtk28m78Hy8skFD0pqReKH1Yp0/BUKRGcffgKvyO/EON5JXpA==",
+      "optionalDependencies": [
+        "sqlite-vec-darwin-arm64",
+        "sqlite-vec-darwin-x64",
+        "sqlite-vec-linux-arm64",
+        "sqlite-vec-linux-x64",
+        "sqlite-vec-windows-x64"
+      ]
+    }
+  },
   "redirects": {
+    "https://esm.sh/@types/d3-dispatch@~3.0.7/index.d.ts": "https://esm.sh/@types/d3-dispatch@3.0.7/index.d.ts",
     "https://esm.sh/@types/d3-drag@~3.0.7/index.d.ts": "https://esm.sh/@types/d3-drag@3.0.7/index.d.ts",
     "https://esm.sh/@types/d3-force@~3.0.10/index.d.ts": "https://esm.sh/@types/d3-force@3.0.10/index.d.ts",
+    "https://esm.sh/@types/d3-quadtree@~3.0.6/index.d.ts": "https://esm.sh/@types/d3-quadtree@3.0.6/index.d.ts",
     "https://esm.sh/@types/d3-selection@~3.0.11/index.d.ts": "https://esm.sh/@types/d3-selection@3.0.11/index.d.ts",
+    "https://esm.sh/@types/d3-timer@~3.0.2/index.d.ts": "https://esm.sh/@types/d3-timer@3.0.2/index.d.ts",
+    "https://esm.sh/d3-dispatch@^3.0.1?target=denonext": "https://esm.sh/d3-dispatch@3.0.1?target=denonext",
     "https://esm.sh/d3-drag@3": "https://esm.sh/d3-drag@3.0.0",
     "https://esm.sh/d3-force@3": "https://esm.sh/d3-force@3.0.0",
-    "https://esm.sh/d3-selection@3": "https://esm.sh/d3-selection@3.0.0"
+    "https://esm.sh/d3-quadtree@^3.0.1?target=denonext": "https://esm.sh/d3-quadtree@3.0.1?target=denonext",
+    "https://esm.sh/d3-selection@3": "https://esm.sh/d3-selection@3.0.0",
+    "https://esm.sh/d3-selection@3?target=denonext": "https://esm.sh/d3-selection@3.0.0?target=denonext",
+    "https://esm.sh/d3-timer@^3.0.1?target=denonext": "https://esm.sh/d3-timer@3.0.1?target=denonext"
   },
   "remote": {
     "https://cdn.jsdelivr.net/npm/katex/dist/katex.mjs": "8e5ec76631a31181d57ed8af5611b2fa15f776e67b6ead5ed3c7639c95208238",
     "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js": "fd52a4d9a8eb652477ec1ddea2c48677bf46fcfc82e3801e46ca54359c57164f",
+    "https://esm.sh/d3-dispatch@3.0.1/denonext/d3-dispatch.mjs": "b36be2eed6f07b517775df12bde28cb0e778b9a7df04974ce9cb99f7b322a2d6",
+    "https://esm.sh/d3-dispatch@3.0.1?target=denonext": "75f32f2a0e7cdddbe15573f1a802fb6bdc46247d038a4b1a2ebde2ad86848c56",
     "https://esm.sh/d3-drag@3.0.0": "29c825b72b51c1c60cf5221266d2b2c4a494d25448a62af8d66a4f228957e899",
+    "https://esm.sh/d3-drag@3.0.0/denonext/d3-drag.mjs": "ae493775f072f5c3c4904b8626f32bfa2fdd3722fa6a40bfe0248c18eaeb355c",
     "https://esm.sh/d3-force@3.0.0": "1a35f3dd1ff127dc27f2b009574d90304693b0a516eac9583df8d0333d61fd8e",
-    "https://esm.sh/d3-selection@3.0.0": "996ecb6a540d57da331d836611fe42cb10b9df82633a04f4ddc1528e566384a6"
+    "https://esm.sh/d3-force@3.0.0/denonext/d3-force.mjs": "daa176ee52b7f8f113d4b0c5e31b95bd99b0cd0cd66ca5c7445ab4bdf7c5cb71",
+    "https://esm.sh/d3-quadtree@3.0.1/denonext/d3-quadtree.mjs": "63669e70a8b12b5b242985137283e55688903456bd96757970835edeb6830d81",
+    "https://esm.sh/d3-quadtree@3.0.1?target=denonext": "d820b5c5854cf78dfd2793468094f5bb2c55c51b1d890f8503f02f980685fcd7",
+    "https://esm.sh/d3-selection@3.0.0": "996ecb6a540d57da331d836611fe42cb10b9df82633a04f4ddc1528e566384a6",
+    "https://esm.sh/d3-selection@3.0.0/denonext/d3-selection.mjs": "30a02b070b81648883d6ea5c893cdccec5add15a803351108e66a897e24aa126",
+    "https://esm.sh/d3-selection@3.0.0?target=denonext": "996ecb6a540d57da331d836611fe42cb10b9df82633a04f4ddc1528e566384a6",
+    "https://esm.sh/d3-timer@3.0.1/denonext/d3-timer.mjs": "eb0b5bf822496c4aad63d2ca4832ec29c8a015467f5a685184bec78d2e3e5003",
+    "https://esm.sh/d3-timer@3.0.1?target=denonext": "5ee90bdf7721811a8f2020e3779e994dfe881d0c8db53e4ea0f535a032516bc1"
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:sqlite-vec@~0.1.9"
+    ]
   }
 }
