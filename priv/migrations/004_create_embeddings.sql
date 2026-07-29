@@ -1,4 +1,0 @@
-CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
-  zettel_id INTEGER PRIMARY KEY,
-  vector    FLOAT[4096]
-);
