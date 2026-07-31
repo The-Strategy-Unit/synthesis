@@ -27,38 +27,17 @@ Rules:
 
 You MUST respond with ONLY a JSON object, no markdown fences, no commentary. The format is:
 
-{"summary": "2-3 sentence overview of the source", "notes": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
+{"summary": "2-3 sentence overview of the source", "notes": [{"title": "...", "body": "...", "tags": ["..."}]}`;
 
 export async function distil(
-  transcript: string,
+  input: string,
   _title: string,
   _sourceUrl: string,
   apiBase: string,
   apiKey: string,
   model: string,
 ): Promise<DistilResult> {
-  const chunks = chunkText(
-    transcript,
-    config.ingest.maxChars,
-    config.ingest.overlap,
-  );
-
-  if (chunks.length === 1) {
-    return await distilChunk(chunks[0], apiBase, apiKey, model);
-  }
-
-  // Multiple chunks: distil each, concatenate results
-  const results: DistilResult[] = [];
-  for (const chunk of chunks) {
-    const result = await distilChunk(chunk, apiBase, apiKey, model);
-    results.push(result);
-  }
-
-  // Simple merge: combine summaries, concatenate notes
-  return {
-    summary: results.map((r) => r.summary).join(" "),
-    notes: results.flatMap((r) => r.notes),
-  };
+  return await distilChunk(input, apiBase, apiKey, model);
 }
 
 async function distilChunk(
@@ -79,8 +58,9 @@ async function distilChunk(
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: text },
       ],
-      temperature: 0.3,
+      temperature: config.llm.temperature,
       response_format: { type: "json_object" },
+      reasoning_effort: config.llm.reasoningEffort,
     }),
   });
 
@@ -113,11 +93,9 @@ function parseDistilResponse(content: string): DistilResult {
 }
 
 function extractJson(text: string): string {
-  // Strip markdown fences if present
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) return fenceMatch[1].trim();
 
-  // Find first { and last } — handles preamble/postamble
   const first = text.indexOf("{");
   const last = text.lastIndexOf("}");
   if (first !== -1 && last !== -1) {
@@ -125,28 +103,6 @@ function extractJson(text: string): string {
   }
 
   return text.trim();
-}
-
-function chunkText(text: string, maxChars: number, overlap: number): string[] {
-  if (text.length <= maxChars) return [text];
-
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + maxChars, text.length);
-    chunks.push(text.slice(start, end));
-    if (end === text.length) break;
-    start = end - overlap;
-  }
-  return chunks;
-}
-
-export function sanitizeTitle(title: string): string {
-  return title
-    .replace(/[/\\:*?"<>|]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
 }
 
 export function noteToMarkdown(
@@ -163,4 +119,123 @@ export function noteToMarkdown(
   ].filter(Boolean).join("\n");
 
   return `${frontmatter}\n\n# ${note.title}\n\n${note.body}\n`;
+}
+
+const INTEGRATE_PROMPT =
+  `You are a knowledge base integrator. You will receive a JSON object with "new_notes" and "existing_notes" arrays. For each new note, decide:
+
+- "new": the note covers a topic not already in the wiki
+- "merge": the note is a refinement/addition to an existing note — provide the existing note's id
+- "contradict": the note contradicts or challenges an existing note — provide the existing note's id
+
+You MUST respond with ONLY a JSON object (no markdown fences, no commentary). The format is:
+
+{"decisions": [{"action": "new"}, {"action": "merge", "existing_id": 42}, {"action": "contradict", "existing_id": 17}]}
+
+The decisions array must have exactly the same length and order as the input new_notes array.`;
+
+export interface IntegrationDecision {
+  action: "new" | "merge" | "contradict";
+  existing_id?: number;
+}
+
+export async function integrate(
+  newNotes: DistilNote[],
+  existingNotes: Array<{ id: number; title: string }>,
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<IntegrationDecision[]> {
+  if (existingNotes.length === 0) {
+    return newNotes.map(() => ({ action: "new" as const }));
+  }
+
+  const userContent = JSON.stringify({
+    new_notes: newNotes.map((n) => ({
+      title: n.title,
+      body: n.body.slice(0, 200),
+    })),
+    existing_notes: existingNotes,
+  });
+
+  const response = await fetch(`${apiBase}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: INTEGRATE_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      temperature: config.llm.integrateTemperature,
+      response_format: { type: "json_object" },
+      reasoning_effort: config.llm.reasoningEffort,
+    }),
+  });
+
+  if (!response.ok) {
+    return newNotes.map(() => ({ action: "new" as const }));
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+  const jsonStr = extractJson(content);
+  let decisions: IntegrationDecision[];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    decisions = Array.isArray(parsed) ? parsed : parsed.decisions ?? [];
+  } catch {
+    return newNotes.map(() => ({ action: "new" as const }));
+  }
+
+  while (decisions.length < newNotes.length) {
+    decisions.push({ action: "new" });
+  }
+  return decisions.slice(0, newNotes.length);
+}
+
+const SUMMARY_PROMPT =
+  `You are a precise summariser. Read the transcript and produce a dense, fact-rich summary in 500-800 words.
+
+Rules:
+- Preserve every key fact, definition, argument, procedure, and decision mentioned.
+- Use clear, declarative sentences. No filler, no commentary, no "the speaker says".
+- Organise by topic, not chronologically.
+- Do not invent or speculate. Only include what is explicitly stated.
+- Respond with plain text, no markdown formatting.`;
+
+export async function summarise(
+  transcript: string,
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const response = await fetch(`${apiBase}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: SUMMARY_PROMPT },
+        { role: "user", content: transcript },
+      ],
+      temperature: config.llm.summariseTemperature,
+      max_tokens: config.llm.maxTokens,
+      reasoning_effort: config.llm.reasoningEffort,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Summary API error ${response.status}: ${errText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content as string;
 }
