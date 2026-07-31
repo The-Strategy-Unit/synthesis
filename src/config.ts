@@ -40,15 +40,22 @@ export const config = {
   llm: {
     apiBase: env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
     apiKey: env("SYNTHESIS_API_KEY", "ollama"),
+
+    // Model roles: small model for cheap parallel work, big model for synthesis
+    extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.5:9b"),
+    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.6:27b"),
+    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:9b"),
+    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.6:27b"),
+    // Kept for backward compat in API responses
     model: env("SYNTHESIS_LLM_MODEL", "qwen3.6:27b"),
-    summaryModel: env("SYNTHESIS_SUMMARY_MODEL", "qwen3.5:9b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
-    summariseTemperature: envClamped(
-      "SYNTHESIS_SUMMARY_TEMPERATURE",
+    extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0.2),
+    consolidateTemperature: envClamped(
+      "SYNTHESIS_CONSOLIDATE_TEMPERATURE",
       0,
       2,
-      0.2,
+      0.1,
     ),
     integrateTemperature: envClamped(
       "SYNTHESIS_INTEGRATE_TEMPERATURE",
@@ -63,6 +70,22 @@ export const config = {
       "none" as ReasoningEffort,
     ),
 
+    extractMaxTokens: Math.max(
+      256,
+      envInt("SYNTHESIS_EXTRACT_MAX_TOKENS", 2000),
+    ),
+    consolidateMaxTokens: Math.max(
+      256,
+      envInt("SYNTHESIS_CONSOLIDATE_MAX_TOKENS", 4000),
+    ),
+    integrateMaxTokens: Math.max(
+      256,
+      envInt("SYNTHESIS_INTEGRATE_MAX_TOKENS", 2000),
+    ),
+    rewriteMaxTokens: Math.max(
+      256,
+      envInt("SYNTHESIS_REWRITE_MAX_TOKENS", 2000),
+    ),
     maxTokens: Math.max(256, envInt("SYNTHESIS_MAX_TOKENS", 800)),
   },
 

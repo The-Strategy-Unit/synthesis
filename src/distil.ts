@@ -1,4 +1,4 @@
-// Distil: transcript → atomic notes via OpenAI-compatible LLM
+// Distil: transcript → extract (small model, parallel) → consolidate (big model)
 
 import { config } from "./config.ts";
 
@@ -13,55 +13,42 @@ export interface DistilResult {
   notes: DistilNote[];
 }
 
-const SYSTEM_PROMPT =
-  `You are a knowledge distillation expert. Your job is to extract atomic, self-contained insights from a transcript and return them as structured JSON.
+// --- Shared chat helper (one place for request construction) ---
 
-Rules:
-- Extract 5 to 15 notes. Each note captures exactly ONE idea, insight, definition, procedure, caution, or decision factor.
-- Each note title must be descriptive, concise, and unique (2-6 words). Titles serve as labels in a knowledge graph.
-- Each note body must be 1-3 sentences, written to make sense when read independently. Do not reference "the video" or "the speaker".
-- Only extract information that is actually present in the transcript. Do not invent or speculate.
-- Do not repeat the same idea across multiple notes.
-- Prefer practical, actionable insights over vague commentary.
-- Tags should be single words or short phrases, lowercase, no more than 3 per note.
-
-You MUST respond with ONLY a JSON object, no markdown fences, no commentary. The format is:
-
-{"summary": "2-3 sentence overview of the source", "notes": [{"title": "...", "body": "...", "tags": ["..."}]}`;
-
-export async function distil(
-  input: string,
-  _title: string,
-  _sourceUrl: string,
+async function chat(
   apiBase: string,
   apiKey: string,
   model: string,
-): Promise<DistilResult> {
-  return await distilChunk(input, apiBase, apiKey, model);
-}
+  systemPrompt: string,
+  userContent: string,
+  opts: {
+    temperature?: number;
+    maxTokens?: number;
+    jsonMode?: boolean;
+  } = {},
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+    temperature: opts.temperature ?? config.llm.temperature,
+  };
+  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+  if (opts.jsonMode) body.response_format = { type: "json_object" };
+  // Only send reasoning_effort if not "none" — some providers don't support it
+  if (config.llm.reasoningEffort !== "none") {
+    body.reasoning_effort = config.llm.reasoningEffort;
+  }
 
-async function distilChunk(
-  text: string,
-  apiBase: string,
-  apiKey: string,
-  model: string,
-): Promise<DistilResult> {
   const response = await fetch(`${apiBase}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: text },
-      ],
-      temperature: config.llm.temperature,
-      response_format: { type: "json_object" },
-      reasoning_effort: config.llm.reasoningEffort,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -70,27 +57,10 @@ async function distilChunk(
   }
 
   const data = await response.json();
-  const content = data.choices[0].message.content;
-  return parseDistilResponse(content);
+  return data.choices[0].message.content;
 }
 
-function parseDistilResponse(content: string): DistilResult {
-  const jsonStr = extractJson(content);
-  const parsed = JSON.parse(jsonStr);
-
-  if (!parsed.notes || !Array.isArray(parsed.notes)) {
-    throw new Error("LLM response missing 'notes' array");
-  }
-
-  return {
-    summary: parsed.summary ?? "",
-    notes: parsed.notes.map((n: Record<string, unknown>) => ({
-      title: String(n.title ?? "Untitled"),
-      body: String(n.body ?? ""),
-      tags: Array.isArray(n.tags) ? n.tags.map(String) : [],
-    })),
-  };
-}
+// --- JSON extraction utility ---
 
 function extractJson(text: string): string {
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -104,6 +74,154 @@ function extractJson(text: string): string {
 
   return text.trim();
 }
+
+// --- Transcript chunking ---
+
+function splitTranscript(
+  text: string,
+  maxChars: number,
+  overlap: number,
+): string[] {
+  if (text.length <= maxChars) return [text];
+
+  const chunks: string[] = [];
+  let pos = 0;
+  while (pos < text.length) {
+    const end = Math.min(pos + maxChars, text.length);
+    chunks.push(text.slice(pos, end));
+    if (end === text.length) break;
+    pos = end - overlap;
+  }
+  return chunks;
+}
+
+// --- Stage 1: Extract (small model, runs in parallel per chunk) ---
+
+const EXTRACT_PROMPT =
+  `You are a knowledge extraction engine. Read the text and extract atomic facts, insights, definitions, procedures, and cautions.
+
+Rules:
+- Extract 3-8 items. Each item captures exactly ONE idea.
+- Each title: 2-6 words, descriptive, unique.
+- Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
+- Only extract what is explicitly stated. Do not invent or speculate.
+- Tags: 1-3 lowercase keywords.
+
+Respond with ONLY JSON, no markdown fences:
+{"items": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
+
+interface ExtractedItem {
+  title: string;
+  body: string;
+  tags: string[];
+}
+
+async function extractChunk(
+  chunk: string,
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<ExtractedItem[]> {
+  const content = await chat(apiBase, apiKey, model, EXTRACT_PROMPT, chunk, {
+    temperature: config.llm.extractTemperature,
+    maxTokens: config.llm.extractMaxTokens,
+    jsonMode: true,
+  });
+
+  try {
+    const parsed = JSON.parse(extractJson(content));
+    return (parsed.items ?? []).map((n: Record<string, unknown>) => ({
+      title: String(n.title ?? "Untitled"),
+      body: String(n.body ?? ""),
+      tags: Array.isArray(n.tags) ? n.tags.map(String) : [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// --- Stage 2: Consolidate (big model, single call) ---
+
+const CONSOLIDATE_PROMPT =
+  `You are a knowledge synthesis expert. You will receive a JSON list of candidate notes extracted from a source. Consolidate them into a clean, deduplicated set of atomic notes.
+
+Rules:
+- Merge near-duplicate candidates into single notes.
+- Remove redundant or trivial items.
+- Produce 5-12 final notes.
+- Each title: 2-6 words, descriptive, unique. Titles serve as labels in a knowledge graph.
+- Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
+- Tags: 1-3 lowercase keywords.
+- Also produce a 2-3 sentence summary of the overall source.
+- Only include information present in the candidates. Do not invent.
+
+Respond with ONLY JSON, no markdown fences:
+{"summary": "...", "notes": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
+
+async function consolidateCandidates(
+  candidates: ExtractedItem[],
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<DistilResult> {
+  const content = await chat(
+    apiBase,
+    apiKey,
+    model,
+    CONSOLIDATE_PROMPT,
+    JSON.stringify({ candidates }),
+    {
+      temperature: config.llm.consolidateTemperature,
+      maxTokens: config.llm.consolidateMaxTokens,
+      jsonMode: true,
+    },
+  );
+
+  const parsed = JSON.parse(extractJson(content));
+  if (!parsed.notes || !Array.isArray(parsed.notes)) {
+    throw new Error("Consolidation response missing 'notes' array");
+  }
+
+  return {
+    summary: parsed.summary ?? "",
+    notes: parsed.notes.map((n: Record<string, unknown>) => ({
+      title: String(n.title ?? "Untitled"),
+      body: String(n.body ?? ""),
+      tags: Array.isArray(n.tags) ? n.tags.map(String) : [],
+    })),
+  };
+}
+
+// --- Main distil entry point: split → parallel extract → consolidate ---
+
+export async function distil(
+  transcript: string,
+  apiBase: string,
+  apiKey: string,
+): Promise<DistilResult> {
+  const chunks = splitTranscript(
+    transcript,
+    config.ingest.maxChars,
+    config.ingest.overlap,
+  );
+
+  // Parallel extraction with small model
+  const candidates = (await Promise.all(
+    chunks.map((chunk) =>
+      extractChunk(chunk, apiBase, apiKey, config.llm.extractModel)
+    ),
+  )).flat();
+
+  // Single consolidation pass with big model
+  return await consolidateCandidates(
+    candidates,
+    apiBase,
+    apiKey,
+    config.llm.consolidateModel,
+  );
+}
+
+// --- Markdown rendering (unchanged) ---
 
 export function noteToMarkdown(
   note: DistilNote,
@@ -120,6 +238,8 @@ export function noteToMarkdown(
 
   return `${frontmatter}\n\n# ${note.title}\n\n${note.body}\n`;
 }
+
+// --- Integration (small model) ---
 
 const INTEGRATE_PROMPT =
   `You are a knowledge base integrator. You will receive a JSON object with "new_notes" and "existing_notes" arrays. For each new note, decide:
@@ -158,87 +278,35 @@ export async function integrate(
     existing_notes: existingNotes,
   });
 
-  const response = await fetch(`${apiBase}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: INTEGRATE_PROMPT },
-        { role: "user", content: userContent },
-      ],
-      temperature: config.llm.integrateTemperature,
-      response_format: { type: "json_object" },
-      reasoning_effort: config.llm.reasoningEffort,
-    }),
-  });
-
-  if (!response.ok) {
-    return newNotes.map(() => ({ action: "new" as const }));
-  }
-
-  const data = await response.json();
-  const content = data.choices[0].message.content;
-  const jsonStr = extractJson(content);
-  let decisions: IntegrationDecision[];
   try {
-    const parsed = JSON.parse(jsonStr);
-    decisions = Array.isArray(parsed) ? parsed : parsed.decisions ?? [];
+    const content = await chat(
+      apiBase,
+      apiKey,
+      model,
+      INTEGRATE_PROMPT,
+      userContent,
+      {
+        temperature: config.llm.integrateTemperature,
+        maxTokens: config.llm.integrateMaxTokens,
+        jsonMode: true,
+      },
+    );
+
+    const parsed = JSON.parse(extractJson(content));
+    const decisions: IntegrationDecision[] = Array.isArray(parsed)
+      ? parsed
+      : parsed.decisions ?? [];
+
+    while (decisions.length < newNotes.length) {
+      decisions.push({ action: "new" });
+    }
+    return decisions.slice(0, newNotes.length);
   } catch {
     return newNotes.map(() => ({ action: "new" as const }));
   }
-
-  while (decisions.length < newNotes.length) {
-    decisions.push({ action: "new" });
-  }
-  return decisions.slice(0, newNotes.length);
 }
 
-const SUMMARY_PROMPT =
-  `You are a precise summariser. Read the transcript and produce a dense, fact-rich summary in 500-800 words.
-
-Rules:
-- Preserve every key fact, definition, argument, procedure, and decision mentioned.
-- Use clear, declarative sentences. No filler, no commentary, no "the speaker says".
-- Organise by topic, not chronologically.
-- Do not invent or speculate. Only include what is explicitly stated.
-- Respond with plain text, no markdown formatting.`;
-
-export async function summarise(
-  transcript: string,
-  apiBase: string,
-  apiKey: string,
-  model: string,
-): Promise<string> {
-  const response = await fetch(`${apiBase}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: SUMMARY_PROMPT },
-        { role: "user", content: transcript },
-      ],
-      temperature: config.llm.summariseTemperature,
-      max_tokens: config.llm.maxTokens,
-      reasoning_effort: config.llm.reasoningEffort,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Summary API error ${response.status}: ${errText}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content as string;
-}
+// --- Note rewriting (big model) ---
 
 const REWRITE_NOTE_PROMPT = `You are maintaining a knowledge wiki.
 
@@ -265,35 +333,20 @@ export async function rewriteNote(
   apiKey: string,
   model: string,
 ): Promise<string> {
-  const response = await fetch(`${apiBase}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: REWRITE_NOTE_PROMPT },
-        {
-          role: "user",
-          content: JSON.stringify({
-            action,
-            existing_markdown: existingMarkdown,
-            new_insight: newInsight,
-          }),
-        },
-      ],
-      temperature: config.llm.temperature,
-      reasoning_effort: config.llm.reasoningEffort,
+  const content = await chat(
+    apiBase,
+    apiKey,
+    model,
+    REWRITE_NOTE_PROMPT,
+    JSON.stringify({
+      action,
+      existing_markdown: existingMarkdown,
+      new_insight: newInsight,
     }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`LLM API error ${response.status}: ${errText}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content.trim();
+    {
+      temperature: config.llm.temperature,
+      maxTokens: config.llm.rewriteMaxTokens,
+    },
+  );
+  return content.trim();
 }

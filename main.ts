@@ -2,12 +2,12 @@ import { config, dbPath, notesDir } from "./src/config.ts";
 import { slugify } from "./src/utils.ts";
 import { DB } from "./src/db.ts";
 import { getPlaylistVideos, ingestText, ingestYouTube } from "./src/ingest.ts";
+
 import {
   distil,
   integrate,
   noteToMarkdown,
   rewriteNote,
-  summarise,
 } from "./src/distil.ts";
 
 const vault_dir = config.vaultDir;
@@ -36,23 +36,11 @@ async function processSingleSource(
   mergeCount: number;
   contradictCount: number;
 }> {
-  send("summarising");
-  const summary = await summarise(
+  send("extracting");
+  const distilled = await distil(
     ingested.transcript,
     config.llm.apiBase,
     config.llm.apiKey,
-    config.llm.summaryModel,
-  );
-  send("summarised");
-
-  send("distilling");
-  const distilled = await distil(
-    summary,
-    ingested.title,
-    ingested.sourceUrl,
-    config.llm.apiBase,
-    config.llm.apiKey,
-    config.llm.model,
   );
   send("distilled", { noteCount: distilled.notes.length });
 
@@ -65,7 +53,7 @@ async function processSingleSource(
     existingNotes,
     config.llm.apiBase,
     config.llm.apiKey,
-    config.llm.model,
+    config.llm.integrateModel,
   );
 
   send("embedding");
@@ -91,7 +79,7 @@ async function processSingleSource(
           decision.action,
           config.llm.apiBase,
           config.llm.apiKey,
-          config.llm.model,
+          config.llm.integrateModel,
         );
         await Deno.writeTextFile(existing.file_path, updatedContent);
         db.indexNote(existing.id, existing.title, updatedContent);
@@ -167,7 +155,10 @@ Deno.serve({ port: config.port }, async (req: Request) => {
         port: config.port,
         llm: {
           model: config.llm.model,
-          summaryModel: config.llm.summaryModel,
+          extractModel: config.llm.extractModel,
+          consolidateModel: config.llm.consolidateModel,
+          integrateModel: config.llm.integrateModel,
+          rewriteModel: config.llm.rewriteModel,
         },
         embed: {
           model: config.embed.model,
@@ -191,7 +182,11 @@ Deno.serve({ port: config.port }, async (req: Request) => {
       return json({
         status: "ok",
         vault: vault_dir,
-        models: { llm: config.llm.model, embed: config.embed.model },
+        models: {
+          llm: config.llm.consolidateModel,
+          extract: config.llm.extractModel,
+          embed: config.embed.model,
+        },
       });
     }
 
@@ -220,7 +215,7 @@ Deno.serve({ port: config.port }, async (req: Request) => {
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         async start(controller) {
-          const send = (stage: string, data?: unknown) => {
+          const send = (stage: string, data?: Record<string, unknown>) => {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ stage, ...data })}\n\n`),
             );
