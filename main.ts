@@ -12,7 +12,9 @@ try {
   await Deno.stat(vault_dir);
 } catch {
   console.error(`Vault directory not found: ${vault_dir}`);
-  console.error("Run `mkdir -p ${HOME}/Synthesis/notes` first.");
+  console.error(
+    `Run \`mkdir -p ${vault_dir}/notes\` first.`,
+  );
   Deno.exit(1);
 }
 await Deno.mkdir(notesDir(), { recursive: true });
