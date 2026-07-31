@@ -58,16 +58,12 @@ function getOllamaInstallerUrl(): { url: string; command: string } | null {
 }
 
 async function checkYtDlp(): Promise<boolean> {
-  try {
-    await new Deno.Command("yt-dlp", {
-      args: ["--version"],
-      stdout: "null",
-      stderr: "null",
-    }).spawn();
-    return true;
-  } catch {
-    return false;
-  }
+  const { success } = await new Deno.Command("yt-dlp", {
+    args: ["--version"],
+    stdout: "null",
+    stderr: "null",
+  }).output();
+  return success;
 }
 
 function getPlatform(): string {

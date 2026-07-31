@@ -17,7 +17,6 @@ const cmd = new Deno.Command(Deno.execPath(), {
     "--allow-run=yt-dlp",
     "--allow-env",
     "--allow-scripts",
-    "-A",
   ],
   stdin: "inherit",
   stdout: "inherit",

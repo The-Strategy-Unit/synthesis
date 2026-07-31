@@ -6,8 +6,9 @@
  * Run: deno task build
  */
 
-const VERSION = "0.1.0";
 const DIST_DIR = new URL("../dist", import.meta.url).pathname;
+
+import { config } from "../src/config.ts";
 
 interface PlatformConfig {
   name: string;
@@ -164,8 +165,8 @@ async function createSetupScript(
   outputDir: string,
 ): Promise<void> {
   const template = platform.setupScriptTemplate
-    .replace("{llm_model}", "qwen3.6:27b")
-    .replace("{embed_model}", "qwen3-embedding:8b");
+    .replace("{llm_model}", config.build.llmModel)
+    .replace("{embed_model}", config.build.embedModel);
 
   const ext = platform.os === "windows" ? "ps1" : "sh";
   const scriptPath = `${outputDir}/setup.${ext}`;
@@ -184,7 +185,7 @@ async function buildPlatform(platform: PlatformConfig): Promise<void> {
   );
 
   const outputDir =
-    `${DIST_DIR}/synthesis-${VERSION}-${platform.name}-${platform.arch}`;
+    `${DIST_DIR}/synthesis-${config.build.version}-${platform.name}-${platform.arch}`;
   await Deno.mkdir(outputDir, { recursive: true });
 
   // Note: Users will run `deno task start` locally, so we don't need to pre-compile
@@ -205,7 +206,7 @@ async function buildPlatform(platform: PlatformConfig): Promise<void> {
   // Create README
   await Deno.writeTextFile(
     `${outputDir}/README.md`,
-    `# Synthesis ${VERSION} for ${platformName}
+    `# Synthesis ${config.build.version} for ${platformName}
 
 ## Quick Start
 
@@ -246,7 +247,9 @@ Full documentation: https://github.com/The-Strategy-Unit/synthesis
 }
 
 async function main() {
-  console.log(`\x1b[1m=== Building Synthesis ${VERSION} ===\x1b[0m\n`);
+  console.log(
+    `\x1b[1m=== Building Synthesis ${config.build.version} ===\x1b[0m\n`,
+  );
 
   // Clean dist directory
   await Deno.remove(DIST_DIR, { recursive: true }).catch(() => {});
