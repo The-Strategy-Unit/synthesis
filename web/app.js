@@ -8,14 +8,37 @@ import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
 
-const LABEL_ZOOM_THRESHOLD = 1.5;
+// --- Config (fetched from backend) ---
 
-// --- Search input ---
-function setSearchStatus(text) {
-  const input = document.getElementById("search-input");
-  input.style.background = text
-    ? "linear-gradient(90deg, #1a4a7a 0%, #0f3460 100%)"
-    : "";
+let uiConfig = {
+  labelZoomThreshold: 1.5,
+  sliderMin: 0,
+  sliderMax: 1,
+  sliderStep: 0.025,
+  defaultSimilarity: 0.75,
+};
+
+async function fetchConfig() {
+  try {
+    const res = await fetch("/api/config");
+    if (res.ok) {
+      const data = await res.json();
+      uiConfig = { ...uiConfig, ...data };
+    }
+  } catch {
+    // Use defaults if endpoint not available
+  }
+  applyConfig();
+}
+
+function applyConfig() {
+  const slider = document.getElementById("similarity-slider");
+  slider.min = uiConfig.sliderMin;
+  slider.max = uiConfig.sliderMax;
+  slider.step = uiConfig.sliderStep;
+  slider.value = uiConfig.defaultSimilarity;
+  document.getElementById("threshold-value").textContent = uiConfig
+    .defaultSimilarity.toFixed(2);
 }
 
 // --- API helpers ---
@@ -33,7 +56,6 @@ async function api(path, opts = {}) {
 let currentNotes = [];
 let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
-
 let simulation = null;
 
 // --- Note list ---
@@ -44,7 +66,6 @@ async function loadNoteList() {
   const list = document.getElementById("note-list");
   list.innerHTML = "";
 
-  // Group notes by source_url
   const groups = new Map();
   for (const note of currentNotes) {
     const key = note.source_url || "Text notes";
@@ -112,7 +133,6 @@ async function loadNote(id, liEl) {
   const data = await api(`notes/${encodeURIComponent(id)}`);
   const viewer = document.getElementById("note-content");
 
-  // Strip frontmatter before rendering
   const raw = data.content ?? "";
   const body = raw.replace(/^---[\s\S]*?---\s*/, "");
 
@@ -125,7 +145,6 @@ async function loadNote(id, liEl) {
     .replace(/^/, "<p>")
     .replace(/$/, "</p>");
 
-  // Related notes
   let relatedHtml = "";
   if (data.related && data.related.length > 0) {
     relatedHtml = '<hr style="border-color:#333;margin:1rem 0">' +
@@ -139,7 +158,6 @@ async function loadNote(id, liEl) {
 
   viewer.innerHTML = html + relatedHtml;
 
-  // Wire up related note clicks
   viewer.querySelectorAll(".related-link").forEach((el) => {
     el.addEventListener("click", () => {
       const relId = parseInt(el.dataset.id);
@@ -152,32 +170,8 @@ async function loadNote(id, liEl) {
 
 // --- Search ---
 
-// let searchTimeout;
-// document.getElementById("search-input").addEventListener("input", (e) => {
-//   clearTimeout(searchTimeout);
-//   const q = e.target.value.trim();
-//   if (q.length < 2) {
-//     loadNoteList();
-//     return;
-//   }
-//   setSearchStatus("searching...");
-//   searchTimeout = setTimeout(async () => {
-//     const mode = document.getElementById("search-mode").value;
-//     const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
-//     setSearchStatus("");
-//     const list = document.getElementById("note-list");
-//     list.innerHTML = "";
-//     for (const result of data.results ?? []) {
-//       const li = document.createElement("li");
-//       li.textContent = result.title;
-//       li.dataset.id = result.id;
-//       li.addEventListener("click", () => loadNote(result.id, li));
-//       list.appendChild(li);
-//     }
-//   }, 800);
-// });
-
 const searchInput = document.getElementById("search-input");
+const searchMode = document.getElementById("search-mode");
 
 searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -192,19 +186,38 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 async function doSearch(q) {
-  const mode = document.getElementById("search-mode").value;
-  const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
+  const mode = searchMode.value;
   const list = document.getElementById("note-list");
-  list.innerHTML = "";
-  for (const result of data.results ?? []) {
-    const li = document.createElement("li");
-    li.textContent = result.title;
-    li.dataset.id = result.id;
-    li.addEventListener("click", () => loadNote(result.id, li));
-    list.appendChild(li);
+
+  list.innerHTML =
+    '<li style="color:#7a7f94;font-style:italic">Searching...</li>';
+  searchInput.disabled = true;
+  searchMode.disabled = true;
+
+  try {
+    const data = await api(`search?q=${encodeURIComponent(q)}&mode=${mode}`);
+    list.innerHTML = "";
+    for (const result of data.results ?? []) {
+      const li = document.createElement("li");
+      li.textContent = result.title;
+      li.dataset.id = result.id;
+      li.addEventListener("click", () => loadNote(result.id, li));
+      list.appendChild(li);
+    }
+    if (list.children.length === 0) {
+      list.innerHTML =
+        '<li style="color:#7a7f94;font-style:italic">No results</li>';
+    }
+  } catch (err) {
+    list.innerHTML =
+      `<li style="color:#ff6b6b">Search error: ${err.message}</li>`;
+  } finally {
+    searchInput.disabled = false;
+    searchMode.disabled = false;
   }
 }
-// --- Ingest ---
+
+// --- Ingest with SSE progress ---
 
 document.getElementById("ingest-btn").addEventListener("click", async () => {
   const input = document.getElementById("ingest-input");
@@ -212,27 +225,62 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   const source = input.value.trim();
   if (!source) return;
 
-  status.textContent = "Ingesting...";
   input.disabled = true;
   document.getElementById("ingest-btn").disabled = true;
 
+  const isPlaylist = source.includes("list=");
+  const endpoint = isPlaylist ? "/api/ingest/playlist" : "/api/ingest";
+
   try {
-    const isPlaylist = source.includes("list=");
-    const endpoint = isPlaylist ? "ingest/playlist" : "ingest";
-    const data = await api(endpoint, {
+    const res = await fetch(endpoint, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: source }),
     });
 
-    if (data.error) {
-      status.textContent = `Error: ${data.error}`;
-    } else {
-      status.textContent = `Done! ${data.notes.length} notes created.`;
-      await loadNoteList();
-      await loadGraph();
+    if (!res.body) throw new Error("No response stream");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = JSON.parse(line.slice(6));
+        const labels = {
+          ingesting: "⬇️ Downloading subtitles...",
+          ingested: "📝 Transcript ready",
+          summarising: "📝 Summarising transcript...",
+          summarised: "✅ Summary ready",
+          distilling: "🧠 Distilling notes...",
+          distilled: "✨ Notes distilled",
+          integrating: "🔗 Integrating with wiki...",
+          integrated:
+            `🔗 Integrated (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)`,
+          embedding: "📐 Embedding notes...",
+          linking: "🕸️ Computing connections...",
+          done: `✅ Done! ${data.notes?.length ?? 0} notes saved.`,
+          error: `❌ ${data.error}`,
+        };
+        status.textContent = labels[data.stage] ?? data.stage;
+        if (data.stage === "done" || data.stage === "error") {
+          if (data.stage === "done") {
+            await loadNoteList();
+            await loadGraph();
+          }
+        }
+      }
     }
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = `❌ ${err.message}`;
   } finally {
     input.disabled = false;
     document.getElementById("ingest-btn").disabled = false;
@@ -240,7 +288,6 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   }
 });
 
-// Enter key triggers ingest too
 document.getElementById("ingest-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("ingest-btn").click();
 });
@@ -301,7 +348,7 @@ function renderGraph() {
       .on("zoom", (event) => {
         currentZoom = event.transform.k;
         g.attr("transform", event.transform);
-        const showLabels = currentZoom > LABEL_ZOOM_THRESHOLD;
+        const showLabels = currentZoom > uiConfig.labelZoomThreshold;
         label.style("display", showLabels ? null : "none");
         if (showLabels) tooltip.classed("hidden", true);
       }),
@@ -316,11 +363,10 @@ function renderGraph() {
     .attr("stroke", (d) => {
       const sim = d.similarity ?? 0.6;
       const t = (sim - minSim) / ((maxSim - minSim) || 1);
-      // accent blue
       const r = Math.round(130 - 50 * t);
-      const g = Math.round(140 - 50 * t);
+      const gg = Math.round(140 - 50 * t);
       const b = Math.round(155 + 45 * t);
-      return `rgb(${r}, ${g}, ${b})`;
+      return `rgb(${r}, ${gg}, ${b})`;
     })
     .attr("stroke-width", (d) => {
       const sim = d.similarity ?? 0.6;
@@ -331,7 +377,6 @@ function renderGraph() {
       return 0.28 + 0.50 * ((sim - minSim) / ((maxSim - minSim) || 1));
     });
 
-  // Compute degree and radius for each node
   const degree = new Map();
   for (const n of graphData.nodes) degree.set(n.id, 0);
   for (const l of graphData.links) {
@@ -357,10 +402,9 @@ function renderGraph() {
     .attr("class", "node")
     .attr("r", nodeRadius)
     .style("cursor", "pointer")
-    .style("cursor", "pointer")
     .on("click", (_event, d) => loadNote(d.id))
     .on("mouseover", (event, d) => {
-      if (currentZoom <= LABEL_ZOOM_THRESHOLD) {
+      if (currentZoom <= uiConfig.labelZoomThreshold) {
         tooltip.classed("hidden", false).text(d.title);
       }
     })
@@ -456,8 +500,9 @@ function renderGraphFiltered(threshold) {
 
 // --- Init ---
 
-loadNoteList();
-loadGraph();
+await fetchConfig();
+await loadNoteList();
+await loadGraph();
 globalThis.addEventListener("resize", () => {
   if (simulation) renderGraph();
 });
