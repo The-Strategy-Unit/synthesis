@@ -3,6 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { load } from "sqlite-vec";
 import { config } from "./config.ts";
 
+const EMBEDDING_DIM = config.embed.dimensions;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +17,7 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
   note_id INTEGER PRIMARY KEY,
-  vector FLOAT[4096] distance_metric=cosine
+  vector FLOAT[${EMBEDDING_DIM}] distance_metric=cosine
 );
 
 CREATE TABLE IF NOT EXISTS links (
@@ -30,15 +32,19 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, content);
 `;
 
+export function initDatabase(db: DatabaseSync): void {
+  load(db);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec(SCHEMA);
+}
+
 export class DB {
   private db: DatabaseSync;
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { allowExtension: true });
-    load(this.db);
-    this.db.exec("PRAGMA journal_mode = WAL");
-    this.db.exec("PRAGMA foreign_keys = ON");
-    this.db.exec(SCHEMA);
+    initDatabase(this.db);
   }
 
   addNote(
@@ -55,8 +61,9 @@ export class DB {
   }
 
   upsertEmbedding(noteId: number, embedding: number[]): void {
+    this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(noteId);
     this.db.prepare(
-      "INSERT OR REPLACE INTO embeddings (note_id, vector) VALUES (?, ?)",
+      "INSERT INTO embeddings (note_id, vector) VALUES (?, ?)",
     ).run(noteId, new Float32Array(embedding));
   }
 
@@ -213,5 +220,114 @@ export class DB {
     return rows
       .filter((r) => r.id !== excludeId)
       .map((r) => ({ id: r.id, title: r.title, similarity: 1 - r.distance }));
+  }
+
+  // Embedding API call (static — no DB state needed)
+  static async embedText(
+    text: string,
+    apiBase: string,
+    apiKey: string,
+    model: string,
+  ): Promise<number[]> {
+    const res = await fetch(`${apiBase}/embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model, input: text }),
+    });
+    if (!res.ok) {
+      throw new Error(`Embedding API error ${res.status}: ${await res.text()}`);
+    }
+    return (await res.json()).data[0].embedding as number[];
+  }
+
+  // Embed + store in one call
+  async embedAndStore(
+    noteId: number,
+    title: string,
+    body: string,
+    apiBase: string,
+    apiKey: string,
+    model: string,
+  ): Promise<number[]> {
+    const embedding = await DB.embedText(
+      `${title}\n${body}`,
+      apiBase,
+      apiKey,
+      model,
+    );
+    this.upsertEmbedding(noteId, embedding);
+    return embedding;
+  }
+
+  // Semantic links for graph
+  computeLinks(
+    threshold = config.link.similarityThreshold,
+    k = config.link.k,
+  ): number {
+    const notes = this.getAllNotes();
+    let count = 0;
+    const seen = new Set<string>();
+    for (const note of notes) {
+      const emb = this.getEmbedding(note.id);
+      if (!emb) continue;
+      for (const n of this.findNearest(note.id, emb, k)) {
+        if (n.similarity < threshold) continue;
+        const key = `${Math.min(note.id, n.id)}-${Math.max(note.id, n.id)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        this.upsertLink(
+          Math.min(note.id, n.id),
+          Math.max(note.id, n.id),
+          n.similarity,
+        );
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // Combined keyword + semantic search
+  async search(
+    query: string,
+    apiBase: string,
+    apiKey: string,
+    embedModel: string,
+    limit = config.search.resultLimit,
+  ): Promise<
+    Array<{ id: number; title: string; score: number; matchType: string }>
+  > {
+    const [kw, qEmb] = await Promise.all([
+      Promise.resolve(this.searchKeyword(query, limit)),
+      DB.embedText(query, apiBase, apiKey, embedModel).catch(() => null),
+    ]);
+    const scores = new Map<number, { score: number; matchType: string }>();
+    for (const r of kw) {
+      scores.set(r.id, {
+        score: 1 / (1 + Math.abs(r.rank)),
+        matchType: "keyword",
+      });
+    }
+    if (qEmb) {
+      for (const r of this.searchSemantic(qEmb, limit)) {
+        const ex = scores.get(r.note_id);
+        scores.set(
+          r.note_id,
+          ex
+            ? { score: (ex.score + r.similarity) / 2, matchType: "both" }
+            : { score: r.similarity, matchType: "semantic" },
+        );
+      }
+    }
+    return Array.from(scores.entries())
+      .map(([id, v]) => ({
+        id,
+        title: this.getNote(id)?.title ?? "Untitled",
+        score: v.score,
+        matchType: v.matchType,
+      }))
+      .sort((a, b) => b.score - a.score).slice(0, limit);
   }
 }
