@@ -1,10 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { load } from "sqlite-vec";
+import { config } from "./config.ts";
 
 const OLD_DB = Deno.args[0] ?? "./output/synthesis.db";
-const NEW_DB = Deno.args[1] ?? `${Deno.env.get("HOME")}/Synthesis/synthesis.db`;
-const NOTES_DIR = `${Deno.env.get("HOME")}/Synthesis/notes`;
-const SOURCES_DIR = `${Deno.env.get("HOME")}/Synthesis/sources`;
+const NEW_DB = Deno.args[1] ?? `${config.vaultDir}/synthesis.db`;
+const NOTES_DIR = `${config.vaultDir}/notes`;
+const SOURCES_DIR = `${config.vaultDir}/sources`;
 
 // --- Open old DB with sqlite-vec to read vec0 embeddings ---
 

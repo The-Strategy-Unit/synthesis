@@ -25,3 +25,15 @@ synthesis-*.tar
 
 # Ignore database
 *.db*
+
+# Deno cache
+.deno/
+
+# Built distributions
+/dist/
+
+# Bundled binaries
+/bundle/
+
+# Desktop build artifacts
+desktop-app/
