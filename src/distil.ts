@@ -239,3 +239,61 @@ export async function summarise(
   const data = await response.json();
   return data.choices[0].message.content as string;
 }
+
+const REWRITE_NOTE_PROMPT = `You are maintaining a knowledge wiki.
+
+You will receive:
+- an existing markdown note
+- a new insight
+- an action: "merge" or "contradict"
+
+Rewrite the existing note so it stays clean, coherent, and self-contained.
+
+Rules:
+- Preserve the overall topic and title.
+- Integrate the new insight naturally into the body.
+- Do not just append a note at the end.
+- If action is "contradict", clearly mention the disagreement inline using cautious language.
+- Keep the result concise and readable.
+- Return ONLY the full rewritten markdown note.`;
+
+export async function rewriteNote(
+  existingMarkdown: string,
+  newInsight: string,
+  action: "merge" | "contradict",
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const response = await fetch(`${apiBase}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: REWRITE_NOTE_PROMPT },
+        {
+          role: "user",
+          content: JSON.stringify({
+            action,
+            existing_markdown: existingMarkdown,
+            new_insight: newInsight,
+          }),
+        },
+      ],
+      temperature: config.llm.temperature,
+      reasoning_effort: config.llm.reasoningEffort,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`LLM API error ${response.status}: ${errText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content.trim();
+}

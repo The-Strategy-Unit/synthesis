@@ -2,7 +2,13 @@ import { config, dbPath, notesDir } from "./src/config.ts";
 import { slugify } from "./src/utils.ts";
 import { DB } from "./src/db.ts";
 import { getPlaylistVideos, ingestText, ingestYouTube } from "./src/ingest.ts";
-import { distil, integrate, noteToMarkdown, summarise } from "./src/distil.ts";
+import {
+  distil,
+  integrate,
+  noteToMarkdown,
+  rewriteNote,
+  summarise,
+} from "./src/distil.ts";
 
 const vault_dir = config.vaultDir;
 const db_path = dbPath();
@@ -79,10 +85,14 @@ async function processSingleSource(
       const existing = db.getNote(decision.existing_id!);
       if (existing) {
         const existingContent = await Deno.readTextFile(existing.file_path);
-        const suffix = decision.action === "contradict"
-          ? `\n\n> ⚠️ **Contradicts:** ${note.body}\n`
-          : `\n\n> **Addition:** ${note.body}\n`;
-        const updatedContent = existingContent + suffix;
+        const updatedContent = await rewriteNote(
+          existingContent,
+          note.body,
+          decision.action,
+          config.llm.apiBase,
+          config.llm.apiKey,
+          config.llm.model,
+        );
         await Deno.writeTextFile(existing.file_path, updatedContent);
         db.indexNote(existing.id, existing.title, updatedContent);
         try {
