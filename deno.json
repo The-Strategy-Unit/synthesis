@@ -2,17 +2,14 @@
   "name": "synthesis",
   "version": "0.1.0",
   "tasks": {
-    "setup": "mkdir -p $HOME/Synthesis",
-    "migrate": "deno run --allow-all src/migrate.ts ./output/synthesis.db ~/Synthesis/synthesis.db",
-    "dev": "deno run --watch --allow-all main.ts",
-    "dev:full": "deno run --watch --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
-    "start": "deno run --allow-net --allow-read=web,${HOME}/Synthesis,/tmp --allow-write=${HOME}/Synthesis,/tmp --allow-run=yt-dlp --allow-env main.ts",
-    "desktop:dev": "deno desktop dev",
-    "desktop:start": "deno desktop start",
-    "build:windows": "deno desktop build --target x86_64-pc-windows-msvc",
-    "build:macos": "deno desktop build --target aarch64-apple-darwin",
-    "build:linux": "deno desktop build --target x86_64-unknown-linux-gnu",
-    "test": "deno test --allow-net --allow-read=web,${HOME}/Synthesis --allow-write=${HOME}/Synthesis --allow-run=yt-dlp --allow-env"
+    "setup": "deno run --allow-all scripts/setup.ts",
+    "migrate": "deno run --allow-all scripts/migrate.ts",
+    "dev": "SYNTHESIS_WATCH=true deno task start",
+    "lint": "deno lint --fix && deno fmt",
+    "start": "deno run --allow-all scripts/start.ts",
+    "build": "deno run --allow-all scripts/build.ts",
+    "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
+    "test": "deno run --allow-all scripts/test.ts"
   },
   "imports": {
     "d3-force": "https://esm.sh/d3-force@3",
@@ -21,5 +18,5 @@
     "sqlite-vec": "npm:sqlite-vec@^0.1.9"
   },
   "exports": "./main.ts",
-  "exclude": ["web/"]
+  "exclude": ["web/", "dist/"]
 }
