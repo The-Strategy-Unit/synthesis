@@ -10,10 +10,8 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
   const tmpDir = await Deno.makeTempDir();
 
   try {
-    // Download title
     const title = await fetchVideoTitle(url);
 
-    // Download auto subtitles (VTT format), skip video download
     const cmd = new Deno.Command("yt-dlp", {
       args: [
         "--write-auto-sub",
@@ -35,7 +33,6 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
       throw new Error(`yt-dlp failed: ${new TextDecoder().decode(stderr)}`);
     }
 
-    // Find the VTT file
     const files: string[] = [];
     for await (const entry of Deno.readDir(tmpDir)) {
       if (entry.name.endsWith(".vtt")) {
@@ -53,7 +50,6 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
 
     return { transcript, sourceUrl: url, title };
   } finally {
-    // Cleanup temp dir
     try {
       await Deno.remove(tmpDir, { recursive: true });
     } catch { /* ignore */ }
@@ -81,28 +77,27 @@ async function fetchVideoTitle(url: string): Promise<string> {
 
 function parseVtt(vtt: string): string {
   const lines = vtt.split("\n");
-  const seen = new Set<string>();
   const textLines: string[] = [];
+  let prevClean = "";
 
   for (const line of lines) {
     const trimmed = line.trim();
-    // Skip VTT header, timestamps, cue settings, and empty lines
     if (!trimmed) continue;
     if (trimmed.startsWith("WEBVTT")) continue;
     if (trimmed.startsWith("Kind:")) continue;
     if (trimmed.startsWith("Language:")) continue;
-    if (/^\d{2}:\d{2}/.test(trimmed)) continue; // timestamp line
+    if (/^\d{2}:\d{2}/.test(trimmed)) continue;
     if (trimmed.includes("-->")) continue;
     if (/^align:/.test(trimmed)) continue;
     if (/^position:/.test(trimmed)) continue;
 
-    // Strip HTML tags from caption text
     const clean = trimmed.replace(/<[^>]+>/g, "");
 
-    // Skip duplicate consecutive lines (YouTube repeats in auto-captions)
-    if (clean && !seen.has(clean)) {
-      seen.add(clean);
+    // Only skip if identical to the immediately preceding line
+    // (YouTube auto-captions duplicate consecutive cues)
+    if (clean && clean !== prevClean) {
       textLines.push(clean);
+      prevClean = clean;
     }
   }
 
