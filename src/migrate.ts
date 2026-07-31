@@ -1,6 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { load } from "sqlite-vec";
 import { config } from "./config.ts";
+import { slugify } from "../src/utils.ts";
+import { initDatabase } from "../src/db.ts";
 
 const OLD_DB = Deno.args[0] ?? "./output/synthesis.db";
 const NEW_DB = Deno.args[1] ?? `${config.vaultDir}/synthesis.db`;
@@ -21,33 +23,7 @@ await Deno.mkdir(NOTES_DIR, { recursive: true });
 await Deno.mkdir(SOURCES_DIR, { recursive: true });
 
 const newDb = new DatabaseSync(NEW_DB, { allowExtension: true });
-load(newDb);
-newDb.exec("PRAGMA journal_mode = WAL");
-
-newDb.exec(`
-  CREATE TABLE IF NOT EXISTS notes (
-    id INTEGER PRIMARY KEY,
-    title TEXT NOT NULL,
-    file_path TEXT NOT NULL UNIQUE,
-    source_url TEXT,
-    source_type TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS links (
-    source_note_id INTEGER NOT NULL,
-    target_note_id INTEGER NOT NULL,
-    similarity REAL NOT NULL,
-    UNIQUE(source_note_id, target_note_id)
-  );
-
-  CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
-    note_id INTEGER PRIMARY KEY,
-    vector FLOAT[4096] distance_metric=cosine
-  );
-
-  CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, content);
-`);
+initDatabase(newDb);
 
 // --- Migrate zettels → notes + markdown files ---
 
@@ -86,7 +62,7 @@ for (const z of zettels) {
   const lines = z.insight.split("\n");
   const title = lines[0].trim();
   const body = lines.slice(1).join("\n").trim();
-  const slug = sanitize(title);
+  const slug = slugify(title);
   const filePath = `${NOTES_DIR}/${slug}.md`;
 
   // Write markdown with frontmatter
@@ -125,7 +101,7 @@ for (const z of zettels) {
 // --- Write source metadata ---
 
 for (const [epTitle, meta] of sourceMap) {
-  const sourceSlug = sanitize(epTitle);
+  const sourceSlug = slugify(epTitle);
   const dir = `${SOURCES_DIR}/${sourceSlug}`;
   await Deno.mkdir(dir, { recursive: true });
 
@@ -188,11 +164,3 @@ for (const e of embeddings) {
 
 console.log(`Migrated ${embCount} embeddings.`);
 console.log("Done!");
-
-function sanitize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
