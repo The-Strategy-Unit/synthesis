@@ -1,292 +1,117 @@
 # Synthesis ⚗️
 
-Turn videos, audio, and text into a structured, semantically searchable
-knowledge base - entirely on your own machine.
+Turn scattered source material into a persistent local knowledge base.
 
-**Pipeline:** ingest → transcribe → distil → embed → search
+Synthesis ingests YouTube videos or pasted text, distils them into compact
+markdown notes, integrates new material into existing notes, builds semantic
+links, and lets you explore everything through search and a graph view.
 
-**Quick Start** · **How It Works** · **API Reference** · **Developers** ·
-**Troubleshooting**
+Everything runs locally against an OpenAI-compatible API - by default, Ollama.
 
-<!-- TODO: Add screenshot of UI here -->
-
-Synthesis ingests a source, distils it into atomic insights, automatically
-detects semantic relationships between notes, and lets you search across
-everything by keyword or meaning. No data leaves your machine.
-
-Built for clinicians, clinical teams, public-sector analysts, and anyone
-navigating complex, information-dense problems in environments where sending
-data to third-party AI services is not an option.
-
-## Quick Start
-
-### Setup
-
-**Prerequisites:**
-
-- **Ollama** (https://ollama.ai) - for local AI models
-- **Deno** (https://deno.land) - to run Synthesis
-- **yt-dlp** (https://github.com/yt-dlp/yt-dlp) - for YouTube transcript
-  extraction (auto-downloaded if missing)
-
-**One-time setup** (runs once):
+## Quick start
 
 ```bash
 git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
-deno run --allow-all scripts/setup.ts
+deno task setup    # checks Ollama, yt-dlp, pulls models
+deno task start    # opens http://localhost:8000
 ```
 
-The setup script will:
+**Prerequisites:** [Deno](https://deno.land), [Ollama](https://ollama.com),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) (for YouTube ingestion).
 
-- Check for Ollama and prompt you if not installed
-- Pull required AI models (~18GB total)
-- Install yt-dlp for transcript extraction
+## How it works
 
-### Run
+1. **Ingest** - YouTube transcript via yt-dlp, or pasted text
+2. **Extract** - small model extracts candidate atomic notes from chunks
+3. **Consolidate** - larger model deduplicates and synthesises into final notes
+4. **Integrate** - each note is classified as `new`, `merge`, or `contradict`
+5. **Rewrite** - merged/contradicted notes are rewritten in place
+6. **Embed & link** - embeddings stored in sqlite-vec, semantic links computed
+7. **Search & explore** - keyword or semantic search + graph view
 
-```bash
-deno task start
+## Storage
+
+```
+~/Synthesis/
+├── notes/          # markdown files (your knowledge base)
+└── synthesis.db    # SQLite: metadata, embeddings, links, FTS5 index
 ```
 
-The web interface opens at http://localhost:8000.
+Override with `SYNTHESIS_VAULT`.
 
-Works on Linux, macOS, and Windows.
+## Configuration
 
-### Your first video
+All settings are in `src/config.ts` and overridable via environment variables.
+Key ones:
 
-1. **Paste a YouTube URL** in the "Ingest" bar at the bottom
-2. **Click "Ingest"** and wait 1-2 minutes for processing
-3. **View generated notes** in the left sidebar, grouped by source
-4. **Open a note** to see its full content and related notes
-5. **Search** using the top bar (supports semantic and keyword search)
+| Variable | Default | Purpose |
+|---|---|---|
+| `SYNTHESIS_VAULT` | `~/Synthesis` | Vault root |
+| `SYNTHESIS_PORT` | `8000` | HTTP port |
+| `SYNTHESIS_API_BASE` | `http://localhost:11434/v1` | LLM API endpoint |
+| `SYNTHESIS_EXTRACT_MODEL` | `qwen3.5:9b` | Chunk extraction |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b` | Source synthesis |
+| `SYNTHESIS_INTEGRATE_MODEL` | `qwen3.5:9b` | New/merge/contradict |
+| `SYNTHESIS_REWRITE_MODEL` | `qwen3.6:27b` | Note rewriting |
+| `SYNTHESIS_EMBED_MODEL` | `qwen3-embedding:8b` | Embeddings |
+| `SYNTHESIS_LINK_THRESHOLD` | `0.75` | Graph link threshold |
 
-Your notes are saved to `~/.Synthesis/notes/` as Markdown files.
+See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the full configuration reference.
 
-### What to expect
+## API
 
-- **First run** downloads models (~18GB) - subsequent runs are instant
-- **Processing time** is ~1-2 minutes per 15-minute video
-- **Auto-linking** connects semantically similar notes automatically
-- **Graph view** shows relationships - adjust the similarity threshold with the
-  slider
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/status` | GET | Server health and model info |
+| `/api/config` | GET | Effective runtime config |
+| `/api/notes` | GET | List all notes |
+| `/api/notes/:id` | GET | Single note with related notes |
+| `/api/search?q=&mode=` | GET | Keyword or semantic search |
+| `/api/graph` | GET | Nodes and links for graph view |
+| `/api/ingest` | POST | Ingest URL or text (SSE streaming) |
+| `/api/ingest/playlist` | POST | Ingest YouTube playlist (SSE) |
 
-## How It Works
+## Deno tasks
 
-1. **Ingest** - paste a YouTube URL, upload text, or (future) upload audio files
-2. **Transcribe** - extract a transcript locally using yt-dlp
-3. **Distil** - a local AI model extracts atomic insights and summaries
-4. **Embed** - generate vector embeddings for semantic search
-5. **Link** - automatically detect relationships between notes
-6. **Search** - query by keyword or meaning across your whole knowledge base
+| Task | Description |
+|---|---|
+| `setup` | First-run setup (Ollama, yt-dlp, models) |
+| `start` | Start server |
+| `dev` | Start with auto-reload |
+| `migrate` | Migrate from legacy Elixir DB |
+| `build` | Create platform distributables |
+| `lint` | Lint + format |
+| `test` | Run tests |
 
-## Privacy and Data Sovereignty
+## Project structure
 
-- All processing runs locally via Ollama
-- No API keys, no cloud dependency, no data egress
-- Supports approved enterprise providers (Azure OpenAI) in future releases
-
-> **Important:** Synthesis is not a medical device and must not process
-> patient-identifiable data. It is a knowledge-management tool for educational
-> and research use.
-
----
-
-## API Reference
-
-Synthesis runs an HTTP server on port 8000. Use these endpoints to interact with
-your knowledge base or build custom integrations.
-
-### `GET /api/status`
-
-Check if the server is running.
-
-```bash
-curl http://localhost:8000/api/status
+```
+main.ts                  # HTTP server + ingest orchestration
+src/
+├── config.ts            # Central configuration with env overrides
+├── db.ts                # SQLite, sqlite-vec, FTS5, embeddings, links, search
+├── distil.ts            # LLM extraction, consolidation, integration, rewriting
+├── ingest.ts            # YouTube transcript fetching via yt-dlp
+├── migrate.ts           # Legacy Elixir → Deno migration
+├── rebuild_links.ts     # Manual link recomputation utility
+└── utils.ts             # Shared helpers (slugify)
+scripts/                 # setup, start, build, migrate, test, yt-dlp helpers
+web/                     # Frontend (HTML, CSS, JS)
+docs/                    # Architecture and developer docs
 ```
 
-### `POST /api/ingest`
+## Privacy
 
-Add a new source (YouTube video or plain text).
+All processing runs locally. No data leaves your machine when using Ollama.
+Point `SYNTHESIS_API_BASE` at a remote provider if you accept that provider's
+data handling terms.
 
-**Request:**
+## Documentation
 
-```bash
-curl -X POST http://localhost:8000/api/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=<id>"}'
-```
-
-**Response:**
-
-```json
-{
-  "title": "Source title",
-  "summary": "AI-generated summary",
-  "notes": [
-    { "id": 1, "title": "First extracted insight" },
-    { "id": 2, "title": "Second extracted insight" }
-  ]
-}
-```
-
-### `POST /api/ingest/playlist`
-
-Process an entire YouTube playlist.
-
-```bash
-curl -X POST http://localhost:8000/api/ingest/playlist \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/playlist?list=<id>"}'
-```
-
-### `GET /api/notes`
-
-List all notes in your knowledge base.
-
-```bash
-curl http://localhost:8000/api/notes
-```
-
-### `GET /api/notes/:id`
-
-Get a specific note with related notes.
-
-```bash
-curl http://localhost:8000/api/notes/1
-```
-
-### `GET /api/search`
-
-Search by keyword or meaning.
-
-```bash
-curl "http://localhost:8000/api/search?q=your+query"
-```
-
-**Response:**
-
-```json
-{
-  "query": "your query",
-  "results": [
-    {
-      "id": 1,
-      "title": "Matching title",
-      "score": 0.85,
-      "matchType": "semantic"
-    },
-    { "id": 2, "title": "Keyword match", "score": 1.0, "matchType": "keyword" }
-  ]
-}
-```
-
-### `GET /api/graph`
-
-Get all notes and their semantic relationships.
-
-```bash
-curl http://localhost:8000/api/graph
-```
-
-**Response:**
-
-```json
-{
-  "nodes": [{ "id": 1, "title": "Note 1" }, { "id": 2, "title": "Note 2" }],
-  "links": [{ "source": 1, "target": 2, "similarity": 0.82 }]
-}
-```
-
----
-
-## Developers
-
-For full developer documentation, including setup, configuration, extension
-guides, and troubleshooting:
-
-**→ [DEVELOPERS.md](docs/DEVELOPERS.md)**
-
-### Quick reference
-
-**Key tasks:**
-
-```bash
-deno task dev          # Dev server with auto-reload
-deno task start        # Production mode
-deno task test         # Run tests
-deno task build        # Build distributable packages
-```
-
-**Override defaults:**
-
-```bash
-# Custom vault location
-SYNTHESIS_VAULT=/path/to/vault deno task start
-
-# Custom port
-SYNTHESIS_PORT=8001 deno task start
-
-# Custom models
-SYNTHESIS_LLM_MODEL=llama3 deno task start
-
-# Enable auto-reload (alias for 'dev' task)
-SYNTHESIS_WATCH=true deno task start
-```
-
-**Core settings:**
-
-| Variable                | Default              | Description                  |
-| ----------------------- | -------------------- | ---------------------------- |
-| `SYNTHESIS_VAULT`       | `~/.Synthesis`       | Notes and database location  |
-| `SYNTHESIS_PORT`        | `8000`               | HTTP server port             |
-| `SYNTHESIS_LLM_MODEL`   | `qwen3.6:27b`        | Model for insight extraction |
-| `SYNTHESIS_EMBED_MODEL` | `qwen3-embedding:8b` | Model for embeddings         |
-| `SYNTHESIS_WATCH`       | `false`              | Enable auto-reload mode      |
-
----
-
-## Roadmap
-
-- [ ] One-click installer (MSI/DMG) for non-technical users
-- [ ] Audio file ingestion (WAV, MP3, etc.)
-- [ ] Azure OpenAI support
-- [ ] Shared team knowledge bases
-- [ ] Cross-platform desktop app (native binaries)
-
----
-
-## Troubleshooting
-
-- **"Ollama not found"** - Start Ollama: `ollama serve`
-- **"No subtitle file"** - Video lacks captions; try different language:
-  `SYNTHESIS_SUBTITLES_LANG=es`
-- **Slow first run** - Models are being downloaded (~18GB)
-- **Custom port** - `SYNTHESIS_PORT=8001 deno task start`
-- **Custom vault** - `SYNTHESIS_VAULT=/custom/path deno task start`
-
-For comprehensive troubleshooting, see
-**[docs/DEVELOPERS.md](docs/DEVELOPERS.md#troubleshooting)**.
-
----
+- [Architecture](docs/ARCHITECTURE.md) - component design, data flow, schema
+- [Developer Guide](docs/DEVELOPERS.md) - setup, config reference, extending, troubleshooting
 
 ## License
 
-See [LICENSE](./LICENSE).
-
----
-
-## Verification
-
-**Check everything is working:**
-
-```bash
-# Run setup script (one-time)
-deno task setup
-
-# Start the server
-deno task start
-
-# In another terminal, verify the API responds
-curl http://localhost:8000/api/status
-```
+See `LICENSE`.
