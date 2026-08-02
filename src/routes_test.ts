@@ -342,8 +342,10 @@ routeTest(
                       summary: "Queued source summary.",
                       notes: [{
                         title: "Queued note",
+                        type: "concept",
                         body: "Only one note is created.",
                         tags: ["queue"],
+                        links: [],
                       }],
                     }),
                   },
@@ -407,8 +409,10 @@ routeTest(
                 content: JSON.stringify({
                   items: [{
                     title: "Queued note",
+                    type: "concept",
                     body: "Only one note is created.",
                     tags: ["queue"],
+                    links: [],
                   }],
                 }),
               },

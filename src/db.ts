@@ -145,6 +145,19 @@ export class DB {
     ).get(contentHash) as SourceRecord | undefined;
   }
 
+  getAllSources(): SourceRecord[] {
+    return this.db.prepare(
+      "SELECT * FROM sources ORDER BY created_at DESC, id DESC",
+    ).all() as unknown as SourceRecord[];
+  }
+
+  getSource(id: number): SourceRecord | undefined {
+    if (!Number.isSafeInteger(id) || id < 1) return undefined;
+    return this.db.prepare(
+      "SELECT * FROM sources WHERE id = ?",
+    ).get(id) as SourceRecord | undefined;
+  }
+
   addSource(
     contentHash: string,
     title: string,
@@ -191,6 +204,57 @@ export class DB {
       source_url: string | null;
       action: string;
     }>;
+  }
+
+  getSourcesForNotes(noteIds: number[]): SourceRecord[] {
+    const ids = [...new Set(noteIds)].filter((id) =>
+      Number.isSafeInteger(id) && id > 0
+    );
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.db.prepare(
+      `SELECT DISTINCT s.*
+       FROM sources s
+       JOIN note_sources ns ON ns.source_id = s.id
+       WHERE ns.note_id IN (${placeholders})
+       ORDER BY s.created_at, s.id`,
+    ).all(...ids) as unknown as SourceRecord[];
+  }
+
+  getSourceProvenanceForNote(
+    noteId: number,
+  ): Array<SourceRecord & { action: string }> {
+    if (!Number.isSafeInteger(noteId) || noteId < 1) return [];
+    return this.db.prepare(
+      `SELECT s.*, ns.action
+       FROM note_sources ns
+       JOIN sources s ON s.id = ns.source_id
+       WHERE ns.note_id = ?
+       ORDER BY s.created_at, s.id`,
+    ).all(noteId) as unknown as Array<SourceRecord & { action: string }>;
+  }
+
+  getNoteByExactTitle(title: string): {
+    id: number;
+    title: string;
+    file_path: string;
+    source_url: string | null;
+    source_type: string | null;
+    created_at: string;
+  } | undefined {
+    return this.db.prepare(
+      `SELECT * FROM notes
+       WHERE title = ? COLLATE NOCASE
+       ORDER BY id
+       LIMIT 1`,
+    ).get(title) as {
+      id: number;
+      title: string;
+      file_path: string;
+      source_url: string | null;
+      source_type: string | null;
+      created_at: string;
+    } | undefined;
   }
 
   upsertEmbedding(noteId: number, embedding: number[]): void {

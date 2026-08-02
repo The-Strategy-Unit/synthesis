@@ -123,6 +123,51 @@ dbTest(
 
       db.attachNoteSource(noteId, sourceId, "merge");
       assert.equal(db.getNotesForSource(sourceId)[0].action, "merge");
+
+      const secondSourceId = db.addSource(
+        "second-content-hash",
+        "Second source",
+        null,
+        "text",
+        `${dir}/second-source.md`,
+        "Second summary",
+      );
+      const secondNoteId = db.addNote(
+        "Second derived note",
+        `${dir}/second-note.md`,
+        null,
+        "text",
+      );
+      db.attachNoteSource(noteId, secondSourceId, "merge");
+      db.attachNoteSource(secondNoteId, secondSourceId, "new");
+
+      assert.deepEqual(
+        db.getAllSources().map((item) => item.id),
+        [secondSourceId, sourceId],
+      );
+      assert.equal(db.getSource(secondSourceId)?.title, "Second source");
+      assert.equal(db.getSource(0), undefined);
+      assert.equal(db.getSource(99_999), undefined);
+      assert.deepEqual(
+        db.getSourcesForNotes([noteId, noteId, secondNoteId, 0]).map((item) =>
+          item.id
+        ),
+        [sourceId, secondSourceId],
+      );
+      assert.deepEqual(db.getSourcesForNotes([]), []);
+      assert.deepEqual(
+        db.getSourceProvenanceForNote(noteId).map((item) => ({
+          id: item.id,
+          action: item.action,
+        })),
+        [
+          { id: sourceId, action: "merge" },
+          { id: secondSourceId, action: "merge" },
+        ],
+      );
+      assert.deepEqual(db.getSourceProvenanceForNote(0), []);
+      assert.equal(db.getNoteByExactTitle("DERIVED NOTE")?.id, noteId);
+      assert.equal(db.getNoteByExactTitle("Missing title"), undefined);
     });
   },
 );

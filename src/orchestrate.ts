@@ -9,11 +9,13 @@ import { dirname } from "node:path";
 import { notesDir, sourcesDir } from "./config.ts";
 import { errMsg, slugify } from "./utils.ts";
 import { DB } from "./db.ts";
-import { distil, integrate, noteToMarkdown, rewriteNote } from "./distil.ts";
+import { distil, type DistilNote, integrate, rewriteNote } from "./distil.ts";
 import {
   type ActiveProviders,
   environmentProviders,
 } from "./provider_runtime.ts";
+import { renderWikiPage, validateWikiPage, type WikiChange } from "./wiki.ts";
+import { updateWikiCatalog } from "./wiki_store.ts";
 
 export function isUrl(s: string): boolean {
   return /^https?:\/\//.test(s.trim());
@@ -77,6 +79,22 @@ function existingSourceReferences(markdown: string): string[] {
   return markdown.split("\n").filter((line) =>
     /<!-- synthesis-source:[a-f0-9]{64} -->/.test(line)
   );
+}
+
+function normalizedTitle(title: string): string {
+  return title.toLocaleLowerCase("en-US");
+}
+
+function resolvePageLinks(
+  note: DistilNote,
+  canonicalTitles: ReadonlyMap<string, string>,
+): DistilNote {
+  return validateWikiPage({
+    ...note,
+    links: note.links.map((link) =>
+      canonicalTitles.get(normalizedTitle(link)) ?? link
+    ),
+  });
 }
 
 async function persistSourceFiles(
@@ -272,6 +290,18 @@ export async function processSingleSource(
     providers.llm.apiKey,
     providers.llm.integrateModel,
   );
+  const canonicalTitles = new Map<string, string>();
+  for (let index = 0; index < distilled.notes.length; index++) {
+    const note = distilled.notes[index];
+    const decision = decisions[index];
+    const canonicalTitle = decision.action === "new"
+      ? note.title
+      : existingById.get(decision.existing_id!)!.title;
+    canonicalTitles.set(normalizedTitle(note.title), canonicalTitle);
+  }
+  const resolvedNotes = distilled.notes.map((note) =>
+    resolvePageLinks(note, canonicalTitles)
+  );
 
   send("embedding");
   const allNotes: Array<{ id: number; title: string }> = [];
@@ -280,8 +310,8 @@ export async function processSingleSource(
   let mergeCount = 0;
   let contradictCount = 0;
 
-  for (let i = 0; i < distilled.notes.length; i++) {
-    const note = distilled.notes[i];
+  for (let i = 0; i < resolvedNotes.length; i++) {
+    const note = resolvedNotes[i];
     const decision = decisions[i];
 
     if (
@@ -298,7 +328,7 @@ export async function processSingleSource(
       const existingContent = await Deno.readTextFile(existing.file_path);
       const rewrittenContent = await rewriteNote(
         existingContent,
-        note.body,
+        note,
         decision.action,
         providers.llm.apiBase,
         providers.llm.apiKey,
@@ -343,10 +373,11 @@ export async function processSingleSource(
       continue;
     }
 
-    const md = addSourceReferences(
-      noteToMarkdown(note, ingested.sourceUrl, ingested.title),
-      [currentSourceReference],
-    );
+    const md = renderWikiPage(note, [{
+      title: ingested.title,
+      url: ingested.sourceUrl || undefined,
+      contentHash,
+    }]);
     const embedding = await DB.embedText(
       `${note.title}\n${note.body}`,
       providers.embedding.apiBase,
@@ -385,6 +416,24 @@ export async function processSingleSource(
     touchedIds.push(noteId);
     newCount++;
   }
+
+  const changes: WikiChange[] = decisions.map((decision, index) => ({
+    action: decision.action === "new"
+      ? "create"
+      : decision.action === "merge"
+      ? "update"
+      : "contradict",
+    pageTitle: canonicalTitles.get(
+      normalizedTitle(distilled.notes[index].title),
+    )!,
+    pageType: distilled.notes[index].type,
+  }));
+  await updateWikiCatalog(db, {
+    operation: "ingest",
+    subject: ingested.title,
+    contentHash,
+    changes,
+  });
 
   return {
     notes: allNotes,

@@ -13,8 +13,10 @@ Deno.test("LLM output is validated before integration or consolidation", async (
   const originalFetch = globalThis.fetch;
   const newNotes: DistilNote[] = [{
     title: "New evidence",
+    type: "concept",
     body: "The new source refines an existing claim.",
     tags: ["evidence"],
+    links: ["Existing claim"],
   }];
   const existingNotes = [{
     id: 7,
@@ -107,6 +109,38 @@ Deno.test("LLM output is validated before integration or consolidation", async (
       /items must contain 1-8 notes/,
     );
     assert.equal(fetchCalls, 1, "empty extraction must not consolidate");
+
+    fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse(JSON.stringify(
+        fetchCalls === 1
+          ? {
+            items: [{
+              title: "Supported claim",
+              type: "concept",
+              body: "The source supports a claim.",
+              tags: ["evidence"],
+              links: [],
+            }],
+          }
+          : {
+            summary: "The source supports a claim.",
+            notes: [{
+              title: "Supported claim",
+              type: "concept",
+              body: "The source supports a claim.",
+              tags: ["evidence"],
+              links: ["Missing page"],
+            }],
+          },
+      )));
+    };
+    await assert.rejects(
+      distil("Source text", apiBase, "test-key"),
+      /link target .* does not match a page title/,
+    );
+    assert.equal(fetchCalls, 2, "dangling final links must fail consolidation");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -148,8 +182,10 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
     request.resolve(chatResponse(JSON.stringify({
       items: [{
         title: `Chunk ${request.chunk}`,
+        type: "concept",
         body: `Body for ${request.chunk}`,
         tags: ["chunk"],
+        links: [],
       }],
     })));
   };
@@ -162,7 +198,7 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
         messages: Array<{ content: string }>;
       };
       const systemPrompt = body.messages[0].content;
-      if (systemPrompt.includes("knowledge extraction engine")) {
+      if (systemPrompt.includes("compiling source material")) {
         const chunk = body.messages[1].content;
         active++;
         peakActive = Math.max(peakActive, active);
@@ -178,7 +214,7 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
         return response;
       }
 
-      assert.match(systemPrompt, /knowledge synthesis expert/);
+      assert.match(systemPrompt, /compiling candidate pages/);
       const input = JSON.parse(body.messages[1].content) as {
         candidates: Array<{ title: string; body: string }>;
       };
@@ -187,8 +223,10 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
         summary: "Five chunks were consolidated.",
         notes: [{
           title: "Ordered result",
+          type: "synthesis",
           body: "The chunks remained ordered.",
           tags: ["order"],
+          links: [],
         }],
       })));
     };

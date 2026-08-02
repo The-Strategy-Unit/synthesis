@@ -80,13 +80,17 @@ Deno.test({
               items: [
                 {
                   title: "Shared title",
+                  type: "concept",
                   body: "Candidate one.",
                   tags: ["one"],
+                  links: ["Supporting context"],
                 },
                 {
-                  title: "Shared title",
+                  title: "Supporting context",
+                  type: "concept",
                   body: "Candidate two.",
                   tags: ["two"],
+                  links: ["Shared title"],
                 },
               ],
             }));
@@ -96,13 +100,17 @@ Deno.test({
               notes: [
                 {
                   title: "Shared title",
+                  type: "concept",
                   body: "Final note one.",
                   tags: ["one"],
+                  links: ["Supporting context"],
                 },
                 {
-                  title: "Shared title",
+                  title: "Supporting context",
+                  type: "concept",
                   body: "Final note two.",
                   tags: ["two"],
+                  links: ["Shared title"],
                 },
               ],
             }));
@@ -114,8 +122,10 @@ Deno.test({
             return Promise.resolve(jsonModelResponse({
               items: [{
                 title: "Shared title update",
+                type: "concept",
                 body: "Final note one gains verified detail.",
                 tags: ["one"],
+                links: [],
               }],
             }));
           case 5:
@@ -123,8 +133,10 @@ Deno.test({
               summary: "A concise second-source summary.",
               notes: [{
                 title: "Shared title update",
+                type: "concept",
                 body: "Final note one gains verified detail.",
                 tags: ["one"],
+                links: [],
               }],
             }));
           case 6:
@@ -143,8 +155,10 @@ Deno.test({
             return Promise.resolve(jsonModelResponse({
               items: [{
                 title: "Shared title retry",
+                type: "concept",
                 body: "A failed update must never remain indexed.",
                 tags: ["retry"],
+                links: [],
               }],
             }));
           case 10:
@@ -152,8 +166,10 @@ Deno.test({
               summary: "A retryable third-source summary.",
               notes: [{
                 title: "Shared title retry",
+                type: "concept",
                 body: "A failed update must never remain indexed.",
                 tags: ["retry"],
+                links: [],
               }],
             }));
           case 11:
@@ -208,7 +224,7 @@ Deno.test({
       );
       assert.deepEqual(
         notesAfterFirst.map((note) => note.file_path).sort(),
-        [`${dir}/notes/shared-title-2.md`, `${dir}/notes/shared-title.md`],
+        [`${dir}/notes/shared-title.md`, `${dir}/notes/supporting-context.md`],
       );
 
       const firstHash = await sha256(firstSource.transcript);
@@ -242,7 +258,27 @@ Deno.test({
       assert.ok(target);
       assert.ok(unaffected);
       state.mergeTargetId = target.id;
+      const targetBefore = await Deno.readTextFile(target.file_path);
       const unaffectedBefore = await Deno.readTextFile(unaffected.file_path);
+      assert.match(targetBefore, /^type: concept$/m);
+      assert.match(targetBefore, /- \[\[Supporting context\]\]/);
+      assert.match(unaffectedBefore, /- \[\[Shared title\]\]/);
+      const indexPath = `${dir}/notes/index.md`;
+      const logPath = `${dir}/notes/log.md`;
+      const indexAfterFirst = await Deno.readTextFile(indexPath);
+      assert.match(indexAfterFirst, /## Concepts/);
+      assert.match(indexAfterFirst, /\[\[Shared title\]\] — Final note one\./);
+      assert.match(
+        indexAfterFirst,
+        /\[\[Supporting context\]\] — Final note two\./,
+      );
+      const logAfterFirst = await Deno.readTextFile(logPath);
+      assert.equal(occurrences(logAfterFirst, "ingest | First source"), 1);
+      assert.match(logAfterFirst, /create concept: \[\[Shared title\]\]/);
+      assert.match(
+        logAfterFirst,
+        /create concept: \[\[Supporting context\]\]/,
+      );
 
       const repeated = await processSingleSource(
         db,
@@ -265,6 +301,11 @@ Deno.test({
         "repeat ingestion must not call a model",
       );
       assert.equal(db.getAllNotes().length, 2);
+      assert.equal(
+        await Deno.readTextFile(logPath),
+        logAfterFirst,
+        "repeat ingestion must not append a duplicate log entry",
+      );
 
       const secondSource = {
         transcript: "A distinct source adds verified detail to final note one.",
@@ -293,6 +334,10 @@ Deno.test({
       );
       assert.equal(db.getAllNotes().length, 2);
       assert.equal(requests.length, 9);
+      const logAfterSecond = await Deno.readTextFile(logPath);
+      assert.equal(occurrences(logAfterSecond, "ingest | First source"), 1);
+      assert.equal(occurrences(logAfterSecond, "ingest | Second source"), 1);
+      assert.match(logAfterSecond, /update concept: \[\[Shared title\]\]/);
 
       assert.deepEqual(
         requests.map((request) => request.body.model),
@@ -343,14 +388,23 @@ Deno.test({
       const rewriteInput = JSON.parse(rewriteMessages[1].content) as {
         action: string;
         existing_markdown: string;
-        new_insight: string;
+        new_page: {
+          title: string;
+          type: string;
+          body: string;
+          tags: string[];
+          links: string[];
+        };
       };
       assert.equal(rewriteInput.action, "merge");
       assert.match(rewriteInput.existing_markdown, /Final note one\./);
-      assert.equal(
-        rewriteInput.new_insight,
-        "Final note one gains verified detail.",
-      );
+      assert.deepEqual(rewriteInput.new_page, {
+        title: "Shared title update",
+        type: "concept",
+        body: "Final note one gains verified detail.",
+        tags: ["one"],
+        links: [],
+      });
 
       const secondHash = await sha256(secondSource.transcript);
       const secondSourceDir = `${dir}/sources/${secondHash}`;
@@ -418,6 +472,8 @@ Deno.test({
         if (entry.isFile) noteFilesBefore.push(entry.name);
       }
       noteFilesBefore.sort();
+      const indexBeforeFailure = await Deno.readTextFile(indexPath);
+      const logBeforeFailure = await Deno.readTextFile(logPath);
 
       const thirdSource = {
         transcript: "A third source exercises transactional retry behavior.",
@@ -511,6 +567,8 @@ Deno.test({
       }
       noteFilesAfter.sort();
       assert.deepEqual(noteFilesAfter, noteFilesBefore);
+      assert.equal(await Deno.readTextFile(indexPath), indexBeforeFailure);
+      assert.equal(await Deno.readTextFile(logPath), logBeforeFailure);
 
       const thirdHash = await sha256(thirdSource.transcript);
       const thirdSourceDir = `${dir}/sources/${thirdHash}`;

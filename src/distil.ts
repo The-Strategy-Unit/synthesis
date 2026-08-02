@@ -1,12 +1,9 @@
 // Distil: transcript → extract (small model, parallel) → consolidate (big model)
 
 import { config } from "./config.ts";
+import { validateWikiPage, type WikiPage } from "./wiki.ts";
 
-export interface DistilNote {
-  title: string;
-  body: string;
-  tags: string[];
-}
+export type DistilNote = WikiPage;
 
 export interface DistilResult {
   summary: string;
@@ -23,6 +20,7 @@ const MAX_BODY_LENGTH = 4_000;
 const MAX_SUMMARY_LENGTH = 2_000;
 const MAX_TAGS = 3;
 const MAX_TAG_LENGTH = 64;
+const MAX_LINKS = 8;
 
 // --- Shared chat helper (one place for request construction) ---
 
@@ -121,17 +119,19 @@ function splitTranscript(
 // --- Stage 1: Extract (small model, runs in parallel per chunk) ---
 
 const EXTRACT_PROMPT =
-  `You are a knowledge extraction engine. Read the text and extract atomic facts, insights, definitions, procedures, and cautions.
+  `You are compiling source material into pages for a persistent knowledge wiki. Read the text and extract durable concepts, entities, findings, procedures, and cautions.
 
 Rules:
 - Extract 3-8 items. Each item captures exactly ONE idea.
 - Each title: 2-6 words, descriptive, unique.
+- Type each page as "concept", "entity", or "synthesis". Use "entity" for a specific person, organisation, place, product, drug, disease, study, or named system. Use "concept" for a reusable idea, finding, method, process, or caution. Use "synthesis" only for a comparison or conclusion that connects multiple ideas in this source.
 - Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
 - Only extract what is explicitly stated. Do not invent or speculate.
 - Tags: 1-3 lowercase keywords.
+- Links: 0-5 exact titles of other extracted pages that materially help explain this page. Do not link a page to itself.
 
 Respond with ONLY JSON, no markdown fences:
-{"items": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
+{"items": [{"title": "...", "type": "concept", "body": "...", "tags": ["..."], "links": ["..."]}]}`;
 
 interface ExtractedItem {
   title: string;
@@ -164,19 +164,25 @@ function boundedString(
 
 function parseNote(value: unknown, context: string): DistilNote {
   const note = asRecord(value, context);
-  if (!Array.isArray(note.tags)) {
-    throw new Error(`${context}.tags must be an array`);
+  const parsed = validateWikiPage(note);
+  if (parsed.body.length > MAX_BODY_LENGTH) {
+    throw new Error(`${context}.body exceeds ${MAX_BODY_LENGTH} characters`);
   }
-  if (note.tags.length === 0 || note.tags.length > MAX_TAGS) {
+  if (parsed.tags.length === 0 || parsed.tags.length > MAX_TAGS) {
     throw new Error(`${context}.tags must contain 1-${MAX_TAGS} items`);
+  }
+  if (parsed.links.length > MAX_LINKS) {
+    throw new Error(`${context}.links must contain at most ${MAX_LINKS} items`);
   }
 
   return {
-    title: boundedString(note.title, `${context}.title`, MAX_TITLE_LENGTH),
-    body: boundedString(note.body, `${context}.body`, MAX_BODY_LENGTH),
-    tags: note.tags.map((tag, index) =>
+    title: boundedString(parsed.title, `${context}.title`, MAX_TITLE_LENGTH),
+    type: parsed.type,
+    body: parsed.body,
+    tags: parsed.tags.map((tag, index) =>
       boundedString(tag, `${context}.tags[${index}]`, MAX_TAG_LENGTH)
     ),
+    links: parsed.links,
   };
 }
 
@@ -189,7 +195,27 @@ function parseNoteArray(
   if (value.length === 0 || value.length > maxItems) {
     throw new Error(`${context} must contain 1-${maxItems} notes`);
   }
-  return value.map((note, index) => parseNote(note, `${context}[${index}]`));
+  const notes = value.map((note, index) =>
+    parseNote(note, `${context}[${index}]`)
+  );
+  const titles = new Set<string>();
+  for (const note of notes) {
+    const title = note.title.toLocaleLowerCase("en-US");
+    if (titles.has(title)) {
+      throw new Error(`${context} contains duplicate page title ${note.title}`);
+    }
+    titles.add(title);
+  }
+  for (let index = 0; index < notes.length; index++) {
+    for (const link of notes[index].links) {
+      if (!titles.has(link.toLocaleLowerCase("en-US"))) {
+        throw new Error(
+          `${context}[${index}] link target ${link} does not match a page title`,
+        );
+      }
+    }
+  }
+  return notes;
 }
 
 async function extractChunk(
@@ -218,20 +244,22 @@ async function extractChunk(
 // --- Stage 2: Consolidate (big model, single call) ---
 
 const CONSOLIDATE_PROMPT =
-  `You are a knowledge synthesis expert. You will receive a JSON list of candidate notes extracted from a source. Consolidate them into a clean, deduplicated set of atomic notes.
+  `You are compiling candidate pages into a persistent knowledge wiki. Consolidate them into a clean, deduplicated set of durable pages.
 
 Rules:
-- Merge near-duplicate candidates into single notes.
+- Merge near-duplicate candidates into single pages.
 - Remove redundant or trivial items.
-- Produce 5-12 final notes.
+- Produce 5-12 final pages.
 - Each title: 2-6 words, descriptive, unique. Titles serve as labels in a knowledge graph.
+- Preserve or correct each page type using only "concept", "entity", or "synthesis".
 - Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
 - Tags: 1-3 lowercase keywords.
+- Links: 0-8 exact titles of other pages in the final response. Every link target must exist, materially help explain the source page, and must not be a self-link.
 - Also produce a 2-3 sentence summary of the overall source.
 - Only include information present in the candidates. Do not invent.
 
 Respond with ONLY JSON, no markdown fences:
-{"summary": "...", "notes": [{"title": "...", "body": "...", "tags": ["..."]}]}`;
+{"summary": "...", "notes": [{"title": "...", "type": "concept", "body": "...", "tags": ["..."], "links": ["..."]}]}`;
 
 async function consolidateCandidates(
   candidates: ExtractedItem[],
@@ -386,7 +414,9 @@ export async function integrate(
   const userContent = JSON.stringify({
     new_notes: newNotes.map((n) => ({
       title: n.title,
+      type: n.type,
       body: n.body.slice(0, 200),
+      links: n.links,
     })),
     existing_notes: existingNotes.map((note) => ({
       id: note.id,
@@ -464,22 +494,26 @@ const REWRITE_NOTE_PROMPT = `You are maintaining a knowledge wiki.
 
 You will receive:
 - an existing markdown note
-- a new insight
+- a validated new wiki page
 - an action: "merge" or "contradict"
 
 Rewrite the existing note so it stays clean, coherent, and self-contained.
 
 Rules:
 - Preserve the overall topic and title.
-- Integrate the new insight naturally into the body.
+- Integrate the new page's information naturally into the body.
 - Do not just append a note at the end.
 - If action is "contradict", clearly mention the disagreement inline using cautious language.
+- Preserve valid YAML frontmatter and existing synthesis-source HTML markers exactly.
+- Preserve existing useful tags and links, and add relevant tags and links from the new page.
+- Keep explicit wiki links in a "## Related" section as Markdown list items using [[Page title]] syntax.
+- Never invent a link target that was not supplied in the existing note or new page.
 - Keep the result concise and readable.
 - Return ONLY the full rewritten markdown note.`;
 
 export async function rewriteNote(
   existingMarkdown: string,
-  newInsight: string,
+  newPage: DistilNote,
   action: "merge" | "contradict",
   apiBase: string,
   apiKey: string,
@@ -493,7 +527,7 @@ export async function rewriteNote(
     JSON.stringify({
       action,
       existing_markdown: existingMarkdown,
-      new_insight: newInsight,
+      new_page: newPage,
     }),
     {
       temperature: config.llm.temperature,
