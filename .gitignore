@@ -13,6 +13,7 @@
 
 # Bundled binaries
 /bundle/
+web/app.bundle.js
 
 # Desktop build artifacts
 desktop-app/
