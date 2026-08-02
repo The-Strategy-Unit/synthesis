@@ -56,6 +56,72 @@ routeTest(
 );
 
 routeTest(
+  "semantic search uses the resolved provider without exposing its key",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db) => {
+        const noteId = db.addNote("Stored note", "note.md", null, "text");
+        db.indexNote(noteId, "Stored note", "Searchable content");
+        db.upsertEmbedding(
+          noteId,
+          Array.from(
+            { length: config.embed.dimensions },
+            (_, index) => index === 0 ? 1 : 0,
+          ),
+        );
+        let resolveCalls = 0;
+        globalThis.fetch = (input, init) => {
+          assert.equal(input, "https://embed.example.test/v1/embeddings");
+          assert.deepEqual(init?.headers, {
+            "Content-Type": "application/json",
+            Authorization: "Bearer embedding-secret",
+          });
+          return Promise.resolve(Response.json({
+            data: [{
+              embedding: Array.from(
+                { length: config.embed.dimensions },
+                (_, index) => index === 0 ? 1 : 0,
+              ),
+            }],
+          }));
+        };
+        const handle = createHandler(db, () => {
+          resolveCalls++;
+          return Promise.resolve({
+            source: "profile",
+            llm: {
+              apiBase: "https://llm.example.test/v1",
+              apiKey: "llm-secret",
+              extractModel: "chat",
+              consolidateModel: "chat",
+              integrateModel: "chat",
+              rewriteModel: "chat",
+            },
+            embedding: {
+              apiBase: "https://embed.example.test/v1",
+              apiKey: "embedding-secret",
+              model: "embed",
+            },
+          });
+        });
+        const response = await handle(
+          new Request("http://localhost/api/search?q=stored&mode=semantic"),
+        );
+        assert.equal(response.status, 200);
+        assert.equal(resolveCalls, 1);
+        assert.doesNotMatch(
+          await response.text(),
+          /embedding-secret|llm-secret/,
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest(
   "invalid mutation origin is rejected before reading the body",
   async () => {
     await withTempHandler(async (handle) => {

@@ -91,8 +91,22 @@ function envEnum<T extends string>(
 
 const home = envValue("HOME") ?? envValue("USERPROFILE") ?? ".";
 
+function defaultAppDataDir(): string {
+  const explicit = envValue("SYNTHESIS_APP_DATA");
+  if (explicit) return explicit;
+  switch (Deno.build.os) {
+    case "windows":
+      return `${envValue("APPDATA") ?? home}/Synthesis`;
+    case "darwin":
+      return `${home}/Library/Application Support/Synthesis`;
+    default:
+      return `${envValue("XDG_CONFIG_HOME") ?? `${home}/.config`}/synthesis`;
+  }
+}
+
 export const config = {
   vaultDir: env("SYNTHESIS_VAULT", `${home}/Synthesis`),
+  appDataDir: defaultAppDataDir(),
   host: env("SYNTHESIS_HOST", "127.0.0.1"),
   port: Math.max(1, Math.min(65535, envInt("SYNTHESIS_PORT", 8000))),
 
@@ -282,4 +296,8 @@ export function notesDir(): string {
 
 export function sourcesDir(): string {
   return `${config.vaultDir}/sources`;
+}
+
+export function providerSettingsPath(): string {
+  return `${config.appDataDir}/provider-profile.json`;
 }

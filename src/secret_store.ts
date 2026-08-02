@@ -29,8 +29,11 @@ export class SecretStoreError extends Error {
 
 function validateSecret(value: string): string {
   const secret = value.trim();
-  // deno-lint-ignore no-control-regex -- API keys must reject control bytes.
-  if (!secret || secret.length > 4096 || /[\u0000-\u001f\u007f]/.test(secret)) {
+  const hasControlCharacter = [...secret].some((character) => {
+    const code = character.codePointAt(0)!;
+    return code < 32 || code === 127;
+  });
+  if (!secret || secret.length > 4096 || hasControlCharacter) {
     throw new SecretStoreError("API key must be 1-4096 printable characters");
   }
   return secret;

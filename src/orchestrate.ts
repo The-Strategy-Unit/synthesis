@@ -6,10 +6,14 @@
 
 import { dirname } from "node:path";
 
-import { config, notesDir, sourcesDir } from "./config.ts";
+import { notesDir, sourcesDir } from "./config.ts";
 import { errMsg, slugify } from "./utils.ts";
 import { DB } from "./db.ts";
 import { distil, integrate, noteToMarkdown, rewriteNote } from "./distil.ts";
+import {
+  type ActiveProviders,
+  environmentProviders,
+} from "./provider_runtime.ts";
 
 export function isUrl(s: string): boolean {
   return /^https?:\/\//.test(s.trim());
@@ -171,6 +175,7 @@ export async function processSingleSource(
   ingested: { transcript: string; sourceUrl: string; title: string },
   isText: boolean,
   send: (stage: string, data?: unknown) => void,
+  providers: ActiveProviders = environmentProviders(),
 ): Promise<{
   notes: Array<{ id: number; title: string }>;
   newCount: number;
@@ -209,8 +214,8 @@ export async function processSingleSource(
   send("extracting");
   const distilled = await distil(
     ingested.transcript,
-    config.llm.apiBase,
-    config.llm.apiKey,
+    providers.llm.apiBase,
+    providers.llm.apiKey,
   );
   send("distilled", { noteCount: distilled.notes.length });
 
@@ -263,9 +268,9 @@ export async function processSingleSource(
   const decisions = await integrate(
     distilled.notes,
     existingNotes,
-    config.llm.apiBase,
-    config.llm.apiKey,
-    config.llm.integrateModel,
+    providers.llm.apiBase,
+    providers.llm.apiKey,
+    providers.llm.integrateModel,
   );
 
   send("embedding");
@@ -295,9 +300,9 @@ export async function processSingleSource(
         existingContent,
         note.body,
         decision.action,
-        config.llm.apiBase,
-        config.llm.apiKey,
-        config.llm.rewriteModel,
+        providers.llm.apiBase,
+        providers.llm.apiKey,
+        providers.llm.rewriteModel,
       );
       const updatedContent = addSourceReferences(rewrittenContent, [
         ...existingSourceReferences(existingContent),
@@ -305,9 +310,9 @@ export async function processSingleSource(
       ]);
       const embedding = await DB.embedText(
         `${existing.title}\n${updatedContent}`,
-        config.embed.apiBase,
-        config.embed.apiKey,
-        config.embed.model,
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+        providers.embedding.model,
       );
 
       await replaceFile(existing.file_path, updatedContent);
@@ -344,9 +349,9 @@ export async function processSingleSource(
     );
     const embedding = await DB.embedText(
       `${note.title}\n${note.body}`,
-      config.embed.apiBase,
-      config.embed.apiKey,
-      config.embed.model,
+      providers.embedding.apiBase,
+      providers.embedding.apiKey,
+      providers.embedding.model,
     );
     const filePath = await createNoteFile(db, note.title, md);
     let noteId: number;

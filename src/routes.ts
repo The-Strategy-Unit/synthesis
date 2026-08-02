@@ -10,6 +10,12 @@ import {
   validateYouTubeUrl,
 } from "./ingest.ts";
 import { isUrl, processSingleSource } from "./orchestrate.ts";
+import {
+  type ActiveProviders,
+  environmentProviders,
+} from "./provider_runtime.ts";
+
+type ProviderResolver = () => Promise<ActiveProviders>;
 
 type SseData = Record<string, unknown>;
 
@@ -155,7 +161,11 @@ function asSseData(data: unknown): SseData {
     : {};
 }
 
-export function createHandler(db: DB): (req: Request) => Promise<Response> {
+export function createHandler(
+  db: DB,
+  resolveProviders: ProviderResolver = () =>
+    Promise.resolve(environmentProviders()),
+): (req: Request) => Promise<Response> {
   return async function handle(req: Request): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
@@ -230,7 +240,13 @@ export function createHandler(db: DB): (req: Request) => Promise<Response> {
               ? ingestText(title, source)
               : await ingestYouTube(source);
             send("ingested", { title: ingested.title });
-            return await processAndLink(db, ingested, textInput, send);
+            return await processAndLink(
+              db,
+              ingested,
+              textInput,
+              send,
+              resolveProviders,
+            );
           });
         }
 
@@ -243,7 +259,13 @@ export function createHandler(db: DB): (req: Request) => Promise<Response> {
           const playlistUrl = requiredString(body.url, "url", 2048);
           validateYouTubeUrl(playlistUrl);
           const release = await ingestGate.acquire(identity, req.signal);
-          return playlistStream(db, requestId, release, playlistUrl);
+          return playlistStream(
+            db,
+            requestId,
+            release,
+            playlistUrl,
+            resolveProviders,
+          );
         }
 
         if (path === "/api/search" && method === "GET") {
@@ -261,7 +283,6 @@ export function createHandler(db: DB): (req: Request) => Promise<Response> {
             throw new ApiError(400, "INVALID_INPUT", "Invalid search mode");
           }
           try {
-            if (mode === "semantic") semanticSearchGate.check(identity);
             const results = mode === "keyword"
               ? db.searchKeyword(q).map((r) => ({
                 id: r.id,
@@ -269,19 +290,7 @@ export function createHandler(db: DB): (req: Request) => Promise<Response> {
                 score: 1 / (1 + Math.abs(r.rank)),
                 matchType: "keyword",
               }))
-              : db.searchSemantic(
-                await DB.embedText(
-                  q,
-                  config.embed.apiBase,
-                  config.embed.apiKey,
-                  config.embed.model,
-                ),
-              ).map((r) => ({
-                id: r.note_id,
-                title: r.title,
-                score: r.similarity,
-                matchType: "semantic",
-              }));
+              : await semanticSearch(db, q, identity, resolveProviders);
             return json({ results, query: q });
           } catch (err) {
             logFailure(requestId, "Search", err);
@@ -322,6 +331,29 @@ export function createHandler(db: DB): (req: Request) => Promise<Response> {
       return errorResponse(500, "INTERNAL_ERROR", "Request failed", requestId);
     }
   };
+}
+
+async function semanticSearch(
+  db: DB,
+  query: string,
+  identity: string,
+  resolveProviders: ProviderResolver,
+) {
+  semanticSearchGate.check(identity);
+  const provider = await resolveProviders();
+  return db.searchSemantic(
+    await DB.embedText(
+      query,
+      provider.embedding.apiBase,
+      provider.embedding.apiKey,
+      provider.embedding.model,
+    ),
+  ).map((r) => ({
+    id: r.note_id,
+    title: r.title,
+    score: r.similarity,
+    matchType: "semantic",
+  }));
 }
 
 function authenticate(req: Request): string {
@@ -458,9 +490,16 @@ async function processAndLink(
   ingested: { transcript: string; sourceUrl: string; title: string },
   textInput: boolean,
   send: (stage: string, data?: unknown) => void,
+  resolveProviders: ProviderResolver,
 ) {
   send("extracting");
-  const result = await processSingleSource(db, ingested, textInput, send);
+  const result = await processSingleSource(
+    db,
+    ingested,
+    textInput,
+    send,
+    await resolveProviders(),
+  );
   send("integrated", {
     new: result.newCount,
     merge: result.mergeCount,
@@ -517,6 +556,7 @@ function playlistStream(
   requestId: string,
   release: () => void,
   playlistUrl: string,
+  resolveProviders: ProviderResolver,
 ): Response {
   return ingestStream(requestId, release, async (send) => {
     const videoUrls = await getPlaylistVideos(playlistUrl);
@@ -532,6 +572,7 @@ function playlistStream(
             await ingestYouTube(videoUrls[i]),
             false,
             send,
+            resolveProviders,
           ),
         );
       } catch (err) {

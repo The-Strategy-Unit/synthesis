@@ -90,10 +90,12 @@ const networkTargets = [
 const allowedEnv = [
   "HOME",
   "USERPROFILE",
+  "APPDATA",
   "TEMP",
   "TMP",
   "TMPDIR",
   "SYNTHESIS_ALLOWED_EMAILS",
+  "SYNTHESIS_APP_DATA",
   "SYNTHESIS_API_BASE",
   "SYNTHESIS_API_KEY",
   "SYNTHESIS_CHUNK_OVERLAP",
@@ -146,6 +148,7 @@ const allowedEnv = [
   "SYNTHESIS_VAULT",
   "SYNTHESIS_WATCH",
   "SYNTHESIS_YT_DLP_TIMEOUT_MS",
+  "XDG_CONFIG_HOME",
 ].join(",");
 
 const args = ["run"];
