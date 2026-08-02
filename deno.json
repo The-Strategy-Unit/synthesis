@@ -11,12 +11,23 @@
     "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
     "test": "deno run --allow-all scripts/test.ts"
   },
+  "test": {
+    "include": ["src/distil_test.ts", "src/ingest_test.ts"]
+  },
   "imports": {
     "d3-force": "https://esm.sh/d3-force@3",
     "d3-selection": "https://esm.sh/d3-selection@3",
     "d3-drag": "https://esm.sh/d3-drag@3",
+    "d3-zoom": "https://esm.sh/d3-zoom@3",
     "sqlite-vec": "npm:sqlite-vec@^0.1.9"
   },
   "exports": "./main.ts",
-  "exclude": ["web/", "dist/"]
+  "exclude": [
+    "web/",
+    "dist/",
+    "output/",
+    "output.haca/",
+    "output.mine/",
+    "AGENTS.md"
+  ]
 }

@@ -3,12 +3,21 @@
 
 type ReasoningEffort = "high" | "medium" | "low" | "max" | "none";
 
+function envValue(key: string): string | undefined {
+  try {
+    return Deno.env.get(key);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotCapable) return undefined;
+    throw error;
+  }
+}
+
 function env(key: string, fallback: string): string {
-  return Deno.env.get(key) ?? fallback;
+  return envValue(key) ?? fallback;
 }
 
 function envInt(key: string, fallback: number): number {
-  const v = parseInt(Deno.env.get(key) ?? "", 10);
+  const v = parseInt(envValue(key) ?? "", 10);
   return isNaN(v) ? fallback : v;
 }
 
@@ -22,7 +31,7 @@ function envIntClamped(
 }
 
 function envBool(key: string, fallback: boolean): boolean {
-  const value = Deno.env.get(key)?.trim().toLowerCase();
+  const value = envValue(key)?.trim().toLowerCase();
   if (value === undefined || value === "") return fallback;
   if (["1", "true", "yes", "on"].includes(value)) return true;
   if (["0", "false", "no", "off"].includes(value)) return false;
@@ -30,7 +39,7 @@ function envBool(key: string, fallback: boolean): boolean {
 }
 
 function envCsv(key: string): string[] {
-  const values = (Deno.env.get(key) ?? "")
+  const values = (envValue(key) ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
@@ -38,7 +47,7 @@ function envCsv(key: string): string[] {
 }
 
 function envOrigin(key: string): string | undefined {
-  const value = Deno.env.get(key)?.trim();
+  const value = envValue(key)?.trim();
   if (!value) return undefined;
 
   let url: URL;
@@ -67,7 +76,7 @@ function envClamped(
   max: number,
   fallback: number,
 ): number {
-  const v = parseFloat(Deno.env.get(key) ?? "");
+  const v = parseFloat(envValue(key) ?? "");
   return isNaN(v) ? fallback : Math.min(max, Math.max(min, v));
 }
 
@@ -76,11 +85,11 @@ function envEnum<T extends string>(
   allowed: readonly T[],
   fallback: T,
 ): T {
-  const v = Deno.env.get(key) as T | undefined;
+  const v = envValue(key) as T | undefined;
   return v && allowed.includes(v) ? v : fallback;
 }
 
-const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? ".";
+const home = envValue("HOME") ?? envValue("USERPROFILE") ?? ".";
 
 export const config = {
   vaultDir: env("SYNTHESIS_VAULT", `${home}/Synthesis`),
