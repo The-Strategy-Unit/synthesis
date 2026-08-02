@@ -50,6 +50,16 @@ function envBool(key: string, fallback: boolean): boolean {
 const openBrowser = envBool("SYNTHESIS_OPEN_BROWSER", true);
 
 const os = Deno.build.os;
+const bundledYtDlpPath = os === "windows" ? "./yt-dlp.exe" : "./yt-dlp";
+const configuredYtDlpPath = Deno.env.get("SYNTHESIS_YT_DLP_PATH")?.trim();
+let bundledYtDlpExists = false;
+try {
+  bundledYtDlpExists = (await Deno.stat(bundledYtDlpPath)).isFile;
+} catch (error) {
+  if (!(error instanceof Deno.errors.NotFound)) throw error;
+}
+const ytDlpPath = configuredYtDlpPath ||
+  (bundledYtDlpExists ? bundledYtDlpPath : "yt-dlp");
 let tempDir: string;
 
 switch (os) {
@@ -72,20 +82,6 @@ function hostPort(hostname: string, port: string | number): string {
     : hostname;
   return `${host}:${port}`;
 }
-
-function apiTarget(value: string): string {
-  const url = new URL(value);
-  const apiPort = url.port || (url.protocol === "https:" ? "443" : "80");
-  return hostPort(url.hostname, apiPort);
-}
-
-const networkTargets = [
-  ...new Set([
-    hostPort(config.host, port),
-    apiTarget(config.llm.apiBase),
-    apiTarget(config.embed.apiBase),
-  ]),
-].join(",");
 
 const allowedEnv = [
   "HOME",
@@ -147,6 +143,7 @@ const allowedEnv = [
   "SYNTHESIS_TRUST_PROXY_AUTH",
   "SYNTHESIS_VAULT",
   "SYNTHESIS_WATCH",
+  "SYNTHESIS_YT_DLP_PATH",
   "SYNTHESIS_YT_DLP_TIMEOUT_MS",
   "XDG_CONFIG_HOME",
 ].join(",");
@@ -155,17 +152,18 @@ const args = ["run"];
 if (isDev) args.push("--watch");
 args.push(
   "--frozen",
-  `--allow-net=${networkTargets}`,
+  "--allow-net",
   "--allow-ffi",
-  `--allow-read=web,${vaultDir},${tempDir}`,
-  `--allow-write=${vaultDir},${tempDir}`,
-  "--allow-run=yt-dlp",
+  `--allow-read=web,${vaultDir},${config.appDataDir},${tempDir}`,
+  `--allow-write=${vaultDir},${config.appDataDir},${tempDir}`,
+  `--allow-run=${ytDlpPath}`,
   `--allow-env=${allowedEnv}`,
   "main.ts",
 );
 
 const cmd = new Deno.Command(Deno.execPath(), {
   args,
+  env: { SYNTHESIS_YT_DLP_PATH: ytDlpPath },
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",

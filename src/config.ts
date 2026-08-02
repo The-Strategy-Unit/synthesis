@@ -248,6 +248,7 @@ export const config = {
   ingest: {
     maxChars: Math.max(1000, envInt("SYNTHESIS_MAX_CHARS", 12000)),
     overlap: envClamped("SYNTHESIS_CHUNK_OVERLAP", 0, 2000, 500),
+    ytDlpPath: env("SYNTHESIS_YT_DLP_PATH", "yt-dlp"),
     ytDlpLang: env("SYNTHESIS_SUBTITLES_LANG", "en"),
     playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", false),
     maxPlaylistItems: envIntClamped(

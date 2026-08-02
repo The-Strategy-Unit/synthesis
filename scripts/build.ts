@@ -7,6 +7,7 @@
  */
 
 const DIST_DIR = new URL("../dist", import.meta.url).pathname;
+const PROJECT_DIR = new URL("..", import.meta.url).pathname;
 
 import { config } from "../src/config.ts";
 
@@ -148,6 +149,43 @@ Write-Host "Or use: deno task start"
   },
 ];
 
+const PACKAGE_FILES = [
+  ".env.example",
+  "LICENSE",
+  "deno.json",
+  "deno.lock",
+  "main.ts",
+];
+const PACKAGE_DIRECTORIES = ["docs", "scripts", "src", "web"];
+
+async function copyDirectory(
+  source: string,
+  destination: string,
+): Promise<void> {
+  await Deno.mkdir(destination, { recursive: true });
+  for await (const entry of Deno.readDir(source)) {
+    const sourcePath = `${source}/${entry.name}`;
+    const destinationPath = `${destination}/${entry.name}`;
+    if (entry.isDirectory) {
+      await copyDirectory(sourcePath, destinationPath);
+    } else if (entry.isFile) {
+      await Deno.copyFile(sourcePath, destinationPath);
+    }
+  }
+}
+
+async function copyApplication(outputDir: string): Promise<void> {
+  for (const file of PACKAGE_FILES) {
+    await Deno.copyFile(`${PROJECT_DIR}/${file}`, `${outputDir}/${file}`);
+  }
+  for (const directory of PACKAGE_DIRECTORIES) {
+    await copyDirectory(
+      `${PROJECT_DIR}/${directory}`,
+      `${outputDir}/${directory}`,
+    );
+  }
+}
+
 async function downloadFile(url: string, outputPath: string): Promise<void> {
   console.log(`    Downloading from ${url.split("/").slice(-1)[0]}...`);
   const response = await fetch(url);
@@ -188,8 +226,7 @@ async function buildPlatform(platform: PlatformConfig): Promise<void> {
     `${DIST_DIR}/synthesis-${config.build.version}-${platform.name}-${platform.arch}`;
   await Deno.mkdir(outputDir, { recursive: true });
 
-  // Note: Users will run `deno task start` locally, so we don't need to pre-compile
-  // Instead, we provide instructions and the setup script
+  await copyApplication(outputDir);
 
   // Download yt-dlp
   await downloadFile(
@@ -210,17 +247,19 @@ async function buildPlatform(platform: PlatformConfig): Promise<void> {
 
 ## Quick Start
 
-### Option 1: Run from source
+### Local Ollama
 
 1. Install Deno: https://deno.land
 2. Run setup script: ./setup.sh (or setup.ps1 on Windows)
 3. Start Synthesis: deno task start
 
-### Option 2: Use as portable app
+### Remote OpenAI-compatible provider
 
-1. Ensure Ollama is installed: https://ollama.ai
-2. Run setup script: ./setup.sh (or setup.ps1 on Windows)
-3. Run Synthesis directly: ./synthesis (or use the development setup above)
+1. Install Deno: https://deno.land
+2. Start Synthesis: deno task start
+3. Open Provider in the browser and test and save both endpoints
+
+The bundled yt-dlp executable is selected automatically for YouTube ingestion.
 
 ## Notes Location
 
@@ -228,7 +267,7 @@ Your notes will be saved to:
 - ${
       platform.os === "windows"
         ? "%USERPROFILE%\\Synthesis\\notes"
-        : "~/.Synthesis/notes"
+        : "~/Synthesis/notes"
     }
 
 ## Environment Variables
@@ -255,15 +294,20 @@ async function main() {
   await Deno.remove(DIST_DIR, { recursive: true }).catch(() => {});
   await Deno.mkdir(DIST_DIR, { recursive: true });
 
-  // Build for each platform
+  const failures: string[] = [];
   for (const platform of PLATFORMS) {
     try {
       await buildPlatform(platform);
     } catch (error) {
+      failures.push(platform.name);
       console.error(
         `\x1b[31m✗ Failed for ${platform.name}: ${error}\x1b[0m`,
       );
     }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Build failed for: ${failures.join(", ")}`);
   }
 
   console.log(`\n\x1b[1m=== Build complete! ===\x1b[0m`);

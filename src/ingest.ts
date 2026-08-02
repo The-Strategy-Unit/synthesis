@@ -38,7 +38,7 @@ export function validateYouTubeUrl(value: string): string {
 }
 
 async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
-  const child = new Deno.Command("yt-dlp", {
+  const child = new Deno.Command(config.ingest.ytDlpPath, {
     args: ["--no-config", ...args],
     stdout: "piped",
     stderr: "piped",
