@@ -55,6 +55,241 @@ routeTest(
   },
 );
 
+routeTest("wiki lint is read-only and provider-independent", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    await withTempHandler(async (handle, db, dir) => {
+      const filePath = `${dir}/legacy.md`;
+      await Deno.writeTextFile(
+        filePath,
+        "# Legacy page\n\nUnsupported claim.\n",
+      );
+      const noteId = db.addNote("Legacy page", filePath, null, "text");
+      globalThis.fetch = () => {
+        throw new Error("lint must not call a provider");
+      };
+
+      const response = await handle(new Request("http://localhost/api/lint"));
+      assert.equal(response.status, 200);
+      const report = await response.json();
+      assert.equal(report.pageCount, 1);
+      assert.deepEqual(
+        report.issues.map((issue: { code: string }) => issue.code),
+        ["legacy_format", "missing_provenance"],
+      );
+      assert.doesNotMatch(JSON.stringify(report), /legacy\.md/);
+
+      globalThis.fetch = (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          model: string;
+          messages: Array<{ content: string }>;
+        };
+        assert.equal(body.model, config.llm.consolidateModel);
+        assert.match(body.messages[1].content, /Unsupported claim/);
+        return Promise.resolve(Response.json({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                findings: [{
+                  kind: "data_gap",
+                  severity: "info",
+                  summary: "The claim has no source provenance.",
+                  page_ids: [noteId],
+                  recommendation: "Add a relevant primary source.",
+                }],
+              }),
+            },
+          }],
+        }));
+      };
+      const analysisResponse = await handle(
+        new Request("http://localhost/api/lint/analyze", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: "{}",
+        }),
+      );
+      assert.equal(analysisResponse.status, 200);
+      const analysis = await analysisResponse.json();
+      assert.deepEqual(analysis.findings[0].pageIds, [noteId]);
+      assert.doesNotMatch(JSON.stringify(analysis), /ollama/);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+routeTest(
+  "provider settings are tested, stored, and returned redacted",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db) => {
+        let storedProfile: unknown = null;
+        const secrets = new Map<string, string>();
+        const settings = {
+          profiles: {
+            load: () => Promise.resolve(storedProfile as never),
+            save: (value: unknown) => {
+              storedProfile = value;
+              return Promise.resolve(value as never);
+            },
+          },
+          secrets: {
+            get: (name: "llm" | "embedding") =>
+              Promise.resolve(secrets.get(name) ?? null),
+            set: (name: "llm" | "embedding", value: string) => {
+              secrets.set(name, value);
+              return Promise.resolve();
+            },
+            delete: (name: "llm" | "embedding") => {
+              secrets.delete(name);
+              return Promise.resolve();
+            },
+          },
+        };
+        const handle = createHandler(
+          db,
+          () =>
+            Promise.resolve({
+              source: "environment",
+              llm: {
+                apiBase: config.llm.apiBase,
+                apiKey: config.llm.apiKey,
+                extractModel: config.llm.extractModel,
+                consolidateModel: config.llm.consolidateModel,
+                integrateModel: config.llm.integrateModel,
+                rewriteModel: config.llm.rewriteModel,
+              },
+              embedding: {
+                apiBase: config.embed.apiBase,
+                apiKey: config.embed.apiKey,
+                model: config.embed.model,
+              },
+            }),
+          settings,
+        );
+
+        const before = await handle(
+          new Request("http://localhost/api/provider"),
+        );
+        assert.deepEqual(await before.json(), {
+          configured: false,
+          profile: null,
+          llmKeyStored: false,
+          embeddingKeyStored: false,
+          source: "profile",
+          embeddingDimensions: config.embed.dimensions,
+        });
+
+        const connectionChecks: string[] = [];
+        globalThis.fetch = (input) => {
+          connectionChecks.push(String(input));
+          return Promise.resolve(Response.json({ data: [] }));
+        };
+        const profile = {
+          id: "default",
+          displayName: "Research provider",
+          llm: {
+            apiBase: "https://llm.example.test/v1",
+            model: "synthesis-model",
+          },
+          embedding: {
+            apiBase: "https://embed.example.test/v1",
+            model: "embedding-model",
+            dimensions: config.embed.dimensions,
+          },
+        };
+        const configured = await handle(
+          new Request("http://localhost/api/provider", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({
+              profile,
+              llmApiKey: "llm-secret",
+              embeddingApiKey: "embedding-secret",
+            }),
+          }),
+        );
+        assert.equal(configured.status, 200);
+        const configuredBody = await configured.json();
+        assert.equal(configuredBody.configured, true);
+        assert.doesNotMatch(
+          JSON.stringify(configuredBody),
+          /llm-secret|embedding-secret/,
+        );
+        assert.deepEqual(connectionChecks.sort(), [
+          "https://embed.example.test/v1/models",
+          "https://llm.example.test/v1/models",
+        ]);
+        assert.equal(secrets.get("llm"), "llm-secret");
+        assert.equal(secrets.get("embedding"), "embedding-secret");
+        assert.doesNotMatch(
+          JSON.stringify(storedProfile),
+          /llm-secret|embedding-secret/,
+        );
+
+        const after = await handle(
+          new Request("http://localhost/api/provider"),
+        );
+        const afterBody = await after.json();
+        assert.equal(afterBody.configured, true);
+        assert.equal(afterBody.llmKeyStored, true);
+        assert.equal(afterBody.embeddingKeyStored, true);
+
+        const fetchesBeforeInvalid = connectionChecks.length;
+        const invalid = await handle(
+          new Request("http://localhost/api/provider", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({
+              profile: {
+                ...profile,
+                llm: { ...profile.llm, apiBase: "http://remote.example/v1" },
+              },
+              llmApiKey: "llm-secret",
+              embeddingApiKey: "embedding-secret",
+            }),
+          }),
+        );
+        assert.equal(invalid.status, 400);
+        assert.equal((await invalid.json()).code, "INVALID_INPUT");
+        assert.equal(connectionChecks.length, fetchesBeforeInvalid);
+
+        globalThis.fetch = (input) => {
+          connectionChecks.push(String(input));
+          return Promise.reject(new Error("private transport detail"));
+        };
+        const unavailable = await handle(
+          new Request("http://localhost/api/provider", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({
+              profile: { ...profile, displayName: "Unavailable provider" },
+              llmApiKey: "replacement-llm-secret",
+              embeddingApiKey: "replacement-embedding-secret",
+            }),
+          }),
+        );
+        assert.equal(unavailable.status, 502);
+        const unavailableBody = await unavailable.json();
+        assert.equal(
+          unavailableBody.code,
+          "PROVIDER_CONFIGURATION_FAILED",
+        );
+        assert.doesNotMatch(
+          JSON.stringify(unavailableBody),
+          /private transport detail|replacement-llm-secret/,
+        );
+        assert.equal(secrets.get("llm"), "llm-secret");
+        assert.equal(secrets.get("embedding"), "embedding-secret");
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
 routeTest(
   "semantic search uses the resolved provider without exposing its key",
   async () => {
@@ -117,6 +352,164 @@ routeTest(
       });
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest(
+  "wiki query returns citations and saves reviewed synthesis",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    const originalVaultDir = config.vaultDir;
+    try {
+      await withTempHandler(async (_defaultHandler, db, dir) => {
+        config.vaultDir = dir;
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        const sourceHash = "e".repeat(64);
+        const sourceId = db.addSource(
+          sourceHash,
+          "Controlled study",
+          "https://example.test/study",
+          "text",
+          `${dir}/sources/${sourceHash}/source.txt`,
+          "Study summary.",
+        );
+        const notePath = `${dir}/notes/treatment-effect.md`;
+        await Deno.writeTextFile(
+          notePath,
+          "# Treatment effect\n\nThe evidence is mixed.\n",
+        );
+        const noteId = db.addNote(
+          "Treatment effect",
+          notePath,
+          "https://example.test/study",
+          "text",
+        );
+        db.indexNote(noteId, "Treatment effect", "The evidence is mixed.");
+        db.attachNoteSource(noteId, sourceId, "new");
+        const embedding = Array.from(
+          { length: config.embed.dimensions },
+          (_, index) => index === 0 ? 1 : 0,
+        );
+        db.upsertEmbedding(noteId, embedding);
+
+        const requests: Array<{ url: string; body: Record<string, unknown> }> =
+          [];
+        globalThis.fetch = (input, init) => {
+          const body = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
+          const index = requests.push({ url: String(input), body }) - 1;
+          if (index === 0 || index === 2) {
+            return Promise.resolve(Response.json({ data: [{ embedding }] }));
+          }
+          if (index === 1) {
+            return Promise.resolve(Response.json({
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    answer: "The available evidence is mixed.",
+                    citations: [noteId],
+                    suggested_page: {
+                      title: "Treatment evidence synthesis",
+                      type: "synthesis",
+                      body: "The available evidence is mixed.",
+                      tags: ["treatment", "evidence"],
+                      links: ["Treatment effect"],
+                    },
+                  }),
+                },
+              }],
+            }));
+          }
+          throw new Error(`Unexpected provider request ${index + 1}`);
+        };
+        const providers = () =>
+          Promise.resolve({
+            source: "profile" as const,
+            llm: {
+              apiBase: "https://llm.example.test/v1",
+              apiKey: "llm-secret",
+              extractModel: "chat",
+              consolidateModel: "synthesis-model",
+              integrateModel: "chat",
+              rewriteModel: "chat",
+            },
+            embedding: {
+              apiBase: "https://embed.example.test/v1",
+              apiKey: "embedding-secret",
+              model: "embed",
+            },
+          });
+        const handle = createHandler(db, providers);
+        const question = "What does the treatment evidence show?";
+        const queryResponse = await handle(
+          new Request("http://localhost/api/query", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({ question }),
+          }),
+        );
+        assert.equal(queryResponse.status, 200);
+        const answer = await queryResponse.json();
+        assert.deepEqual(answer.citations, [{
+          id: noteId,
+          title: "Treatment effect",
+        }]);
+        assert.equal(Object.hasOwn(answer.citations[0], "file_path"), false);
+        assert.equal(answer.answer, "The available evidence is mixed.");
+
+        const saveBody = {
+          question,
+          answer: answer.answer,
+          citations: answer.citations.map((citation: { id: number }) =>
+            citation.id
+          ),
+          suggestedPage: answer.suggestedPage,
+        };
+        const saveResponse = await handle(
+          new Request("http://localhost/api/query/save", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify(saveBody),
+          }),
+        );
+        assert.equal(saveResponse.status, 201);
+        const saved = await saveResponse.json();
+        assert.equal(saved.saved.title, "Treatment evidence synthesis");
+        assert.equal(requests.length, 3);
+        assert.equal(
+          requests[0].url,
+          "https://embed.example.test/v1/embeddings",
+        );
+        assert.equal(
+          requests[1].url,
+          "https://llm.example.test/v1/chat/completions",
+        );
+        assert.equal(
+          requests[2].url,
+          "https://embed.example.test/v1/embeddings",
+        );
+        assert.doesNotMatch(
+          JSON.stringify(answer),
+          /llm-secret|embedding-secret/,
+        );
+
+        const duplicate = await handle(
+          new Request("http://localhost/api/query/save", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify(saveBody),
+          }),
+        );
+        assert.equal(duplicate.status, 409);
+        assert.equal((await duplicate.json()).code, "PAGE_EXISTS");
+        assert.equal(requests.length, 3);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      config.vaultDir = originalVaultDir;
     }
   },
 );
@@ -200,6 +593,57 @@ routeTest(
 );
 
 routeTest(
+  "source review exposes provenance without internal paths",
+  async () => {
+    await withTempHandler(async (handle, db, dir) => {
+      const sourceId = db.addSource(
+        "private-content-hash",
+        "Randomized clinical trial",
+        "https://example.test/trial",
+        "text",
+        `${dir}/sources/private/source.txt`,
+        "A controlled comparison of two interventions.",
+      );
+      const noteId = db.addNote(
+        "Treatment comparison",
+        `${dir}/notes/treatment-comparison.md`,
+        "https://example.test/trial",
+        "text",
+      );
+      db.attachNoteSource(noteId, sourceId, "new");
+
+      const listResponse = await handle(
+        new Request("http://localhost/api/sources"),
+      );
+      assert.equal(listResponse.status, 200);
+      const list = await listResponse.json();
+      assert.equal(list.sources[0].pageCount, 1);
+      assert.equal(list.sources[0].title, "Randomized clinical trial");
+
+      const detailResponse = await handle(
+        new Request(`http://localhost/api/sources/${sourceId}`),
+      );
+      assert.equal(detailResponse.status, 200);
+      const detail = await detailResponse.json();
+      assert.deepEqual(detail.pages, [{
+        id: noteId,
+        title: "Treatment comparison",
+        action: "new",
+      }]);
+      assert.doesNotMatch(
+        JSON.stringify({ list, detail }),
+        /private-content-hash|source\.txt|treatment-comparison\.md/,
+      );
+
+      const missing = await handle(
+        new Request("http://localhost/api/sources/99999"),
+      );
+      assert.equal(missing.status, 404);
+    });
+  },
+);
+
+routeTest(
   "trusted proxy authentication enforces viewer and ingester roles",
   async () => {
     const original = {
@@ -256,6 +700,18 @@ routeTest(
         );
         assert.equal(viewerIngest.status, 403);
         assert.equal((await viewerIngest.json()).code, "FORBIDDEN");
+
+        const viewerSave = await handle(
+          new Request("https://synthesis.example/api/query/save", {
+            method: "POST",
+            headers: {
+              ...mutationHeaders("https://synthesis.example"),
+              "Cf-Access-Authenticated-User-Email": "viewer@example.com",
+            },
+          }),
+        );
+        assert.equal(viewerSave.status, 403);
+        assert.equal((await viewerSave.json()).code, "FORBIDDEN");
 
         const ingester = await handle(
           new Request("https://synthesis.example/api/ingest", {

@@ -48,7 +48,15 @@ async function api(path, opts = {}) {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.error || `Request failed (${res.status})`);
+    error.code = data.code;
+    error.status = res.status;
+    error.data = data;
+    throw error;
+  }
+  return data;
 }
 
 // --- State ---
@@ -131,6 +139,504 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
+// --- Cited wiki query and reviewed write-back ---
+
+const askModal = document.getElementById("ask-modal");
+const askInput = document.getElementById("ask-input");
+const askSubmit = document.getElementById("ask-submit");
+const askSave = document.getElementById("ask-save");
+const askStatus = document.getElementById("ask-status");
+const askResult = document.getElementById("ask-result");
+let reviewedWikiAnswer = null;
+
+function openAskModal() {
+  askModal.classList.remove("hidden");
+  askInput.focus();
+}
+
+function closeAskModal() {
+  askModal.classList.add("hidden");
+}
+
+function setAskBusy(busy) {
+  askInput.disabled = busy;
+  askSubmit.disabled = busy;
+  askSave.disabled = busy;
+}
+
+function clearReviewedAnswer() {
+  reviewedWikiAnswer = null;
+  askResult.classList.add("hidden");
+  askSave.classList.add("hidden");
+  document.getElementById("ask-answer").textContent = "";
+  document.getElementById("ask-citations").replaceChildren();
+}
+
+function showWikiAnswer(question, data) {
+  reviewedWikiAnswer = { question, ...data };
+  document.getElementById("ask-answer").textContent = data.answer;
+  const citations = document.getElementById("ask-citations");
+  citations.replaceChildren();
+  for (const citation of data.citations ?? []) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = citation.title;
+    button.addEventListener("click", () => loadNote(citation.id));
+    item.appendChild(button);
+    citations.appendChild(item);
+  }
+  askResult.classList.remove("hidden");
+  askSave.classList.remove("hidden");
+}
+
+async function submitWikiQuestion() {
+  const question = askInput.value.trim();
+  if (!question) return;
+  clearReviewedAnswer();
+  setAskBusy(true);
+  askStatus.textContent = "Reading the compiled wiki...";
+  try {
+    const data = await api("query", {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
+    showWikiAnswer(question, data);
+    askStatus.textContent = "Review the answer and citations before saving.";
+  } catch (error) {
+    askStatus.textContent = error.message;
+  } finally {
+    setAskBusy(false);
+  }
+}
+
+async function saveReviewedWikiAnswer() {
+  if (!reviewedWikiAnswer) return;
+  setAskBusy(true);
+  askStatus.textContent = "Saving the reviewed synthesis...";
+  try {
+    const data = await api("query/save", {
+      method: "POST",
+      body: JSON.stringify({
+        question: reviewedWikiAnswer.question,
+        answer: reviewedWikiAnswer.answer,
+        citations: reviewedWikiAnswer.citations.map((citation) => citation.id),
+        suggestedPage: reviewedWikiAnswer.suggestedPage,
+      }),
+    });
+    askSave.classList.add("hidden");
+    askStatus.textContent = `Saved “${data.saved.title}”.`;
+    await loadNoteList();
+    await loadGraph();
+  } catch (error) {
+    if (error.code === "PAGE_EXISTS" && error.data?.existingNoteId) {
+      askSave.classList.add("hidden");
+      askStatus.textContent = "That synthesis page already exists.";
+    } else {
+      askStatus.textContent = error.message;
+    }
+  } finally {
+    setAskBusy(false);
+  }
+}
+
+document.getElementById("ask-open-btn").addEventListener("click", openAskModal);
+document.getElementById("ask-close").addEventListener("click", closeAskModal);
+askModal.addEventListener("click", (event) => {
+  if (event.target === askModal) closeAskModal();
+});
+askSubmit.addEventListener("click", submitWikiQuestion);
+askSave.addEventListener("click", saveReviewedWikiAnswer);
+askInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    submitWikiQuestion();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeAskModal();
+});
+
+// --- Provider onboarding ---
+
+const providerModal = document.getElementById("provider-modal");
+const providerForm = document.getElementById("provider-form");
+const providerSave = document.getElementById("provider-save");
+const providerStatus = document.getElementById("provider-status");
+const llmKeyInput = document.getElementById("provider-llm-key");
+const embeddingKeyInput = document.getElementById("provider-embed-key");
+
+function setProviderBusy(busy) {
+  for (const control of providerForm.elements) control.disabled = busy;
+  providerSave.textContent = busy ? "Testing..." : "Test and save";
+}
+
+function updateKeyHint(id, stored) {
+  document.getElementById(id).textContent = stored
+    ? "A key is stored. Leave blank to keep it."
+    : "Required for first-time setup.";
+}
+
+function populateProviderForm(data) {
+  const profile = data.profile;
+  if (profile) {
+    providerForm.elements.displayName.value = profile.displayName;
+    providerForm.elements.llmApiBase.value = profile.llm.apiBase;
+    providerForm.elements.llmModel.value = profile.llm.model;
+    providerForm.elements.embeddingApiBase.value = profile.embedding.apiBase;
+    providerForm.elements.embeddingModel.value = profile.embedding.model;
+    providerForm.elements.embeddingDimensions.value = profile.embedding
+      .dimensions;
+  } else if (Number.isSafeInteger(data.embeddingDimensions)) {
+    providerForm.elements.embeddingDimensions.value = data.embeddingDimensions;
+  }
+  updateKeyHint("provider-llm-key-hint", data.llmKeyStored);
+  updateKeyHint("provider-embed-key-hint", data.embeddingKeyStored);
+}
+
+async function openProviderModal() {
+  providerModal.classList.remove("hidden");
+  providerStatus.textContent = "Loading provider settings...";
+  setProviderBusy(true);
+  try {
+    const data = await api("provider");
+    populateProviderForm(data);
+    providerStatus.textContent = data.configured
+      ? "Provider is configured."
+      : "Complete the profile and test both connections.";
+  } catch (error) {
+    providerStatus.textContent = error.message;
+  } finally {
+    setProviderBusy(false);
+  }
+}
+
+function closeProviderModal() {
+  providerModal.classList.add("hidden");
+  llmKeyInput.value = "";
+  embeddingKeyInput.value = "";
+}
+
+async function saveProvider(event) {
+  event.preventDefault();
+  if (!providerForm.reportValidity()) return;
+  const fields = new FormData(providerForm);
+  setProviderBusy(true);
+  providerStatus.textContent = "Testing chat and embedding connections...";
+  try {
+    const data = await api("provider", {
+      method: "POST",
+      body: JSON.stringify({
+        profile: {
+          id: "default",
+          displayName: fields.get("displayName"),
+          llm: {
+            apiBase: fields.get("llmApiBase"),
+            model: fields.get("llmModel"),
+          },
+          embedding: {
+            apiBase: fields.get("embeddingApiBase"),
+            model: fields.get("embeddingModel"),
+            dimensions: Number(fields.get("embeddingDimensions")),
+          },
+        },
+        llmApiKey: fields.get("llmApiKey"),
+        embeddingApiKey: fields.get("embeddingApiKey"),
+      }),
+    });
+    populateProviderForm(data);
+    providerStatus.textContent = "Provider tested and saved.";
+  } catch (error) {
+    providerStatus.textContent = error.message;
+  } finally {
+    llmKeyInput.value = "";
+    embeddingKeyInput.value = "";
+    setProviderBusy(false);
+  }
+}
+
+document.getElementById("provider-open-btn").addEventListener(
+  "click",
+  openProviderModal,
+);
+document.getElementById("provider-close").addEventListener(
+  "click",
+  closeProviderModal,
+);
+providerModal.addEventListener("click", (event) => {
+  if (event.target === providerModal) closeProviderModal();
+});
+providerForm.addEventListener("submit", saveProvider);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeProviderModal();
+});
+
+// --- Source provenance review ---
+
+const sourcesModal = document.getElementById("sources-modal");
+const sourcesStatus = document.getElementById("sources-status");
+const sourcesList = document.getElementById("sources-list");
+const sourceDetail = document.getElementById("source-detail");
+let selectedSourceId = null;
+
+function safeSourceUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function closeSourcesModal() {
+  sourcesModal.classList.add("hidden");
+  selectedSourceId = null;
+}
+
+function showSourceDetail(data) {
+  document.getElementById("source-detail-title").textContent = data.title;
+  document.getElementById("source-detail-meta").textContent =
+    `${data.sourceType} · ${data.createdAt}`;
+  document.getElementById("source-detail-summary").textContent = data.summary;
+
+  const originalLink = document.getElementById("source-detail-link");
+  const sourceUrl = safeSourceUrl(data.sourceUrl);
+  if (sourceUrl) {
+    originalLink.href = sourceUrl;
+    originalLink.classList.remove("hidden");
+  } else {
+    originalLink.removeAttribute("href");
+    originalLink.classList.add("hidden");
+  }
+
+  const pages = document.getElementById("source-detail-pages");
+  pages.replaceChildren();
+  for (const page of data.pages ?? []) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = page.title;
+    button.addEventListener("click", () => {
+      closeSourcesModal();
+      loadNote(page.id);
+    });
+    const action = document.createElement("small");
+    action.textContent = page.action;
+    item.append(button, action);
+    pages.appendChild(item);
+  }
+  if (!data.pages?.length) {
+    const item = document.createElement("li");
+    item.textContent = "No derived pages are recorded.";
+    pages.appendChild(item);
+  }
+  sourceDetail.classList.remove("hidden");
+}
+
+async function loadSourceDetail(sourceId, button) {
+  selectedSourceId = sourceId;
+  for (const item of sourcesList.querySelectorAll("button")) {
+    item.classList.toggle("active", item === button);
+  }
+  sourcesStatus.textContent = "Loading source provenance...";
+  try {
+    const data = await api(`sources/${sourceId}`);
+    if (selectedSourceId !== sourceId) return;
+    showSourceDetail(data);
+    sourcesStatus.textContent = "";
+  } catch (error) {
+    if (selectedSourceId !== sourceId) return;
+    sourceDetail.classList.add("hidden");
+    sourcesStatus.textContent = error.message;
+  }
+}
+
+async function openSourcesModal() {
+  sourcesModal.classList.remove("hidden");
+  sourcesList.replaceChildren();
+  sourceDetail.classList.add("hidden");
+  sourcesStatus.textContent = "Loading sources...";
+  try {
+    const data = await api("sources");
+    const sources = data.sources ?? [];
+    for (const source of sources) {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "source-list-button";
+      const title = document.createElement("span");
+      title.textContent = source.title;
+      const count = document.createElement("small");
+      count.textContent = `${source.pageCount} derived page${
+        source.pageCount === 1 ? "" : "s"
+      }`;
+      button.append(title, count);
+      button.addEventListener(
+        "click",
+        () => loadSourceDetail(source.id, button),
+      );
+      item.appendChild(button);
+      sourcesList.appendChild(item);
+    }
+    if (sources.length === 0) {
+      sourcesStatus.textContent = "No sources have been ingested yet.";
+      return;
+    }
+    sourcesStatus.textContent = `${sources.length} source${
+      sources.length === 1 ? "" : "s"
+    }`;
+    sourcesList.querySelector("button")?.click();
+  } catch (error) {
+    sourcesStatus.textContent = error.message;
+  }
+}
+
+document.getElementById("sources-open-btn").addEventListener(
+  "click",
+  openSourcesModal,
+);
+document.getElementById("sources-close").addEventListener(
+  "click",
+  closeSourcesModal,
+);
+sourcesModal.addEventListener("click", (event) => {
+  if (event.target === sourcesModal) closeSourcesModal();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeSourcesModal();
+});
+
+// --- Deterministic wiki health checks ---
+
+const lintModal = document.getElementById("lint-modal");
+const lintRefresh = document.getElementById("lint-refresh");
+const lintAnalyze = document.getElementById("lint-analyze");
+const lintStatus = document.getElementById("lint-status");
+const lintSummary = document.getElementById("lint-summary");
+const lintIssues = document.getElementById("lint-issues");
+const lintAnalysis = document.getElementById("lint-analysis");
+const lintAnalysisFindings = document.getElementById(
+  "lint-analysis-findings",
+);
+
+function closeLintModal() {
+  lintModal.classList.add("hidden");
+}
+
+function lintCount(label, count) {
+  const item = document.createElement("span");
+  item.className = "lint-count";
+  item.textContent = `${count} ${label}`;
+  return item;
+}
+
+async function runWikiLint() {
+  lintRefresh.disabled = true;
+  lintAnalyze.disabled = true;
+  lintStatus.textContent = "Checking wiki structure and provenance...";
+  lintSummary.classList.add("hidden");
+  lintIssues.replaceChildren();
+  lintAnalysis.classList.add("hidden");
+  lintAnalysisFindings.replaceChildren();
+  try {
+    const report = await api("lint");
+    lintSummary.replaceChildren(
+      lintCount("pages", report.pageCount),
+      lintCount("sources", report.sourceCount),
+      lintCount("errors", report.errorCount),
+      lintCount("warnings", report.warningCount),
+      lintCount("information", report.infoCount),
+    );
+    lintSummary.classList.remove("hidden");
+    for (const issue of report.issues ?? []) {
+      const item = document.createElement("li");
+      item.className = "lint-issue";
+      item.dataset.severity = issue.severity;
+      const pageButton = document.createElement("button");
+      pageButton.type = "button";
+      pageButton.textContent = issue.pageTitle;
+      pageButton.addEventListener("click", () => {
+        closeLintModal();
+        loadNote(issue.pageId);
+      });
+      const message = document.createElement("span");
+      message.textContent = issue.message;
+      item.append(pageButton, message);
+      lintIssues.appendChild(item);
+    }
+    lintStatus.textContent = report.issues?.length
+      ? `${report.issues.length} finding(s). Lint made no changes.`
+      : "No structural or provenance issues found.";
+  } catch (error) {
+    lintStatus.textContent = error.message;
+  } finally {
+    lintRefresh.disabled = false;
+    lintAnalyze.disabled = false;
+  }
+}
+
+async function analyzeWikiHealth() {
+  lintRefresh.disabled = true;
+  lintAnalyze.disabled = true;
+  lintStatus.textContent =
+    "Analyzing contradictions, stale claims, and gaps...";
+  try {
+    const analysis = await api("lint/analyze", {
+      method: "POST",
+      body: "{}",
+    });
+    lintAnalysisFindings.replaceChildren();
+    for (const finding of analysis.findings ?? []) {
+      const item = document.createElement("li");
+      item.className = "lint-analysis-finding";
+      item.dataset.severity = finding.severity;
+      const summary = document.createElement("div");
+      summary.textContent = finding.summary;
+      item.appendChild(summary);
+      for (const pageId of finding.pageIds ?? []) {
+        const page = currentNotes.find((note) => note.id === pageId);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = page?.title ?? `Wiki page ${pageId}`;
+        button.addEventListener("click", () => {
+          closeLintModal();
+          loadNote(pageId);
+        });
+        item.appendChild(button);
+      }
+      const recommendation = document.createElement("span");
+      recommendation.className = "lint-recommendation";
+      recommendation.textContent = `Next step: ${finding.recommendation}`;
+      item.appendChild(recommendation);
+      lintAnalysisFindings.appendChild(item);
+    }
+    lintAnalysis.classList.remove("hidden");
+    lintStatus.textContent = analysis.findings?.length
+      ? `${analysis.findings.length} cited AI finding(s). No changes were made.`
+      : "AI analysis found no supported additional issues.";
+  } catch (error) {
+    lintStatus.textContent = error.message;
+  } finally {
+    lintRefresh.disabled = false;
+    lintAnalyze.disabled = false;
+  }
+}
+
+document.getElementById("lint-open-btn").addEventListener("click", () => {
+  lintModal.classList.remove("hidden");
+  runWikiLint();
+});
+document.getElementById("lint-close").addEventListener("click", closeLintModal);
+lintModal.addEventListener("click", (event) => {
+  if (event.target === lintModal) closeLintModal();
+});
+lintRefresh.addEventListener("click", runWikiLint);
+lintAnalyze.addEventListener("click", analyzeWikiHealth);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeLintModal();
+});
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -174,7 +680,9 @@ async function loadNote(id, liEl, updateHistory = true) {
       '<p style="color:#888;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem">Related</p>' +
       '<ul style="list-style:none">' +
       data.related.map((r) =>
-        `<li><a href="/?note=${encodeURIComponent(r.id)}" data-id="${r.id}" class="related-link">${
+        `<li><a href="/?note=${
+          encodeURIComponent(r.id)
+        }" data-id="${r.id}" class="related-link">${
           escapeHtml(r.title)
         }</a></li>`
       ).join("") +
@@ -186,7 +694,8 @@ async function loadNote(id, liEl, updateHistory = true) {
   viewer.querySelectorAll(".related-link").forEach((el) => {
     el.addEventListener("click", (event) => {
       if (
-        event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey ||
+        event.button !== 0 || event.metaKey || event.ctrlKey ||
+        event.shiftKey ||
         event.altKey
       ) return;
       event.preventDefault();
@@ -249,24 +758,46 @@ async function doSearch(q) {
 
 // --- Ingest with SSE progress ---
 
+function httpUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 document.getElementById("ingest-btn").addEventListener("click", async () => {
   const input = document.getElementById("ingest-input");
+  const titleInput = document.getElementById("ingest-title");
   const status = document.getElementById("ingest-status");
   const source = input.value.trim();
+  const title = titleInput.value.trim();
   if (!source) return;
 
   input.disabled = true;
+  titleInput.disabled = true;
   document.getElementById("ingest-btn").disabled = true;
 
-  const isPlaylist = source.includes("list=");
+  const sourceUrl = httpUrl(source);
+  const isPlaylist = sourceUrl?.searchParams.has("list") ?? false;
   const endpoint = isPlaylist ? "/api/ingest/playlist" : "/api/ingest";
+  const body = sourceUrl
+    ? { url: source }
+    : { text: source, ...(title ? { title } : {}) };
+  let completed = false;
 
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: source }),
+      body: JSON.stringify(body),
     });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || `Ingestion failed (${res.status})`);
+    }
 
     if (!res.body) throw new Error("No response stream");
 
@@ -290,18 +821,19 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
           ingested: "📝 Transcript ready",
           extracting: "🧠 Extracting insights...",
           distilling: `🧠 ${data.title}`,
-          distilled: "✨ Notes distilled",
+          distilled: "✨ Pages distilled",
           integrating: "🔗 Integrating with wiki...",
           integrated:
             `🔗 Integrated (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)`,
           embedding: "📐 Embedding notes...",
           linking: "🕸️ Computing connections...",
-          done: `✅ Done! ${data.notes?.length ?? 0} notes saved.`,
+          done: `✅ Done! ${data.notes?.length ?? 0} pages updated.`,
           error: `❌ ${data.error}`,
         };
         status.textContent = labels[data.stage] ?? data.stage;
         if (data.stage === "done" || data.stage === "error") {
           if (data.stage === "done") {
+            completed = true;
             await loadNoteList();
             await loadGraph();
           }
@@ -312,13 +844,26 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
     status.textContent = `❌ ${err.message}`;
   } finally {
     input.disabled = false;
+    titleInput.disabled = false;
     document.getElementById("ingest-btn").disabled = false;
-    input.value = "";
+    if (completed) {
+      input.value = "";
+      titleInput.value = "";
+    }
   }
 });
 
 document.getElementById("ingest-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") document.getElementById("ingest-btn").click();
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    document.getElementById("ingest-btn").click();
+  }
+});
+document.getElementById("ingest-title").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("ingest-btn").click();
+  }
 });
 
 // --- Graph (d3-force) ---
@@ -432,7 +977,7 @@ function renderGraph() {
     .attr("r", nodeRadius)
     .style("cursor", "pointer")
     .on("click", (_event, d) => loadNote(d.id))
-    .on("mouseover", (event, d) => {
+    .on("mouseover", (_event, d) => {
       highlightNeighborhood(d.id);
       const visibleConnections = degree.get(d.id) ?? 0;
       tooltip
@@ -473,14 +1018,15 @@ function renderGraph() {
     });
 
     link
-      .classed("is-highlighted", (edge) =>
-        endpointId(edge.source) === hoveredId ||
-        endpointId(edge.target) === hoveredId
+      .classed(
+        "is-highlighted",
+        (edge) =>
+          endpointId(edge.source) === hoveredId ||
+          endpointId(edge.target) === hoveredId,
       )
       .classed("is-muted", (edge) =>
         endpointId(edge.source) !== hoveredId &&
-        endpointId(edge.target) !== hoveredId
-      );
+        endpointId(edge.target) !== hoveredId);
     node
       .classed("is-focused", (datum) => datum.id === hoveredId)
       .classed(
@@ -575,7 +1121,9 @@ function renderGraphFiltered(threshold) {
 await fetchConfig();
 await loadNoteList();
 await loadGraph();
-const requestedNoteId = Number(new URLSearchParams(location.search).get("note"));
+const requestedNoteId = Number(
+  new URLSearchParams(location.search).get("note"),
+);
 if (Number.isSafeInteger(requestedNoteId) && requestedNoteId > 0) {
   await loadNote(requestedNoteId, undefined, false);
 }

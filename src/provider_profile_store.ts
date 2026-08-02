@@ -20,7 +20,14 @@ export class DenoProfileFileStore implements ProfileFileStore {
       Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")),
     );
     if (directory) await Deno.mkdir(directory, { recursive: true });
-    await Deno.writeTextFile(path, content);
+    const temporaryPath = `${path}.${crypto.randomUUID()}.tmp`;
+    try {
+      await Deno.writeTextFile(temporaryPath, content, { createNew: true });
+      await Deno.rename(temporaryPath, path);
+    } catch (error) {
+      await Deno.remove(temporaryPath).catch(() => undefined);
+      throw error;
+    }
   }
 }
 

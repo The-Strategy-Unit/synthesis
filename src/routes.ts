@@ -10,12 +10,27 @@ import {
   validateYouTubeUrl,
 } from "./ingest.ts";
 import { isUrl, processSingleSource } from "./orchestrate.ts";
+import { answerWiki, validateWikiAnswer, type WikiQueryPage } from "./query.ts";
 import {
   type ActiveProviders,
   environmentProviders,
 } from "./provider_runtime.ts";
+import type { ProviderProfileStore } from "./provider_profile_store.ts";
+import { ProviderProfileError } from "./provider_profile.ts";
+import {
+  configureProviders,
+  ProviderSettingsInputError,
+  providerSettingsStatus,
+} from "./provider_settings.ts";
+import type { SecretStore } from "./secret_store.ts";
+import { saveWikiSynthesis, WikiPageExistsError } from "./wiki_store.ts";
+import { analyzeWikiHealth, lintWiki } from "./wiki_lint.ts";
 
 type ProviderResolver = () => Promise<ActiveProviders>;
+type ProviderSettingsDependencies = {
+  profiles: Pick<ProviderProfileStore, "load" | "save">;
+  secrets: SecretStore | (() => Promise<SecretStore>);
+};
 
 type SseData = Record<string, unknown>;
 
@@ -165,6 +180,7 @@ export function createHandler(
   db: DB,
   resolveProviders: ProviderResolver = () =>
     Promise.resolve(environmentProviders()),
+  providerSettings?: ProviderSettingsDependencies,
 ): (req: Request) => Promise<Response> {
   return async function handle(req: Request): Promise<Response> {
     const requestId = crypto.randomUUID();
@@ -189,12 +205,148 @@ export function createHandler(
         if (path === "/api/status" && method === "GET") {
           return json({ status: "ok" });
         }
+        if (path === "/api/provider" && method === "GET") {
+          if (!providerSettings) {
+            return json({
+              configured: true,
+              source: "environment",
+              profile: null,
+              llmKeyStored: true,
+              embeddingKeyStored: true,
+              embeddingDimensions: config.embed.dimensions,
+            });
+          }
+          return json({
+            ...await providerSettingsStatus(
+              providerSettings.profiles,
+              providerSettings.secrets,
+            ),
+            source: "profile",
+            embeddingDimensions: config.embed.dimensions,
+          });
+        }
+        if (path === "/api/provider" && method === "POST") {
+          requireIngester(identity);
+          if (!providerSettings) {
+            throw new ApiError(
+              501,
+              "NOT_IMPLEMENTED",
+              "Provider settings are unavailable",
+            );
+          }
+          const body = await readJson(req);
+          try {
+            return json({
+              ...await configureProviders(
+                providerSettings.profiles,
+                providerSettings.secrets,
+                {
+                  profile: body.profile,
+                  llmApiKey: body.llmApiKey,
+                  embeddingApiKey: body.embeddingApiKey,
+                },
+              ),
+              source: "profile",
+            });
+          } catch (error) {
+            if (
+              error instanceof ProviderProfileError ||
+              error instanceof ProviderSettingsInputError
+            ) {
+              throw new ApiError(
+                400,
+                "INVALID_INPUT",
+                "Provider settings are invalid",
+              );
+            }
+            logFailure(requestId, "Provider configuration", error);
+            return errorResponse(
+              502,
+              "PROVIDER_CONFIGURATION_FAILED",
+              "Provider configuration failed",
+              requestId,
+            );
+          }
+        }
+        if (path === "/api/lint" && method === "GET") {
+          return json(await lintWiki(db));
+        }
+        if (path === "/api/lint/analyze" && method === "POST") {
+          try {
+            semanticSearchGate.check(identity);
+            const report = await lintWiki(db);
+            const context = await wikiLintContext(
+              db,
+              report.issues.map((issue) => issue.pageId),
+            );
+            if (context.length === 0) {
+              throw new ApiError(
+                422,
+                "NO_WIKI_CONTEXT",
+                "No readable wiki pages were found",
+              );
+            }
+            const providers = await resolveProviders();
+            return json(
+              await analyzeWikiHealth(
+                report,
+                context,
+                providers.llm.apiBase,
+                providers.llm.apiKey,
+                providers.llm.consolidateModel,
+              ),
+            );
+          } catch (error) {
+            if (error instanceof ApiError) throw error;
+            logFailure(requestId, "Wiki health analysis", error);
+            return errorResponse(
+              500,
+              "LINT_ANALYSIS_FAILED",
+              "Wiki health analysis failed",
+              requestId,
+            );
+          }
+        }
         if (path === "/api/notes" && method === "GET") {
           return json({
             notes: db.getAllNotes().map(({ id, title, source_url }) => ({
               id,
               title,
               source_url,
+            })),
+          });
+        }
+        if (path === "/api/sources" && method === "GET") {
+          return json({
+            sources: db.getAllSources().map((source) => ({
+              id: source.id,
+              title: source.title,
+              sourceUrl: source.source_url,
+              sourceType: source.source_type,
+              summary: source.summary,
+              createdAt: source.created_at,
+              pageCount: db.getNotesForSource(source.id).length,
+            })),
+          });
+        }
+        if (path.startsWith("/api/sources/") && method === "GET") {
+          const id = Number(path.split("/")[3]);
+          if (!Number.isSafeInteger(id) || id < 1) {
+            throw new ApiError(400, "INVALID_INPUT", "Invalid source ID");
+          }
+          const source = db.getSource(id);
+          if (!source) throw new ApiError(404, "NOT_FOUND", "Not found");
+          return json({
+            id: source.id,
+            title: source.title,
+            sourceUrl: source.source_url,
+            sourceType: source.source_type,
+            summary: source.summary,
+            createdAt: source.created_at,
+            pages: db.getNotesForSource(id).map((note) => ({
+              id: note.id,
+              title: note.title,
+              action: note.action,
             })),
           });
         }
@@ -268,6 +420,122 @@ export function createHandler(
           );
         }
 
+        if (path === "/api/query" && method === "POST") {
+          const body = await readJson(req);
+          const question = requiredString(
+            body.question,
+            "question",
+            config.security.maxSearchChars,
+          );
+          try {
+            semanticSearchGate.check(identity);
+            const providers = await resolveProviders();
+            const context = await retrieveWikiContext(db, question, providers);
+            if (context.length === 0) {
+              throw new ApiError(
+                422,
+                "NO_WIKI_CONTEXT",
+                "No relevant wiki pages were found",
+              );
+            }
+            const result = await answerWiki(
+              question,
+              context,
+              providers.llm.apiBase,
+              providers.llm.apiKey,
+              providers.llm.consolidateModel,
+            );
+            const titles = new Map(
+              context.map((page) => [page.id, page.title]),
+            );
+            return json({
+              answer: result.answer,
+              citations: result.citations.map((id) => ({
+                id,
+                title: titles.get(id),
+              })),
+              suggestedPage: result.suggestedPage,
+            });
+          } catch (error) {
+            if (error instanceof ApiError) throw error;
+            logFailure(requestId, "Wiki query", error);
+            return errorResponse(
+              500,
+              "QUERY_FAILED",
+              "Wiki query failed",
+              requestId,
+            );
+          }
+        }
+
+        if (path === "/api/query/save" && method === "POST") {
+          requireIngester(identity);
+          const body = await readJson(req);
+          const question = requiredString(
+            body.question,
+            "question",
+            config.security.maxSearchChars,
+          );
+          if (!Array.isArray(body.citations)) {
+            throw new ApiError(
+              400,
+              "INVALID_INPUT",
+              "'citations' must be an array",
+            );
+          }
+          const citationIds = body.citations.map((value) => {
+            if (!Number.isSafeInteger(value) || (value as number) < 1) {
+              throw new ApiError(
+                400,
+                "INVALID_INPUT",
+                "Citation IDs must be positive integers",
+              );
+            }
+            return value as number;
+          });
+          const context = await loadWikiPages(db, citationIds);
+          let result;
+          try {
+            result = validateWikiAnswer({
+              answer: body.answer,
+              citations: citationIds,
+              suggested_page: body.suggestedPage,
+            }, context);
+          } catch {
+            throw new ApiError(
+              400,
+              "INVALID_INPUT",
+              "The reviewed wiki answer is invalid",
+            );
+          }
+          try {
+            const saved = await saveWikiSynthesis(
+              db,
+              result.suggestedPage,
+              result.citations,
+              await resolveProviders(),
+              question,
+            );
+            return json({ saved }, 201);
+          } catch (error) {
+            if (error instanceof WikiPageExistsError) {
+              return json({
+                error: error.message,
+                code: "PAGE_EXISTS",
+                existingNoteId: error.noteId,
+                requestId,
+              }, 409);
+            }
+            logFailure(requestId, "Wiki query save", error);
+            return errorResponse(
+              500,
+              "QUERY_SAVE_FAILED",
+              "Wiki answer could not be saved",
+              requestId,
+            );
+          }
+        }
+
         if (path === "/api/search" && method === "GET") {
           const q = url.searchParams.get("q") ?? "";
           if (q.length > config.security.maxSearchChars) {
@@ -331,6 +599,71 @@ export function createHandler(
       return errorResponse(500, "INTERNAL_ERROR", "Request failed", requestId);
     }
   };
+}
+
+async function loadWikiPages(
+  db: DB,
+  noteIds: number[],
+): Promise<WikiQueryPage[]> {
+  const pages: WikiQueryPage[] = [];
+  for (const id of [...new Set(noteIds)]) {
+    const note = db.getNote(id);
+    if (!note) {
+      throw new ApiError(
+        400,
+        "INVALID_INPUT",
+        `Cited wiki page ${id} not found`,
+      );
+    }
+    pages.push({
+      id: note.id,
+      title: note.title,
+      content: (await Deno.readTextFile(note.file_path)).slice(0, 12_000),
+    });
+  }
+  return pages;
+}
+
+async function retrieveWikiContext(
+  db: DB,
+  question: string,
+  providers: ActiveProviders,
+): Promise<WikiQueryPage[]> {
+  const embedding = await DB.embedText(
+    question,
+    providers.embedding.apiBase,
+    providers.embedding.apiKey,
+    providers.embedding.model,
+  );
+  const ids = db.searchSemantic(embedding, 12).map((result) => result.note_id);
+  return await loadWikiPages(db, ids);
+}
+
+async function wikiLintContext(
+  db: DB,
+  priorityIds: number[],
+): Promise<WikiQueryPage[]> {
+  const orderedIds = [
+    ...new Set([
+      ...priorityIds,
+      ...db.getAllNotes().map((note) => note.id),
+    ]),
+  ].slice(0, 12);
+  const pages: WikiQueryPage[] = [];
+  for (const id of orderedIds) {
+    const note = db.getNote(id);
+    if (!note) continue;
+    try {
+      pages.push({
+        id: note.id,
+        title: note.title,
+        content: (await Deno.readTextFile(note.file_path)).slice(0, 12_000),
+      });
+    } catch {
+      // The deterministic report already records unreadable registered pages.
+    }
+  }
+  return pages;
 }
 
 async function semanticSearch(

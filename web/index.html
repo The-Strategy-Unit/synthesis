@@ -21,6 +21,10 @@
             <option value="keyword">Keyword</option>
           </select>
         </div>
+        <button id="ask-open-btn" type="button">Ask wiki</button>
+        <button id="lint-open-btn" type="button">Wiki health</button>
+        <button id="sources-open-btn" type="button">Sources</button>
+        <button id="provider-open-btn" type="button">Provider</button>
       </header>
 
       <main id="main">
@@ -41,8 +45,10 @@
       </main>
 
       <footer id="ingest-bar">
-        <input type="text" id="ingest-input"
-          placeholder="Paste a YouTube URL or text..." />
+        <input type="text" id="ingest-title" maxlength="200"
+          placeholder="Source title (for pasted text)" />
+        <textarea id="ingest-input" rows="2"
+          placeholder="Paste source text or a YouTube URL..."></textarea>
         <button id="ingest-btn">Ingest</button>
         <span id="ingest-status"></span>
       </footer>
@@ -52,6 +58,141 @@
       <div class="modal-content">
         <button id="modal-close">&times;</button>
         <div id="note-content"></div>
+      </div>
+    </div>
+
+    <div id="ask-modal" class="modal hidden">
+      <div class="modal-content ask-content">
+        <button id="ask-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Ask your wiki</h2>
+        <p class="modal-intro">
+          Answers use compiled wiki pages and cite the pages they rely on.
+        </p>
+        <label for="ask-input">Question</label>
+        <textarea id="ask-input" rows="4"
+          placeholder="What does the accumulated evidence show?"></textarea>
+        <div class="ask-actions">
+          <button id="ask-submit" type="button">Ask</button>
+          <button id="ask-save" type="button" class="hidden">
+            Save synthesis
+          </button>
+        </div>
+        <p id="ask-status" role="status"></p>
+        <div id="ask-result" class="hidden">
+          <h3>Answer</h3>
+          <div id="ask-answer"></div>
+          <h3>Cited wiki pages</h3>
+          <ul id="ask-citations"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="lint-modal" class="modal hidden">
+      <div class="modal-content lint-content">
+        <button id="lint-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Wiki health</h2>
+        <p class="modal-intro">
+          Read-only checks for broken structure, missing provenance, and recorded
+          contradictions.
+        </p>
+        <div class="lint-actions">
+          <button id="lint-refresh" type="button">Run checks</button>
+          <button id="lint-analyze" type="button">Analyze with AI</button>
+        </div>
+        <p id="lint-status" role="status"></p>
+        <div id="lint-summary" class="hidden"></div>
+        <ul id="lint-issues"></ul>
+        <div id="lint-analysis" class="hidden">
+          <h3>AI analysis</h3>
+          <ul id="lint-analysis-findings"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="provider-modal" class="modal hidden">
+      <div class="modal-content provider-content">
+        <button id="provider-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>AI provider</h2>
+        <p class="modal-intro">
+          Configure OpenAI-compatible chat and embedding endpoints. API keys are
+          stored in your operating system credential store, never in the vault.
+        </p>
+        <form id="provider-form">
+          <label for="provider-name">Profile name</label>
+          <input id="provider-name" name="displayName" required maxlength="80"
+            autocomplete="off" placeholder="Clinical research provider" />
+
+          <fieldset>
+            <legend>Chat model</legend>
+            <label for="provider-llm-base">API base</label>
+            <input id="provider-llm-base" name="llmApiBase" required
+              type="url" placeholder="https://api.example.com/v1" />
+            <label for="provider-llm-model">Model</label>
+            <input id="provider-llm-model" name="llmModel" required
+              maxlength="200" placeholder="chat-model" />
+            <label for="provider-llm-key">API key</label>
+            <input id="provider-llm-key" name="llmApiKey" type="password"
+              maxlength="4096" autocomplete="new-password" />
+            <small id="provider-llm-key-hint">
+              Required for first-time setup.
+            </small>
+          </fieldset>
+
+          <fieldset>
+            <legend>Embedding model</legend>
+            <label for="provider-embed-base">API base</label>
+            <input id="provider-embed-base" name="embeddingApiBase" required
+              type="url" placeholder="https://api.example.com/v1" />
+            <label for="provider-embed-model">Model</label>
+            <input id="provider-embed-model" name="embeddingModel" required
+              maxlength="200" placeholder="embedding-model" />
+            <label for="provider-embed-dimensions">Dimensions</label>
+            <input id="provider-embed-dimensions" name="embeddingDimensions"
+              required type="number" min="64" max="32768" step="1" />
+            <label for="provider-embed-key">API key</label>
+            <input id="provider-embed-key" name="embeddingApiKey"
+              type="password" maxlength="4096"
+              autocomplete="new-password" />
+            <small id="provider-embed-key-hint">
+              Required for first-time setup.
+            </small>
+          </fieldset>
+
+          <div class="provider-actions">
+            <button id="provider-save" type="submit">
+              Test and save
+            </button>
+          </div>
+        </form>
+        <p id="provider-status" role="status"></p>
+      </div>
+    </div>
+
+    <div id="sources-modal" class="modal hidden">
+      <div class="modal-content sources-content">
+        <button id="sources-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Source provenance</h2>
+        <p class="modal-intro">
+          Review ingested sources and the wiki pages each source created or
+          changed.
+        </p>
+        <p id="sources-status" role="status"></p>
+        <div class="sources-layout">
+          <ul id="sources-list" aria-label="Ingested sources"></ul>
+          <section id="source-detail" class="hidden">
+            <h3 id="source-detail-title"></h3>
+            <p id="source-detail-meta"></p>
+            <p id="source-detail-summary"></p>
+            <a id="source-detail-link" class="hidden" target="_blank"
+              rel="noopener noreferrer">Open original source</a>
+            <h4>Derived wiki pages</h4>
+            <ul id="source-detail-pages"></ul>
+          </section>
+        </div>
       </div>
     </div>
 

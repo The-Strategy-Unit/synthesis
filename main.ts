@@ -17,13 +17,7 @@ import { KeyringSecretStore } from "./src/secret_store.ts";
 const vault_dir = config.vaultDir;
 const db_path = dbPath();
 
-try {
-  await Deno.stat(vault_dir);
-} catch {
-  console.error(`Vault directory not found: ${vault_dir}`);
-  console.error(`Run \`mkdir -p ${vault_dir}/notes\` first.`);
-  Deno.exit(1);
-}
+await Deno.mkdir(vault_dir, { recursive: true });
 await Deno.mkdir(notesDir(), { recursive: true });
 await Deno.mkdir(sourcesDir(), { recursive: true });
 
@@ -37,5 +31,8 @@ const resolveProviders = () =>
 
 Deno.serve(
   { hostname: config.host, port: config.port },
-  createHandler(db, resolveProviders),
+  createHandler(db, resolveProviders, {
+    profiles: profileStore,
+    secrets: KeyringSecretStore.create,
+  }),
 );
