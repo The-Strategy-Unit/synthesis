@@ -12,7 +12,11 @@
     "test": "deno run --allow-all scripts/test.ts"
   },
   "test": {
-    "include": ["src/distil_test.ts", "src/ingest_test.ts"]
+    "include": [
+      "src/distil_test.ts",
+      "src/ingest_test.ts",
+      "src/provider_profile_test.ts"
+    ]
   },
   "imports": {
     "d3-force": "https://esm.sh/d3-force@3",
