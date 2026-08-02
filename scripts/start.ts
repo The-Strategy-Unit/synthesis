@@ -10,6 +10,35 @@ const vaultDir = config.vaultDir;
 const port = config.port;
 const isDev = Deno.env.get("SYNTHESIS_WATCH") === "true";
 
+function frontendBundleCommand(watch = false): Deno.Command {
+  return new Deno.Command(Deno.execPath(), {
+    args: [
+      "bundle",
+      ...(watch ? ["--watch"] : []),
+      "--platform",
+      "browser",
+      "--output",
+      "web/app.bundle.js",
+      "web/app.js",
+    ],
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}
+
+async function bundleFrontend(): Promise<void> {
+  console.log("Building frontend...");
+  const bundle = frontendBundleCommand();
+  const status = await bundle.spawn().status;
+  if (!status.success) {
+    throw new Error("Frontend bundle failed; server was not started.");
+  }
+}
+
+await bundleFrontend();
+const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
+
 function envBool(key: string, fallback: boolean): boolean {
   const value = Deno.env.get(key)?.trim().toLowerCase();
   if (value === undefined || value === "") return fallback;
@@ -165,4 +194,5 @@ if (openBrowser) {
 }
 
 const status = await process.status;
+frontendWatcher?.kill();
 Deno.exit(status.code);

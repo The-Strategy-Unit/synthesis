@@ -204,21 +204,56 @@ body {
 #graph .link {
   stroke: var(--text-faint);
   stroke-opacity: 0.45;
+  transition: stroke-opacity 120ms ease, stroke-width 120ms ease;
+}
+
+#graph .link.is-muted {
+  stroke-opacity: 0.04 !important;
+}
+
+#graph .link.is-highlighted {
+  stroke-opacity: 1 !important;
+  stroke-width: 3px !important;
 }
 
 #graph circle {
   fill: var(--accent);
   cursor: pointer;
+  transition: opacity 120ms ease, fill 120ms ease, stroke-width 120ms ease;
 }
 
 #graph circle:hover {
   fill: var(--accent-soft);
 }
 
+#graph circle.is-muted,
+#graph text.is-muted {
+  opacity: 0.14;
+}
+
+#graph circle.is-connected {
+  opacity: 0.9;
+  stroke: var(--accent-soft);
+  stroke-width: 2px;
+}
+
+#graph circle.is-focused {
+  fill: var(--accent-soft);
+  opacity: 1;
+  stroke: var(--text);
+  stroke-width: 3px;
+}
+
 #graph text {
   font-size: 10px;
   fill: var(--text-muted);
   pointer-events: none;
+  transition: opacity 120ms ease, fill 120ms ease;
+}
+
+#graph text.is-highlighted {
+  fill: var(--text);
+  opacity: 1;
 }
 
 #graph-tooltip {
@@ -303,6 +338,22 @@ body {
 #note-content hr {
   border: none;
   border-top: 1px solid var(--border);
+}
+
+#note-content .related-link {
+  color: var(--accent);
+  display: inline-block;
+  padding: 0.3rem 0;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 0.2em;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+#note-content .related-link:hover,
+#note-content .related-link:focus-visible {
+  color: var(--accent-soft);
+  text-decoration-color: currentColor;
 }
 
 #ingest-bar {

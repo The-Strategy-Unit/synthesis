@@ -112,11 +112,18 @@ const modalClose = document.getElementById("modal-close");
 function openModal() {
   modal.classList.remove("hidden");
 }
-function closeModal() {
+function closeModal(updateHistory = true) {
   modal.classList.add("hidden");
+  if (updateHistory) {
+    const url = new URL(location.href);
+    if (url.searchParams.has("note")) {
+      url.searchParams.delete("note");
+      history.replaceState({}, "", url);
+    }
+  }
 }
 
-modalClose.addEventListener("click", closeModal);
+modalClose.addEventListener("click", () => closeModal());
 modal.addEventListener("click", (e) => {
   if (e.target === modal) closeModal();
 });
@@ -124,7 +131,23 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
-async function loadNote(id, liEl) {
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function loadNote(id, liEl, updateHistory = true) {
+  if (updateHistory) {
+    const url = new URL(location.href);
+    if (url.searchParams.get("note") !== String(id)) {
+      url.searchParams.set("note", String(id));
+      history.pushState({}, "", url);
+    }
+  }
   document.querySelectorAll("#note-list li").forEach((el) =>
     el.classList.remove("active")
   );
@@ -136,7 +159,7 @@ async function loadNote(id, liEl) {
   const raw = data.content ?? "";
   const body = raw.replace(/^---[\s\S]*?---\s*/, "");
 
-  const html = body
+  const html = escapeHtml(body)
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
@@ -151,7 +174,9 @@ async function loadNote(id, liEl) {
       '<p style="color:#888;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem">Related</p>' +
       '<ul style="list-style:none">' +
       data.related.map((r) =>
-        `<li style="padding:0.3rem 0;cursor:pointer;color:#4ea8de" data-id="${r.id}" class="related-link">${r.title}</li>`
+        `<li><a href="/?note=${encodeURIComponent(r.id)}" data-id="${r.id}" class="related-link">${
+          escapeHtml(r.title)
+        }</a></li>`
       ).join("") +
       "</ul>";
   }
@@ -159,7 +184,12 @@ async function loadNote(id, liEl) {
   viewer.innerHTML = html + relatedHtml;
 
   viewer.querySelectorAll(".related-link").forEach((el) => {
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (event) => {
+      if (
+        event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey ||
+        event.altKey
+      ) return;
+      event.preventDefault();
       const relId = parseInt(el.dataset.id);
       loadNote(relId);
     });
@@ -258,9 +288,8 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
         const labels = {
           ingesting: "⬇️ Downloading subtitles...",
           ingested: "📝 Transcript ready",
-          summarising: "📝 Summarising transcript...",
-          summarised: "✅ Summary ready",
-          distilling: "🧠 Distilling notes...",
+          extracting: "🧠 Extracting insights...",
+          distilling: `🧠 ${data.title}`,
           distilled: "✨ Notes distilled",
           integrating: "🔗 Integrating with wiki...",
           integrated:
@@ -404,9 +433,11 @@ function renderGraph() {
     .style("cursor", "pointer")
     .on("click", (_event, d) => loadNote(d.id))
     .on("mouseover", (event, d) => {
-      if (currentZoom <= uiConfig.labelZoomThreshold) {
-        tooltip.classed("hidden", false).text(d.title);
-      }
+      highlightNeighborhood(d.id);
+      const visibleConnections = degree.get(d.id) ?? 0;
+      tooltip
+        .classed("hidden", false)
+        .text(`${d.title} — ${visibleConnections} visible connections`);
     })
     .on("mousemove", (event) => {
       tooltip
@@ -414,6 +445,7 @@ function renderGraph() {
         .style("top", `${event.clientY - 10}px`);
     })
     .on("mouseout", () => {
+      clearNeighborhoodHighlight();
       tooltip.classed("hidden", true);
     });
 
@@ -426,6 +458,46 @@ function renderGraph() {
     .attr("dx", 10)
     .attr("dy", 3)
     .style("pointer-events", "none");
+
+  function endpointId(endpoint) {
+    return endpoint && typeof endpoint === "object" ? endpoint.id : endpoint;
+  }
+
+  function highlightNeighborhood(hoveredId) {
+    const connectedIds = new Set([hoveredId]);
+    link.each((edge) => {
+      const sourceId = endpointId(edge.source);
+      const targetId = endpointId(edge.target);
+      if (sourceId === hoveredId) connectedIds.add(targetId);
+      if (targetId === hoveredId) connectedIds.add(sourceId);
+    });
+
+    link
+      .classed("is-highlighted", (edge) =>
+        endpointId(edge.source) === hoveredId ||
+        endpointId(edge.target) === hoveredId
+      )
+      .classed("is-muted", (edge) =>
+        endpointId(edge.source) !== hoveredId &&
+        endpointId(edge.target) !== hoveredId
+      );
+    node
+      .classed("is-focused", (datum) => datum.id === hoveredId)
+      .classed(
+        "is-connected",
+        (datum) => datum.id !== hoveredId && connectedIds.has(datum.id),
+      )
+      .classed("is-muted", (datum) => !connectedIds.has(datum.id));
+    label
+      .classed("is-highlighted", (datum) => connectedIds.has(datum.id))
+      .classed("is-muted", (datum) => !connectedIds.has(datum.id));
+  }
+
+  function clearNeighborhoodHighlight() {
+    link.classed("is-highlighted is-muted", false);
+    node.classed("is-focused is-connected is-muted", false);
+    label.classed("is-highlighted is-muted", false);
+  }
 
   node.call(
     drag()
@@ -503,6 +575,16 @@ function renderGraphFiltered(threshold) {
 await fetchConfig();
 await loadNoteList();
 await loadGraph();
+const requestedNoteId = Number(new URLSearchParams(location.search).get("note"));
+if (Number.isSafeInteger(requestedNoteId) && requestedNoteId > 0) {
+  await loadNote(requestedNoteId, undefined, false);
+}
+globalThis.addEventListener("popstate", () => {
+  const noteId = Number(new URLSearchParams(location.search).get("note"));
+  if (Number.isSafeInteger(noteId) && noteId > 0) {
+    loadNote(noteId, undefined, false);
+  } else closeModal(false);
+});
 globalThis.addEventListener("resize", () => {
   if (simulation) renderGraph();
 });
