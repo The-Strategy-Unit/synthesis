@@ -181,14 +181,19 @@ async function main() {
     }
 
     console.log(
-      "\n\x1b[33mContinuing anyway. yt-dlp will be downloaded automatically when you ingest YouTube videos.\x1b[0m",
+      "\n\x1b[33mContinuing without yt-dlp. Install it before ingesting YouTube videos.\x1b[0m",
     );
   }
 
   // Check and pull models
   const requiredModels = [
-    config.llm.model,
-    config.embed.model,
+    ...new Set([
+      config.llm.extractModel,
+      config.llm.consolidateModel,
+      config.llm.integrateModel,
+      config.llm.rewriteModel,
+      config.embed.model,
+    ]),
   ];
 
   console.log("\nChecking models...");
@@ -212,12 +217,12 @@ async function main() {
       // Continue if we can't list models
     }
 
-    console.log(`\x1b[33m⚠ ${model} - will be pulled on first use\x1b[0m`);
+    console.log(`\x1b[33m⚠ ${model} is not installed\x1b[0m`);
     console.log(
-      "   This will download on first run (requires ~18GB disk space for both models)",
+      "   LLM and embedding models can require significant disk space.",
     );
     console.log(
-      "   Or pull manually: \x1b[1mollama pull ${model}\x1b[0m\n",
+      `   Or pull manually: \x1b[1mollama pull ${model}\x1b[0m\n`,
     );
   }
 
@@ -229,10 +234,9 @@ async function main() {
 
   console.log("\n\x1b[1m=== Next steps ===\x1b[0m");
   console.log(
-    `\x1b[1mPull models now:\x1b[0m \`ollama pull ${config.llm.model}\` and \`ollama pull ${config.embed.model}\``,
-  );
-  console.log(
-    `\x1b[1mOr:\x1b[0m Run Synthesis and it will pull them automatically on first use.`,
+    `\x1b[1mPull models now:\x1b[0m ${
+      requiredModels.map((m) => `\`ollama pull ${m}\``).join(" and ")
+    }`,
   );
   console.log(
     `\x1b[1mStart Synthesis:\x1b[0m \x1b[36mdeno task start\x1b[0m`,

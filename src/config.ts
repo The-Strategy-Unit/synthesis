@@ -12,6 +12,55 @@ function envInt(key: string, fallback: number): number {
   return isNaN(v) ? fallback : v;
 }
 
+function envIntClamped(
+  key: string,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  return Math.min(max, Math.max(min, envInt(key, fallback)));
+}
+
+function envBool(key: string, fallback: boolean): boolean {
+  const value = Deno.env.get(key)?.trim().toLowerCase();
+  if (value === undefined || value === "") return fallback;
+  if (["1", "true", "yes", "on"].includes(value)) return true;
+  if (["0", "false", "no", "off"].includes(value)) return false;
+  throw new Error(`${key} must be a boolean`);
+}
+
+function envCsv(key: string): string[] {
+  const values = (Deno.env.get(key) ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
+function envOrigin(key: string): string | undefined {
+  const value = Deno.env.get(key)?.trim();
+  if (!value) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${key} must be an absolute HTTP(S) origin`);
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    value.replace(/\/$/, "") !== url.origin
+  ) {
+    throw new Error(`${key} must contain only an HTTP(S) scheme and host`);
+  }
+  return url.origin;
+}
+
 function envClamped(
   key: string,
   min: number,
@@ -35,7 +84,81 @@ const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? ".";
 
 export const config = {
   vaultDir: env("SYNTHESIS_VAULT", `${home}/Synthesis`),
+  host: env("SYNTHESIS_HOST", "127.0.0.1"),
   port: Math.max(1, Math.min(65535, envInt("SYNTHESIS_PORT", 8000))),
+
+  security: {
+    publicOrigin: envOrigin("SYNTHESIS_PUBLIC_ORIGIN"),
+    trustProxyAuth: envBool("SYNTHESIS_TRUST_PROXY_AUTH", false),
+    allowedEmails: envCsv("SYNTHESIS_ALLOWED_EMAILS"),
+    ingesterEmails: envCsv("SYNTHESIS_INGESTER_EMAILS"),
+    maxBodyBytes: envIntClamped(
+      "SYNTHESIS_MAX_BODY_BYTES",
+      1024,
+      10 * 1024 * 1024,
+      1024 * 1024,
+    ),
+    maxPastedTextChars: envIntClamped(
+      "SYNTHESIS_MAX_PASTED_TEXT_CHARS",
+      1000,
+      1_000_000,
+      250_000,
+    ),
+    maxTitleChars: envIntClamped(
+      "SYNTHESIS_MAX_TITLE_CHARS",
+      20,
+      1000,
+      200,
+    ),
+    maxSearchChars: envIntClamped(
+      "SYNTHESIS_MAX_SEARCH_CHARS",
+      20,
+      5000,
+      500,
+    ),
+    maxTranscriptChars: envIntClamped(
+      "SYNTHESIS_MAX_TRANSCRIPT_CHARS",
+      1000,
+      2_000_000,
+      500_000,
+    ),
+    ytDlpTimeoutMs: envIntClamped(
+      "SYNTHESIS_YT_DLP_TIMEOUT_MS",
+      5000,
+      30 * 60 * 1000,
+      2 * 60 * 1000,
+    ),
+    modelTimeoutMs: envIntClamped(
+      "SYNTHESIS_MODEL_TIMEOUT_MS",
+      5000,
+      30 * 60 * 1000,
+      3 * 60 * 1000,
+    ),
+    ingestQueueSize: envIntClamped(
+      "SYNTHESIS_INGEST_QUEUE_SIZE",
+      0,
+      100,
+      4,
+    ),
+    perUserDailyJobs: envIntClamped(
+      "SYNTHESIS_PER_USER_DAILY_JOBS",
+      1,
+      10_000,
+      5,
+    ),
+    globalDailyJobs: envIntClamped(
+      "SYNTHESIS_GLOBAL_DAILY_JOBS",
+      1,
+      100_000,
+      20,
+    ),
+    semanticSearchesPerMinute: envIntClamped(
+      "SYNTHESIS_SEMANTIC_SEARCHES_PER_MINUTE",
+      1,
+      1_000,
+      5,
+    ),
+  },
 
   llm: {
     apiBase: env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
@@ -103,6 +226,13 @@ export const config = {
     maxChars: Math.max(1000, envInt("SYNTHESIS_MAX_CHARS", 12000)),
     overlap: envClamped("SYNTHESIS_CHUNK_OVERLAP", 0, 2000, 500),
     ytDlpLang: env("SYNTHESIS_SUBTITLES_LANG", "en"),
+    playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", false),
+    maxPlaylistItems: envIntClamped(
+      "SYNTHESIS_MAX_PLAYLIST_ITEMS",
+      1,
+      100,
+      10,
+    ),
   },
 
   link: {
@@ -139,4 +269,8 @@ export function dbPath(): string {
 
 export function notesDir(): string {
   return `${config.vaultDir}/notes`;
+}
+
+export function sourcesDir(): string {
+  return `${config.vaultDir}/sources`;
 }

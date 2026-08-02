@@ -4,8 +4,9 @@ Setup, configuration, extending, and troubleshooting for Synthesis.
 
 ## Prerequisites
 
-- [Deno](https://deno.land) ≥ 2.0 
-- [Ollama](https://ollama.com) running locally (or a remote OpenAI-compatible endpoint)
+- [Deno](https://deno.land) ≥ 2.0
+- [Ollama](https://ollama.com) running locally (or a remote OpenAI-compatible
+  endpoint)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion
 
 ## Setup
@@ -18,15 +19,11 @@ deno task start
 ```
 
 `setup.ts` will:
-1. Check that Ollama is running (exits with install instructions if not)
-2. Check for yt-dlp (warns but continues if missing - auto-downloads later)
-3. Check that `config.llm.model` and `config.embed.model` are available in Ollama
-4. Create the vault directory at `~/Synthesis/notes`
 
-> **Note:** `setup.ts` currently checks `config.llm.model` (the backward-compat
-> field) and `config.embed.model`, not the individual role-based models
-> (`extractModel`, `consolidateModel`, etc.). You may need to manually pull
-> those: `ollama pull qwen3.5:9b` and `ollama pull qwen3.6:27b`.
+1. Check that Ollama is running (exits with install instructions if not)
+2. Check for yt-dlp and warn if it must be installed
+3. Check every configured model role and report models that must be pulled
+4. Create the vault directory at `~/Synthesis/notes`
 
 ## Development
 
@@ -38,13 +35,17 @@ deno task test     # run tests
 
 ### Permissions
 
-`scripts/start.ts` grants:
-- `--allow-net` - HTTP server + LLM/embedding API calls
+`scripts/start.ts` grants the child runtime:
+
+- `--allow-net` scoped to the listen address and configured AI API hosts
 - `--allow-ffi` - sqlite-vec native extension
 - `--allow-read=web,$vaultDir,$tmpDir`
 - `--allow-write=$vaultDir,$tmpDir`
 - `--allow-run=yt-dlp`
-- `--allow-env`
+- `--allow-env` restricted to documented Synthesis and platform path variables
+
+See [Private Alpha Deployment](DEPLOYMENT.md) for the authentication, quota,
+backup, and reverse-proxy configuration.
 
 ## Configuration reference
 
@@ -53,81 +54,81 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Core
 
-| Variable | Default | Validation |
-|---|---|---|
-| `SYNTHESIS_VAULT` | `~/Synthesis` | - |
-| `SYNTHESIS_PORT` | `8000` | clamped 1–65535 |
+| Variable          | Default       | Validation      |
+| ----------------- | ------------- | --------------- |
+| `SYNTHESIS_VAULT` | `~/Synthesis` | -               |
+| `SYNTHESIS_PORT`  | `8000`        | clamped 1–65535 |
 
 ### LLM API
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_API_BASE` | `http://localhost:11434/v1` | OpenAI-compatible endpoint |
-| `SYNTHESIS_API_KEY` | `ollama` | Bearer token |
-| `SYNTHESIS_REASONING_EFFORT` | `none` | `high\|medium\|low\|max\|none` |
+| Variable                     | Default                     | Notes                          |
+| ---------------------------- | --------------------------- | ------------------------------ |
+| `SYNTHESIS_API_BASE`         | `http://localhost:11434/v1` | OpenAI-compatible endpoint     |
+| `SYNTHESIS_API_KEY`          | `ollama`                    | Bearer token                   |
+| `SYNTHESIS_REASONING_EFFORT` | `none`                      | `high\|medium\|low\|max\|none` |
 
 ### Model roles
 
-| Variable | Default | Used by |
-|---|---|---|
-| `SYNTHESIS_EXTRACT_MODEL` | `qwen3.5:9b` | Per-chunk extraction |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b` | Source-level consolidation |
-| `SYNTHESIS_INTEGRATE_MODEL` | `qwen3.5:9b` | new/merge/contradict decisions |
-| `SYNTHESIS_REWRITE_MODEL` | `qwen3.6:27b` | Rewriting existing notes |
-| `SYNTHESIS_LLM_MODEL` | `qwen3.6:27b` | Backward-compat / API response only |
+| Variable                      | Default       | Used by                             |
+| ----------------------------- | ------------- | ----------------------------------- |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`  | Per-chunk extraction                |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b` | Source-level consolidation          |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b`  | new/merge/contradict decisions      |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.6:27b` | Rewriting existing notes            |
+| `SYNTHESIS_LLM_MODEL`         | `qwen3.6:27b` | Backward-compat / API response only |
 
 ### LLM tuning
 
-| Variable | Default | Validation |
-|---|---|---|
-| `SYNTHESIS_LLM_TEMPERATURE` | `0.1` | clamped 0–2 |
-| `SYNTHESIS_EXTRACT_TEMPERATURE` | `0.2` | clamped 0–2 |
-| `SYNTHESIS_CONSOLIDATE_TEMPERATURE` | `0.1` | clamped 0–2 |
-| `SYNTHESIS_INTEGRATE_TEMPERATURE` | `0.1` | clamped 0–2 |
-| `SYNTHESIS_EXTRACT_MAX_TOKENS` | `2000` | min 256 |
-| `SYNTHESIS_CONSOLIDATE_MAX_TOKENS` | `4000` | min 256 |
-| `SYNTHESIS_INTEGRATE_MAX_TOKENS` | `2000` | min 256 |
-| `SYNTHESIS_REWRITE_MAX_TOKENS` | `2000` | min 256 |
-| `SYNTHESIS_MAX_TOKENS` | `800` | min 256 |
+| Variable                            | Default | Validation  |
+| ----------------------------------- | ------- | ----------- |
+| `SYNTHESIS_LLM_TEMPERATURE`         | `0.1`   | clamped 0–2 |
+| `SYNTHESIS_EXTRACT_TEMPERATURE`     | `0.2`   | clamped 0–2 |
+| `SYNTHESIS_CONSOLIDATE_TEMPERATURE` | `0.1`   | clamped 0–2 |
+| `SYNTHESIS_INTEGRATE_TEMPERATURE`   | `0.1`   | clamped 0–2 |
+| `SYNTHESIS_EXTRACT_MAX_TOKENS`      | `2000`  | min 256     |
+| `SYNTHESIS_CONSOLIDATE_MAX_TOKENS`  | `4000`  | min 256     |
+| `SYNTHESIS_INTEGRATE_MAX_TOKENS`    | `2000`  | min 256     |
+| `SYNTHESIS_REWRITE_MAX_TOKENS`      | `2000`  | min 256     |
+| `SYNTHESIS_MAX_TOKENS`              | `800`   | min 256     |
 
 ### Embeddings
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_EMBED_API_BASE` | inherits `SYNTHESIS_API_BASE` | Separate endpoint if needed |
-| `SYNTHESIS_EMBED_API_KEY` | inherits `SYNTHESIS_API_KEY` | - |
-| `SYNTHESIS_EMBED_MODEL` | `qwen3-embedding:8b` | - |
-| `SYNTHESIS_EMBED_DIMENSIONS` | `4096` | min 64; must match model output |
+| Variable                     | Default                       | Notes                           |
+| ---------------------------- | ----------------------------- | ------------------------------- |
+| `SYNTHESIS_EMBED_API_BASE`   | inherits `SYNTHESIS_API_BASE` | Separate endpoint if needed     |
+| `SYNTHESIS_EMBED_API_KEY`    | inherits `SYNTHESIS_API_KEY`  | -                               |
+| `SYNTHESIS_EMBED_MODEL`      | `qwen3-embedding:8b`          | -                               |
+| `SYNTHESIS_EMBED_DIMENSIONS` | `4096`                        | min 64; must match model output |
 
 ### Ingest
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_MAX_CHARS` | `12000` | min 1000; chunk size |
-| `SYNTHESIS_CHUNK_OVERLAP` | `500` | clamped 0–2000 |
-| `SYNTHESIS_SUBTITLES_LANG` | `en` | yt-dlp `--sub-lang` |
+| Variable                   | Default | Notes                |
+| -------------------------- | ------- | -------------------- |
+| `SYNTHESIS_MAX_CHARS`      | `12000` | min 1000; chunk size |
+| `SYNTHESIS_CHUNK_OVERLAP`  | `500`   | clamped 0–2000       |
+| `SYNTHESIS_SUBTITLES_LANG` | `en`    | yt-dlp `--sub-lang`  |
 
 ### Linking
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_LINK_THRESHOLD` | `0.75` | clamped 0–1; cosine similarity |
-| `SYNTHESIS_LINK_K` | `50` | min 1; kNN fanout per note |
+| Variable                   | Default | Notes                          |
+| -------------------------- | ------- | ------------------------------ |
+| `SYNTHESIS_LINK_THRESHOLD` | `0.75`  | clamped 0–1; cosine similarity |
+| `SYNTHESIS_LINK_K`         | `50`    | min 1; kNN fanout per note     |
 
 ### Search
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_SEARCH_LIMIT` | `20` | min 1; max results |
+| Variable                 | Default | Notes              |
+| ------------------------ | ------- | ------------------ |
+| `SYNTHESIS_SEARCH_LIMIT` | `20`    | min 1; max results |
 
 ### UI
 
-| Variable | Default | Notes |
-|---|---|---|
-| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5` | clamped 0–10 |
-| `SYNTHESIS_SLIDER_MIN` | `0` | clamped 0–1 |
-| `SYNTHESIS_SLIDER_MAX` | `1` | clamped 0–1 |
-| `SYNTHESIS_SLIDER_STEP` | `0.025` | clamped 0.001–1 |
+| Variable                         | Default | Notes           |
+| -------------------------------- | ------- | --------------- |
+| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10    |
+| `SYNTHESIS_SLIDER_MIN`           | `0`     | clamped 0–1     |
+| `SYNTHESIS_SLIDER_MAX`           | `1`     | clamped 0–1     |
+| `SYNTHESIS_SLIDER_STEP`          | `0.025` | clamped 0.001–1 |
 
 ## Extending
 
@@ -135,23 +136,28 @@ override with validation (clamping, enum checks, minimum bounds).
 
 1. Add a function to `src/ingest.ts` returning `IngestResult`:
    ```typescript
-   { transcript: string; sourceUrl: string; title: string }
+   {
+     transcript: string;
+     sourceUrl: string;
+     title: string;
+   }
    ```
-2. Wire it into the `POST /api/ingest` handler in `main.ts`
-3. Set an appropriate `source_type` in the `db.addNote()` call
+2. Wire it into the `POST /api/ingest` handler in `src/routes.ts`
+3. Preserve immutable-source and note provenance in `src/orchestrate.ts`
 
 ### Customizing the distillation prompt
 
 Edit the prompt constants in `src/distil.ts`:
+
 - `EXTRACT_PROMPT` - per-chunk extraction
 - `CONSOLIDATE_PROMPT` - source-level consolidation
 - Integrate and rewrite prompts are inline in their respective functions
 
 ### Changing the embedding model
 
-Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` matches
-the model's output. Existing embeddings will have mismatched dimensions and
-must be regenerated (delete the `embeddings` table or rebuild from scratch).
+Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` matches the
+model's output. Existing embeddings will have mismatched dimensions and must be
+regenerated (delete the `embeddings` table or rebuild from scratch).
 
 ## API reference
 
@@ -163,18 +169,18 @@ Request body: `{ "url": "..." }` or `{ "text": "...", "title": "..." }`
 
 Response is a `text/event-stream` with `data:` events:
 
-| Stage | Data |
-|---|---|
-| `ingesting` | `{ title }` |
-| `ingested` | `{ title }` |
-| `extracting` | - |
-| `distilled` | `{ noteCount }` |
-| `embedding` | - |
-| `integrating` | - |
-| `integrated` | `{ new, merge, contradict }` |
-| `linking` | - |
-| `done` | `{ notes: [{ id, title }] }` |
-| `error` | `{ error }` |
+| Stage         | Data                         |
+| ------------- | ---------------------------- |
+| `ingesting`   | `{ title }`                  |
+| `ingested`    | `{ title }`                  |
+| `extracting`  | -                            |
+| `distilled`   | `{ noteCount }`              |
+| `embedding`   | -                            |
+| `integrating` | -                            |
+| `integrated`  | `{ new, merge, contradict }` |
+| `linking`     | -                            |
+| `done`        | `{ notes: [{ id, title }] }` |
+| `error`       | `{ error }`                  |
 
 ### `POST /api/ingest/playlist` (SSE)
 
@@ -186,6 +192,7 @@ Same SSE stages, but with `distilling` events per video
 ### `GET /api/search`
 
 Query parameters:
+
 - `q` - search query (required)
 - `mode` - `semantic` (default) or `keyword`
 

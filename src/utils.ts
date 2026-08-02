@@ -5,3 +5,7 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
 }
+
+export function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}

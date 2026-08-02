@@ -35,6 +35,7 @@ deno task start    # opens http://localhost:8000
 ```
 ~/Synthesis/
 ├── notes/          # markdown files (your knowledge base)
+├── sources/        # immutable raw inputs, metadata, and source summaries
 └── synthesis.db    # SQLite: metadata, embeddings, links, FTS5 index
 ```
 
@@ -45,44 +46,45 @@ Override with `SYNTHESIS_VAULT`.
 All settings are in `src/config.ts` and overridable via environment variables.
 Key ones:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `SYNTHESIS_VAULT` | `~/Synthesis` | Vault root |
-| `SYNTHESIS_PORT` | `8000` | HTTP port |
-| `SYNTHESIS_API_BASE` | `http://localhost:11434/v1` | LLM API endpoint |
-| `SYNTHESIS_EXTRACT_MODEL` | `qwen3.5:9b` | Chunk extraction |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b` | Source synthesis |
-| `SYNTHESIS_INTEGRATE_MODEL` | `qwen3.5:9b` | New/merge/contradict |
-| `SYNTHESIS_REWRITE_MODEL` | `qwen3.6:27b` | Note rewriting |
-| `SYNTHESIS_EMBED_MODEL` | `qwen3-embedding:8b` | Embeddings |
-| `SYNTHESIS_LINK_THRESHOLD` | `0.75` | Graph link threshold |
+| Variable                      | Default                     | Purpose              |
+| ----------------------------- | --------------------------- | -------------------- |
+| `SYNTHESIS_VAULT`             | `~/Synthesis`               | Vault root           |
+| `SYNTHESIS_PORT`              | `8000`                      | HTTP port            |
+| `SYNTHESIS_API_BASE`          | `http://localhost:11434/v1` | LLM API endpoint     |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`                | Chunk extraction     |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b`               | Source synthesis     |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b`                | New/merge/contradict |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.6:27b`               | Note rewriting       |
+| `SYNTHESIS_EMBED_MODEL`       | `qwen3-embedding:8b`        | Embeddings           |
+| `SYNTHESIS_LINK_THRESHOLD`    | `0.75`                      | Graph link threshold |
 
-See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the full configuration reference.
+See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the full configuration
+reference.
 
 ## API
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/status` | GET | Server health and model info |
-| `/api/config` | GET | Effective runtime config |
-| `/api/notes` | GET | List all notes |
-| `/api/notes/:id` | GET | Single note with related notes |
-| `/api/search?q=&mode=` | GET | Keyword or semantic search |
-| `/api/graph` | GET | Nodes and links for graph view |
-| `/api/ingest` | POST | Ingest URL or text (SSE streaming) |
-| `/api/ingest/playlist` | POST | Ingest YouTube playlist (SSE) |
+| Endpoint               | Method | Description                        |
+| ---------------------- | ------ | ---------------------------------- |
+| `/api/status`          | GET    | Server health and model info       |
+| `/api/config`          | GET    | Effective runtime config           |
+| `/api/notes`           | GET    | List all notes                     |
+| `/api/notes/:id`       | GET    | Single note with related notes     |
+| `/api/search?q=&mode=` | GET    | Keyword or semantic search         |
+| `/api/graph`           | GET    | Nodes and links for graph view     |
+| `/api/ingest`          | POST   | Ingest URL or text (SSE streaming) |
+| `/api/ingest/playlist` | POST   | Ingest YouTube playlist (SSE)      |
 
 ## Deno tasks
 
-| Task | Description |
-|---|---|
-| `setup` | First-run setup (Ollama, yt-dlp, models) |
-| `start` | Start server |
-| `dev` | Start with auto-reload |
-| `migrate` | Migrate from legacy Elixir DB |
-| `build` | Create platform distributables |
-| `lint` | Lint + format |
-| `test` | Run tests |
+| Task      | Description                              |
+| --------- | ---------------------------------------- |
+| `setup`   | First-run setup (Ollama, yt-dlp, models) |
+| `start`   | Start server                             |
+| `dev`     | Start with auto-reload                   |
+| `migrate` | Migrate from legacy Elixir DB            |
+| `build`   | Create platform distributables           |
+| `lint`    | Lint + format                            |
+| `test`    | Run tests                                |
 
 ## Project structure
 
@@ -110,7 +112,10 @@ data handling terms.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) - component design, data flow, schema
-- [Developer Guide](docs/DEVELOPERS.md) - setup, config reference, extending, troubleshooting
+- [Developer Guide](docs/DEVELOPERS.md) - setup, config reference, extending,
+  troubleshooting
+- [Private Alpha Deployment](docs/DEPLOYMENT.md) - access controls, limits,
+  backups, rollout
 
 ## License
 

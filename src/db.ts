@@ -30,7 +30,70 @@ CREATE TABLE IF NOT EXISTS links (
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, content);
+
+CREATE TABLE IF NOT EXISTS sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content_hash TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  source_url TEXT,
+  source_type TEXT NOT NULL,
+  file_path TEXT NOT NULL UNIQUE,
+  summary TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS note_sources (
+  note_id INTEGER NOT NULL,
+  source_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  PRIMARY KEY (note_id, source_id),
+  FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+  FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
 `;
+
+export interface SourceRecord {
+  id: number;
+  content_hash: string;
+  title: string;
+  source_url: string | null;
+  source_type: string;
+  file_path: string;
+  summary: string;
+  created_at: string;
+}
+
+export interface IntegrationCandidate {
+  id: number;
+  title: string;
+  body: string;
+}
+
+const INTEGRATION_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "in",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "were",
+  "with",
+]);
 
 export function initDatabase(db: DatabaseSync): void {
   load(db);
@@ -47,6 +110,22 @@ export class DB {
     initDatabase(this.db);
   }
 
+  withTransaction<T>(operation: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = operation();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {
+        // Preserve the error that caused the transaction to fail.
+      }
+      throw error;
+    }
+  }
+
   addNote(
     title: string,
     filePath: string,
@@ -60,11 +139,65 @@ export class DB {
     return Number(info.lastInsertRowid);
   }
 
+  getSourceByHash(contentHash: string): SourceRecord | undefined {
+    return this.db.prepare(
+      "SELECT * FROM sources WHERE content_hash = ?",
+    ).get(contentHash) as SourceRecord | undefined;
+  }
+
+  addSource(
+    contentHash: string,
+    title: string,
+    sourceUrl: string | null,
+    sourceType: string,
+    filePath: string,
+    summary: string,
+  ): number {
+    const info = this.db.prepare(
+      `INSERT INTO sources
+       (content_hash, title, source_url, source_type, file_path, summary)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(contentHash, title, sourceUrl, sourceType, filePath, summary);
+    return Number(info.lastInsertRowid);
+  }
+
+  attachNoteSource(noteId: number, sourceId: number, action: string): void {
+    this.db.prepare(
+      `INSERT INTO note_sources (note_id, source_id, action)
+       VALUES (?, ?, ?)
+       ON CONFLICT(note_id, source_id) DO UPDATE SET action = excluded.action`,
+    ).run(noteId, sourceId, action);
+  }
+
+  getNotesForSource(
+    sourceId: number,
+  ): Array<{
+    id: number;
+    title: string;
+    file_path: string;
+    source_url: string | null;
+    action: string;
+  }> {
+    return this.db.prepare(
+      `SELECT n.id, n.title, n.file_path, n.source_url, ns.action
+       FROM note_sources ns
+       JOIN notes n ON n.id = ns.note_id
+       WHERE ns.source_id = ?
+       ORDER BY n.created_at`,
+    ).all(sourceId) as Array<{
+      id: number;
+      title: string;
+      file_path: string;
+      source_url: string | null;
+      action: string;
+    }>;
+  }
+
   upsertEmbedding(noteId: number, embedding: number[]): void {
     this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(noteId);
     this.db.prepare(
       "INSERT INTO embeddings (note_id, vector) VALUES (?, ?)",
-    ).run(noteId, new Float32Array(embedding));
+    ).run(BigInt(noteId), new Float32Array(embedding));
   }
 
   indexNote(noteId: number, title: string, content: string): void {
@@ -86,6 +219,30 @@ export class DB {
     return stmt.all(query, limit) as Array<
       { id: number; title: string; rank: number }
     >;
+  }
+
+  findIntegrationCandidates(
+    text: string,
+    limit = 8,
+  ): IntegrationCandidate[] {
+    if (!Number.isFinite(limit) || limit <= 0) return [];
+
+    const terms = [...text.toLowerCase().matchAll(/[\p{L}\p{N}]+/gu)]
+      .map((match) => match[0])
+      .filter((term) => term.length >= 2 && !INTEGRATION_STOP_WORDS.has(term));
+    const uniqueTerms = [...new Set(terms)].slice(0, 16);
+    if (uniqueTerms.length === 0) return [];
+
+    const query = uniqueTerms.map((term) => `"${term}"`).join(" OR ");
+    const resultLimit = Math.min(50, Math.trunc(limit));
+    return this.db.prepare(
+      `SELECT n.id, n.title, notes_fts.content AS body
+       FROM notes_fts
+       JOIN notes n ON n.id = notes_fts.rowid
+       WHERE notes_fts MATCH ?
+       ORDER BY notes_fts.rank
+       LIMIT ?`,
+    ).all(query, resultLimit) as unknown as IntegrationCandidate[];
   }
 
   searchSemantic(
@@ -156,6 +313,34 @@ export class DB {
         source_type: string | null;
       }
       | undefined;
+  }
+
+  getNoteByFilePath(
+    filePath: string,
+  ): {
+    id: number;
+    title: string;
+    file_path: string;
+    source_url: string | null;
+    source_type: string | null;
+  } | undefined {
+    return this.db.prepare("SELECT * FROM notes WHERE file_path = ?").get(
+      filePath,
+    ) as
+      | {
+        id: number;
+        title: string;
+        file_path: string;
+        source_url: string | null;
+        source_type: string | null;
+      }
+      | undefined;
+  }
+
+  deleteNote(id: number): void {
+    this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(id);
+    this.db.prepare("DELETE FROM notes_fts WHERE rowid = ?").run(id);
+    this.db.prepare("DELETE FROM notes WHERE id = ?").run(id);
   }
 
   close(): void {
@@ -229,18 +414,52 @@ export class DB {
     apiKey: string,
     model: string,
   ): Promise<number[]> {
-    const res = await fetch(`${apiBase}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ model, input: text }),
-    });
-    if (!res.ok) {
-      throw new Error(`Embedding API error ${res.status}: ${await res.text()}`);
+    let res: Response;
+    try {
+      res = await fetch(`${apiBase}/embeddings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ model, input: text }),
+        signal: AbortSignal.timeout(config.security.modelTimeoutMs),
+      });
+    } catch (err) {
+      const errorName = err instanceof Error ? err.name : "UnknownError";
+      if (errorName === "TimeoutError" || errorName === "AbortError") {
+        throw new Error("Embedding request timed out");
+      }
+      console.error(`Embedding API transport failed (${errorName})`);
+      throw new Error("Unable to contact the embedding service");
     }
-    return (await res.json()).data[0].embedding as number[];
+
+    if (!res.ok) {
+      console.error(`Embedding API request failed with status ${res.status}`);
+      await res.body?.cancel();
+      throw new Error(`Embedding service rejected the request (${res.status})`);
+    }
+
+    let payload: unknown;
+    try {
+      payload = await res.json();
+    } catch {
+      throw new Error("Embedding service returned an invalid response");
+    }
+
+    const embedding = (payload as {
+      data?: Array<{ embedding?: unknown }>;
+    })?.data?.[0]?.embedding;
+    if (
+      !Array.isArray(embedding) ||
+      embedding.length !== config.embed.dimensions ||
+      !embedding.every((value) =>
+        typeof value === "number" && Number.isFinite(value)
+      )
+    ) {
+      throw new Error("Embedding service returned an invalid embedding");
+    }
+    return embedding;
   }
 
   // Embed + store in one call
@@ -262,31 +481,69 @@ export class DB {
     return embedding;
   }
 
-  // Semantic links for graph
-  computeLinks(
-    threshold = config.link.similarityThreshold,
-    k = config.link.k,
+  // Shared per-note kNN + upsert logic used by both computeLinks() (full
+  // rebuild) and computeLinksFor() (incremental rebuild for touched notes).
+  private linkNotes(
+    noteIds: number[],
+    threshold: number,
+    k: number,
+    seen: Set<string>,
   ): number {
-    const notes = this.getAllNotes();
     let count = 0;
-    const seen = new Set<string>();
-    for (const note of notes) {
-      const emb = this.getEmbedding(note.id);
+    for (const noteId of noteIds) {
+      const emb = this.getEmbedding(noteId);
       if (!emb) continue;
-      for (const n of this.findNearest(note.id, emb, k)) {
+      for (const n of this.findNearest(noteId, emb, k)) {
         if (n.similarity < threshold) continue;
-        const key = `${Math.min(note.id, n.id)}-${Math.max(note.id, n.id)}`;
+        const key = `${Math.min(noteId, n.id)}-${Math.max(noteId, n.id)}`;
         if (seen.has(key)) continue;
         seen.add(key);
         this.upsertLink(
-          Math.min(note.id, n.id),
-          Math.max(note.id, n.id),
+          Math.min(noteId, n.id),
+          Math.max(noteId, n.id),
           n.similarity,
         );
         count++;
       }
     }
     return count;
+  }
+
+  // Semantic links for graph — full rebuild over every note in the vault.
+  computeLinks(
+    threshold = config.link.similarityThreshold,
+    k = config.link.k,
+  ): number {
+    return this.withTransaction(() => {
+      this.clearLinks();
+      const notes = this.getAllNotes();
+      return this.linkNotes(
+        notes.map((n) => n.id),
+        threshold,
+        k,
+        new Set<string>(),
+      );
+    });
+  }
+
+  // Incremental link recomputation — only runs the kNN search for the given
+  // (newly-created or rewritten) note ids against the rest of the vault,
+  // instead of recomputing links for every note.
+  computeLinksFor(
+    noteIds: number[],
+    threshold = config.link.similarityThreshold,
+    k = config.link.k,
+  ): number {
+    const uniqueIds = [...new Set(noteIds)];
+    if (uniqueIds.length === 0) return 0;
+
+    return this.withTransaction(() => {
+      const deleteLinks = this.db.prepare(
+        "DELETE FROM links WHERE source_note_id = ? OR target_note_id = ?",
+      );
+      for (const noteId of uniqueIds) deleteLinks.run(noteId, noteId);
+      return this.linkNotes(uniqueIds, threshold, k, new Set<string>());
+    });
   }
 
   // Combined keyword + semantic search

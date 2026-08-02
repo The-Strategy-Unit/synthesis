@@ -1,36 +1,90 @@
 // Ingest: fetch YouTube transcript via yt-dlp auto-captions
 
+import { config } from "./config.ts";
+
 export interface IngestResult {
   transcript: string;
   sourceUrl: string;
   title: string;
 }
 
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtu.be",
+]);
+
+export function validateYouTubeUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Invalid YouTube URL");
+  }
+
+  if (
+    url.protocol !== "https:" ||
+    !YOUTUBE_HOSTS.has(url.hostname.toLowerCase()) ||
+    url.username ||
+    url.password ||
+    url.port
+  ) {
+    throw new Error("Only HTTPS YouTube URLs are supported");
+  }
+
+  return url.href;
+}
+
+async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
+  const child = new Deno.Command("yt-dlp", {
+    args: ["--no-config", ...args],
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The process may have exited between the timeout and kill call.
+      }
+      reject(new Error("YouTube request timed out"));
+    }, config.security.ytDlpTimeoutMs);
+  });
+
+  try {
+    return await Promise.race([child.output(), timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 export async function ingestYouTube(url: string): Promise<IngestResult> {
+  const validatedUrl = validateYouTubeUrl(url);
   const tmpDir = await Deno.makeTempDir();
 
   try {
-    const title = await fetchVideoTitle(url);
+    const title = await fetchVideoTitle(validatedUrl);
 
-    const cmd = new Deno.Command("yt-dlp", {
-      args: [
-        "--write-auto-sub",
-        "--write-sub",
-        "--skip-download",
-        "--sub-format",
-        "vtt",
-        "--sub-lang",
-        "en",
-        "-o",
-        `${tmpDir}/%(id)s`,
-        url,
-      ],
-      stdout: "piped",
-      stderr: "piped",
-    });
-    const { success, stderr } = await cmd.output();
+    const { success, code } = await runYtDlp([
+      "--write-auto-sub",
+      "--write-sub",
+      "--skip-download",
+      "--sub-format",
+      "vtt",
+      "--sub-lang",
+      config.ingest.ytDlpLang,
+      "-o",
+      `${tmpDir}/%(id)s`,
+      validatedUrl,
+    ]);
     if (!success) {
-      throw new Error(`yt-dlp failed: ${new TextDecoder().decode(stderr)}`);
+      console.error(`yt-dlp subtitle request failed with exit code ${code}`);
+      throw new Error("Unable to download YouTube subtitles");
     }
 
     const files: string[] = [];
@@ -45,10 +99,18 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
       );
     }
 
+    const stat = await Deno.stat(files[0]);
+    if (stat.size > config.security.maxTranscriptChars) {
+      throw new Error("YouTube subtitles exceed the configured size limit");
+    }
+
     const vttContent = await Deno.readTextFile(files[0]);
     const transcript = parseVtt(vttContent);
+    if (transcript.length > config.security.maxTranscriptChars) {
+      throw new Error("YouTube transcript exceeds the configured size limit");
+    }
 
-    return { transcript, sourceUrl: url, title };
+    return { transcript, sourceUrl: validatedUrl, title };
   } finally {
     try {
       await Deno.remove(tmpDir, { recursive: true });
@@ -61,21 +123,19 @@ export function ingestText(title: string, text: string): IngestResult {
 }
 
 async function fetchVideoTitle(url: string): Promise<string> {
-  const cmd = new Deno.Command("yt-dlp", {
-    args: ["--get-title", url],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const { success, stdout, stderr } = await cmd.output();
+  const validatedUrl = validateYouTubeUrl(url);
+  const { success, code, stdout } = await runYtDlp([
+    "--get-title",
+    validatedUrl,
+  ]);
   if (!success) {
-    throw new Error(
-      `yt-dlp failed to fetch title: ${new TextDecoder().decode(stderr)}`,
-    );
+    console.error(`yt-dlp title request failed with exit code ${code}`);
+    throw new Error("Unable to fetch the YouTube video title");
   }
   return new TextDecoder().decode(stdout).trim();
 }
 
-function parseVtt(vtt: string): string {
+export function parseVtt(vtt: string): string {
   const lines = vtt.split("\n");
   const textLines: string[] = [];
   let prevClean = "";
@@ -107,16 +167,23 @@ function parseVtt(vtt: string): string {
 export async function getPlaylistVideos(
   playlistUrl: string,
 ): Promise<string[]> {
-  const cmd = new Deno.Command("yt-dlp", {
-    args: ["--flat-playlist", "--print", "url", playlistUrl],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const { success, stdout, stderr } = await cmd.output();
+  const validatedUrl = validateYouTubeUrl(playlistUrl);
+  const { success, code, stdout } = await runYtDlp([
+    "--flat-playlist",
+    "--print",
+    "url",
+    validatedUrl,
+  ]);
   if (!success) {
-    throw new Error(
-      `yt-dlp playlist fetch failed: ${new TextDecoder().decode(stderr)}`,
-    );
+    console.error(`yt-dlp playlist request failed with exit code ${code}`);
+    throw new Error("Unable to fetch the YouTube playlist");
   }
-  return new TextDecoder().decode(stdout).trim().split("\n").filter(Boolean);
+
+  const urls = new TextDecoder().decode(stdout).trim().split("\n").filter(
+    Boolean,
+  );
+  if (urls.length > config.ingest.maxPlaylistItems) {
+    throw new Error("YouTube playlist exceeds the configured item limit");
+  }
+  return urls.map(validateYouTubeUrl);
 }

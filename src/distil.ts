@@ -13,6 +13,17 @@ export interface DistilResult {
   notes: DistilNote[];
 }
 
+const MAX_CHUNKS = 32;
+const EXTRACTION_CONCURRENCY = 3;
+const MAX_ITEMS_PER_CHUNK = 8;
+const MAX_CANDIDATES = MAX_CHUNKS * MAX_ITEMS_PER_CHUNK;
+const MAX_FINAL_NOTES = 12;
+const MAX_TITLE_LENGTH = 120;
+const MAX_BODY_LENGTH = 4_000;
+const MAX_SUMMARY_LENGTH = 2_000;
+const MAX_TAGS = 3;
+const MAX_TAG_LENGTH = 64;
+
 // --- Shared chat helper (one place for request construction) ---
 
 async function chat(
@@ -42,18 +53,30 @@ async function chat(
     body.reasoning_effort = config.llm.reasoningEffort;
   }
 
-  const response = await fetch(`${apiBase}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(config.security.modelTimeoutMs),
+    });
+  } catch (err) {
+    const errorName = err instanceof Error ? err.name : "UnknownError";
+    if (errorName === "TimeoutError" || errorName === "AbortError") {
+      throw new Error("LLM request timed out");
+    }
+    console.error(`LLM API transport failed (${errorName})`);
+    throw new Error("Unable to contact the LLM service");
+  }
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`LLM API error ${response.status}: ${errText}`);
+    console.error(`LLM API request failed with status ${response.status}`);
+    await response.body?.cancel();
+    throw new Error(`LLM service rejected the request (${response.status})`);
   }
 
   const data = await response.json();
@@ -116,6 +139,59 @@ interface ExtractedItem {
   tags: string[];
 }
 
+function asRecord(value: unknown, context: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context} must be a JSON object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function boundedString(
+  value: unknown,
+  context: string,
+  maxLength: number,
+): string {
+  if (typeof value !== "string") {
+    throw new Error(`${context} must be a string`);
+  }
+  const result = value.trim();
+  if (result.length === 0) throw new Error(`${context} must not be empty`);
+  if (result.length > maxLength) {
+    throw new Error(`${context} exceeds ${maxLength} characters`);
+  }
+  return result;
+}
+
+function parseNote(value: unknown, context: string): DistilNote {
+  const note = asRecord(value, context);
+  if (!Array.isArray(note.tags)) {
+    throw new Error(`${context}.tags must be an array`);
+  }
+  if (note.tags.length === 0 || note.tags.length > MAX_TAGS) {
+    throw new Error(`${context}.tags must contain 1-${MAX_TAGS} items`);
+  }
+
+  return {
+    title: boundedString(note.title, `${context}.title`, MAX_TITLE_LENGTH),
+    body: boundedString(note.body, `${context}.body`, MAX_BODY_LENGTH),
+    tags: note.tags.map((tag, index) =>
+      boundedString(tag, `${context}.tags[${index}]`, MAX_TAG_LENGTH)
+    ),
+  };
+}
+
+function parseNoteArray(
+  value: unknown,
+  context: string,
+  maxItems: number,
+): DistilNote[] {
+  if (!Array.isArray(value)) throw new Error(`${context} must be an array`);
+  if (value.length === 0 || value.length > maxItems) {
+    throw new Error(`${context} must contain 1-${maxItems} notes`);
+  }
+  return value.map((note, index) => parseNote(note, `${context}[${index}]`));
+}
+
 async function extractChunk(
   chunk: string,
   apiBase: string,
@@ -128,16 +204,15 @@ async function extractChunk(
     jsonMode: true,
   });
 
-  try {
-    const parsed = JSON.parse(extractJson(content));
-    return (parsed.items ?? []).map((n: Record<string, unknown>) => ({
-      title: String(n.title ?? "Untitled"),
-      body: String(n.body ?? ""),
-      tags: Array.isArray(n.tags) ? n.tags.map(String) : [],
-    }));
-  } catch {
-    return [];
-  }
+  const parsed = asRecord(
+    JSON.parse(extractJson(content)) as unknown,
+    "Extraction response",
+  );
+  return parseNoteArray(
+    parsed.items,
+    "Extraction response.items",
+    MAX_ITEMS_PER_CHUNK,
+  );
 }
 
 // --- Stage 2: Consolidate (big model, single call) ---
@@ -177,19 +252,52 @@ async function consolidateCandidates(
     },
   );
 
-  const parsed = JSON.parse(extractJson(content));
-  if (!parsed.notes || !Array.isArray(parsed.notes)) {
-    throw new Error("Consolidation response missing 'notes' array");
-  }
+  const parsed = asRecord(
+    JSON.parse(extractJson(content)) as unknown,
+    "Consolidation response",
+  );
 
   return {
-    summary: parsed.summary ?? "",
-    notes: parsed.notes.map((n: Record<string, unknown>) => ({
-      title: String(n.title ?? "Untitled"),
-      body: String(n.body ?? ""),
-      tags: Array.isArray(n.tags) ? n.tags.map(String) : [],
-    })),
+    summary: boundedString(
+      parsed.summary,
+      "Consolidation response.summary",
+      MAX_SUMMARY_LENGTH,
+    ),
+    notes: parseNoteArray(
+      parsed.notes,
+      "Consolidation response.notes",
+      MAX_FINAL_NOTES,
+    ),
   };
+}
+
+async function extractChunks(
+  chunks: string[],
+  apiBase: string,
+  apiKey: string,
+): Promise<ExtractedItem[]> {
+  const results = new Array<ExtractedItem[]>(chunks.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < chunks.length) {
+      const index = nextIndex++;
+      results[index] = await extractChunk(
+        chunks[index],
+        apiBase,
+        apiKey,
+        config.llm.extractModel,
+      );
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(EXTRACTION_CONCURRENCY, chunks.length) },
+      () => worker(),
+    ),
+  );
+  return results.flat();
 }
 
 // --- Main distil entry point: split → parallel extract → consolidate ---
@@ -204,13 +312,18 @@ export async function distil(
     config.ingest.maxChars,
     config.ingest.overlap,
   );
+  if (chunks.length > MAX_CHUNKS) {
+    throw new Error(
+      `Transcript requires ${chunks.length} chunks; maximum is ${MAX_CHUNKS}`,
+    );
+  }
 
-  // Parallel extraction with small model
-  const candidates = (await Promise.all(
-    chunks.map((chunk) =>
-      extractChunk(chunk, apiBase, apiKey, config.llm.extractModel)
-    ),
-  )).flat();
+  const candidates = await extractChunks(chunks, apiBase, apiKey);
+  if (candidates.length === 0 || candidates.length > MAX_CANDIDATES) {
+    throw new Error(
+      `Extraction produced ${candidates.length} candidates; expected 1-${MAX_CANDIDATES}`,
+    );
+  }
 
   // Single consolidation pass with big model
   return await consolidateCandidates(
@@ -261,7 +374,7 @@ export interface IntegrationDecision {
 
 export async function integrate(
   newNotes: DistilNote[],
-  existingNotes: Array<{ id: number; title: string }>,
+  existingNotes: Array<{ id: number; title: string; body?: string }>,
   apiBase: string,
   apiKey: string,
   model: string,
@@ -275,35 +388,74 @@ export async function integrate(
       title: n.title,
       body: n.body.slice(0, 200),
     })),
-    existing_notes: existingNotes,
+    existing_notes: existingNotes.map((note) => ({
+      id: note.id,
+      title: note.title,
+      body: note.body?.slice(0, 1_200),
+    })),
   });
 
-  try {
-    const content = await chat(
-      apiBase,
-      apiKey,
-      model,
-      INTEGRATE_PROMPT,
-      userContent,
-      {
-        temperature: config.llm.integrateTemperature,
-        maxTokens: config.llm.integrateMaxTokens,
-        jsonMode: true,
-      },
-    );
+  const content = await chat(
+    apiBase,
+    apiKey,
+    model,
+    INTEGRATE_PROMPT,
+    userContent,
+    {
+      temperature: config.llm.integrateTemperature,
+      maxTokens: config.llm.integrateMaxTokens,
+      jsonMode: true,
+    },
+  );
 
-    const parsed = JSON.parse(extractJson(content));
-    const decisions: IntegrationDecision[] = Array.isArray(parsed)
-      ? parsed
-      : parsed.decisions ?? [];
-
-    while (decisions.length < newNotes.length) {
-      decisions.push({ action: "new" });
-    }
-    return decisions.slice(0, newNotes.length);
-  } catch {
-    return newNotes.map(() => ({ action: "new" as const }));
+  const parsed = asRecord(
+    JSON.parse(extractJson(content)) as unknown,
+    "Integration response",
+  );
+  if (!Array.isArray(parsed.decisions)) {
+    throw new Error("Integration response.decisions must be an array");
   }
+  if (parsed.decisions.length !== newNotes.length) {
+    throw new Error(
+      `Integration response returned ${parsed.decisions.length} decisions; expected ${newNotes.length}`,
+    );
+  }
+
+  const existingIds = new Set(existingNotes.map((note) => note.id));
+  return parsed.decisions.map((value, index): IntegrationDecision => {
+    const decision = asRecord(
+      value,
+      `Integration response.decisions[${index}]`,
+    );
+    if (
+      decision.action !== "new" && decision.action !== "merge" &&
+      decision.action !== "contradict"
+    ) {
+      throw new Error(
+        `Integration response.decisions[${index}].action is invalid`,
+      );
+    }
+    if (decision.action === "new") {
+      if (decision.existing_id !== undefined) {
+        throw new Error(
+          `Integration response.decisions[${index}] must not include existing_id for action new`,
+        );
+      }
+      return { action: "new" };
+    }
+    if (
+      !Number.isSafeInteger(decision.existing_id) ||
+      !existingIds.has(decision.existing_id as number)
+    ) {
+      throw new Error(
+        `Integration response.decisions[${index}].existing_id is not a supplied note ID`,
+      );
+    }
+    return {
+      action: decision.action,
+      existing_id: decision.existing_id as number,
+    };
+  });
 }
 
 // --- Note rewriting (big model) ---
