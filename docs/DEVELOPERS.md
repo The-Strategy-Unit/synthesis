@@ -38,12 +38,16 @@ deno task test:integration   # database, route, and orchestration tests
 
 `scripts/start.ts` grants the child runtime:
 
-- `--allow-net` scoped to the listen address and configured AI API hosts
+- `--allow-net` because validated provider endpoints can be configured at
+  runtime
 - `--allow-ffi` - sqlite-vec native extension
-- `--allow-read=web,$vaultDir,$tmpDir`
-- `--allow-write=$vaultDir,$tmpDir`
+- `--allow-read=web,$vaultDir,$appDataDir,$tmpDir`
+- `--allow-write=$vaultDir,$appDataDir,$tmpDir`
 - `--allow-run=yt-dlp`
 - `--allow-env` restricted to documented Synthesis and platform path variables
+
+Application validation limits provider API bases to HTTPS endpoints ending in
+`/v1`, except that loopback HTTP is allowed for local providers.
 
 See [Private Alpha Deployment](DEPLOYMENT.md) for the authentication, quota,
 backup, and reverse-proxy configuration.
@@ -103,11 +107,12 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Ingest
 
-| Variable                   | Default | Notes                |
-| -------------------------- | ------- | -------------------- |
-| `SYNTHESIS_MAX_CHARS`      | `12000` | min 1000; chunk size |
-| `SYNTHESIS_CHUNK_OVERLAP`  | `500`   | clamped 0–2000       |
-| `SYNTHESIS_SUBTITLES_LANG` | `en`    | yt-dlp `--sub-lang`  |
+| Variable                   | Default  | Notes                 |
+| -------------------------- | -------- | --------------------- |
+| `SYNTHESIS_MAX_CHARS`      | `12000`  | min 1000; chunk size  |
+| `SYNTHESIS_CHUNK_OVERLAP`  | `500`    | clamped 0–2000        |
+| `SYNTHESIS_YT_DLP_PATH`    | `yt-dlp` | downloader executable |
+| `SYNTHESIS_SUBTITLES_LANG` | `en`     | yt-dlp `--sub-lang`   |
 
 ### Linking
 
