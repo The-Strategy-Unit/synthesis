@@ -83,25 +83,83 @@
         </nav>
 
         <main id="main">
-          <aside id="sidebar">
-            <h3>Wiki pages</h3>
-            <ul id="note-list"></ul>
-          </aside>
+          <header class="knowledge-toolbar">
+            <div>
+              <p class="workspace-eyebrow">Knowledge</p>
+              <h1 id="workspace-title">Compiled wiki</h1>
+            </div>
+            <div class="workspace-actions">
+              <button id="evidence-toggle" class="workspace-secondary hidden"
+                type="button" aria-controls="evidence-panel"
+                aria-expanded="true">Evidence</button>
+              <div class="view-switch" role="group"
+                aria-label="Knowledge view">
+                <button id="page-view-btn" class="active" type="button"
+                  aria-pressed="true">Page</button>
+                <button id="connections-view-btn" type="button"
+                  aria-pressed="false">Connections</button>
+              </div>
+            </div>
+          </header>
 
-          <aside id="graph-panel">
-            <h3>Connections</h3>
-            <div class="threshold-control">
-              <label>Min semantic similarity:
-                <span id="threshold-value">0.75</span></label>
-              <input type="range" id="similarity-slider" min="0" max="1"
-                step="0.025" value="0.75" />
-            </div>
-            <div class="graph-legend" aria-label="Connection types">
-              <span><i class="legend-explicit"></i>Wiki link</span>
-              <span><i class="legend-semantic"></i>Semantic</span>
-            </div>
-            <svg id="graph"></svg>
-          </aside>
+          <div id="knowledge-layout">
+            <aside id="sidebar">
+              <div class="sidebar-heading">
+                <h2>Wiki pages</h2>
+                <span id="page-count" aria-label="0 wiki pages">0</span>
+              </div>
+              <ul id="note-list"></ul>
+            </aside>
+
+            <section id="reader-panel" aria-label="Wiki page">
+              <div id="reader-empty" class="reader-empty">
+                <p class="workspace-eyebrow">Compiled knowledge</p>
+                <h2>Select a wiki page</h2>
+                <p>
+                  Read the durable synthesis, then inspect its supporting
+                  claims, sources, and connections without losing context.
+                </p>
+                <button id="reader-add-source" type="button">
+                  Add your first source
+                </button>
+              </div>
+              <article id="note-content" class="hidden" tabindex="-1"></article>
+            </section>
+
+            <aside id="evidence-panel" class="hidden"
+              aria-labelledby="evidence-title">
+              <header>
+                <div>
+                  <p class="workspace-eyebrow">Provenance</p>
+                  <h2 id="evidence-title">Evidence &amp; context</h2>
+                </div>
+                <button id="evidence-close" type="button"
+                  aria-label="Hide evidence panel">&times;</button>
+              </header>
+              <div id="evidence-content"></div>
+            </aside>
+
+            <section id="graph-panel" class="hidden"
+              aria-labelledby="connections-title">
+              <div class="graph-heading">
+                <div>
+                  <p class="workspace-eyebrow">Explore</p>
+                  <h2 id="connections-title">Knowledge connections</h2>
+                </div>
+                <div class="threshold-control">
+                  <label>Min semantic similarity
+                    <span id="threshold-value">0.75</span></label>
+                  <input type="range" id="similarity-slider" min="0" max="1"
+                    step="0.025" value="0.75" />
+                </div>
+              </div>
+              <div class="graph-legend" aria-label="Connection types">
+                <span><i class="legend-explicit"></i>Wiki link</span>
+                <span><i class="legend-semantic"></i>Semantic</span>
+              </div>
+              <svg id="graph" aria-label="Knowledge connection map"></svg>
+            </section>
+          </div>
         </main>
       </div>
 
@@ -149,13 +207,6 @@
           </div>
         </div>
       </aside>
-    </div>
-
-    <div id="note-modal" class="modal hidden">
-      <div class="modal-content">
-        <button id="modal-close">&times;</button>
-        <div id="note-content"></div>
-      </div>
     </div>
 
     <div id="ask-modal" class="modal hidden">

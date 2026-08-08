@@ -8,6 +8,11 @@ import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
 import { classifyIngestSource } from "./ingest_source.js";
+import {
+  evidenceSummary,
+  initialReaderState,
+  reduceReaderState,
+} from "./reader_workspace.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 // --- Config (fetched from backend) ---
@@ -283,6 +288,7 @@ let currentNotes = [];
 let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
 let simulation = null;
+let graphUnavailable = false;
 
 // --- Note list ---
 
@@ -290,97 +296,133 @@ async function loadNoteList() {
   const data = await api("notes");
   currentNotes = data.notes ?? [];
   const list = document.getElementById("note-list");
-  list.innerHTML = "";
+  const pageCount = document.getElementById("page-count");
+  const emptyHeading = readerEmpty.querySelector("h2");
+  const emptyCopy = readerEmpty.querySelector("h2 + p");
+  const emptyAction = document.getElementById("reader-add-source");
+  list.replaceChildren();
+  pageCount.textContent = String(currentNotes.length);
+  pageCount.setAttribute(
+    "aria-label",
+    `${currentNotes.length} wiki page${currentNotes.length === 1 ? "" : "s"}`,
+  );
 
   if (currentNotes.length === 0) {
     const empty = document.createElement("li");
     empty.className = "note-list-empty";
-
-    const heading = document.createElement("strong");
-    heading.textContent = "Build the compiled wiki";
-    empty.appendChild(heading);
-
-    const steps = document.createElement("ol");
-    for (
-      const step of [
-        "Ingest a source below.",
-        "Review the proposed page changes.",
-        "Ask the wiki, then save a reviewed synthesis.",
-      ]
-    ) {
-      const item = document.createElement("li");
-      item.textContent = step;
-      steps.appendChild(item);
-    }
-    empty.appendChild(steps);
+    empty.textContent = "No compiled pages yet.";
     list.appendChild(empty);
+    emptyHeading.textContent = "Build a source-grounded wiki";
+    emptyCopy.textContent =
+      "Add a source, review the proposed changes, then read the compiled knowledge here.";
+    emptyAction.textContent = "Add your first source";
     return;
   }
 
-  const groups = new Map();
-  for (const note of currentNotes) {
-    const key = note.source_url || "Text notes";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(note);
-  }
+  emptyHeading.textContent = "Select a wiki page";
+  emptyCopy.textContent =
+    "Read the durable synthesis, then inspect its supporting claims, sources, and connections without losing context.";
+  emptyAction.textContent = "Add another source";
 
-  for (const [source, notes] of groups) {
-    const li = document.createElement("li");
-    li.className = "tree-group";
-    const label = document.createElement("span");
-    label.className = "tree-label";
-    label.textContent = "▸ " + (notes[0].title?.split(" — ")[0] || source);
-    label.style.cursor = "pointer";
-    li.appendChild(label);
-
-    const ul = document.createElement("ul");
-    ul.className = "tree-children";
-    ul.style.display = "none";
-
-    label.addEventListener("click", () => {
-      const open = ul.style.display !== "none";
-      ul.style.display = open ? "none" : "block";
-      label.textContent = (open ? "▸ " : "▾ ") + label.textContent.slice(2);
-    });
-
-    for (const note of notes) {
-      const child = document.createElement("li");
-      child.textContent = note.title;
-      child.dataset.id = note.id;
-      child.addEventListener("click", () => loadNote(note.id, child));
-      ul.appendChild(child);
-    }
-    li.appendChild(ul);
-    list.appendChild(li);
+  const notes = [...currentNotes].sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+  for (const note of notes) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "note-list-button";
+    button.dataset.id = String(note.id);
+    button.textContent = note.title;
+    button.classList.toggle("active", readerState.selectedNoteId === note.id);
+    button.addEventListener("click", () => loadNote(note.id, button));
+    item.appendChild(button);
+    list.appendChild(item);
   }
 }
 
-// --- Note modal ---
+// --- Reader workspace ---
 
-const modal = document.getElementById("note-modal");
-const modalClose = document.getElementById("modal-close");
+const pageViewButton = document.getElementById("page-view-btn");
+const connectionsViewButton = document.getElementById("connections-view-btn");
+const readerPanel = document.getElementById("reader-panel");
+const readerEmpty = document.getElementById("reader-empty");
+const noteContent = document.getElementById("note-content");
+const evidencePanel = document.getElementById("evidence-panel");
+const evidenceContent = document.getElementById("evidence-content");
+const evidenceToggle = document.getElementById("evidence-toggle");
+const evidenceClose = document.getElementById("evidence-close");
+const graphPanel = document.getElementById("graph-panel");
+const knowledgeLayout = document.getElementById("knowledge-layout");
+const workspaceTitle = document.getElementById("workspace-title");
+let readerState = initialReaderState();
 
-function openModal() {
-  modal.classList.remove("hidden");
+function renderReaderWorkspace() {
+  const pageVisible = readerState.view === "page";
+  const hasSelection = readerState.selectedNoteId !== null;
+  const evidenceVisible = pageVisible && hasSelection &&
+    readerState.evidenceOpen;
+
+  readerPanel.classList.toggle("hidden", !pageVisible);
+  graphPanel.classList.toggle("hidden", pageVisible);
+  readerEmpty.classList.toggle("hidden", hasSelection);
+  noteContent.classList.toggle("hidden", !hasSelection);
+  evidencePanel.classList.toggle("hidden", !evidenceVisible);
+  evidenceToggle.classList.toggle("hidden", !pageVisible || !hasSelection);
+  evidenceToggle.setAttribute("aria-expanded", String(evidenceVisible));
+  knowledgeLayout.classList.toggle("evidence-hidden", !evidenceVisible);
+  knowledgeLayout.classList.toggle("connections-view", !pageVisible);
+
+  pageViewButton.classList.toggle("active", pageVisible);
+  pageViewButton.setAttribute("aria-pressed", String(pageVisible));
+  connectionsViewButton.classList.toggle("active", !pageVisible);
+  connectionsViewButton.setAttribute("aria-pressed", String(!pageVisible));
+  workspaceTitle.textContent = pageVisible ? "Compiled wiki" : "Connections";
+
+  if (pageVisible) simulation?.stop();
+  else queueMicrotask(renderGraph);
 }
-function closeModal(updateHistory = true) {
-  modal.classList.add("hidden");
+
+function updateReader(action) {
+  readerState = reduceReaderState(readerState, action);
+  renderReaderWorkspace();
+}
+
+function clearReader(updateHistory = true) {
+  updateReader({ type: "clear-note" });
+  noteContent.replaceChildren();
+  evidenceContent.replaceChildren();
+  document.querySelectorAll("#note-list [data-id]").forEach((element) => {
+    element.classList.remove("active");
+  });
   if (updateHistory) {
     const url = new URL(location.href);
-    if (url.searchParams.has("note")) {
-      url.searchParams.delete("note");
-      history.replaceState({}, "", url);
-    }
+    url.searchParams.delete("note");
+    history.replaceState({}, "", url);
   }
 }
 
-modalClose.addEventListener("click", () => closeModal());
-modal.addEventListener("click", (e) => {
-  if (e.target === modal) closeModal();
+pageViewButton.addEventListener("click", () => {
+  updateReader({ type: "show-page" });
 });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
+connectionsViewButton.addEventListener("click", () => {
+  updateReader({ type: "show-connections" });
 });
+evidenceToggle.addEventListener("click", () => {
+  updateReader({ type: "toggle-evidence" });
+});
+evidenceClose.addEventListener("click", () => {
+  updateReader({ type: "hide-evidence" });
+  evidenceToggle.focus();
+});
+document.getElementById("reader-add-source").addEventListener("click", () => {
+  addSourceButton.click();
+});
+document.getElementById("wiki-nav-btn").addEventListener("click", () => {
+  updateReader({ type: "show-page" });
+});
+
+renderReaderWorkspace();
 
 // --- Cited wiki query and reviewed write-back ---
 
@@ -1628,7 +1670,99 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-async function loadNote(id, liEl, updateHistory = true) {
+function sourceLocation(source) {
+  return source.sourcePages?.length
+    ? `pages ${source.sourcePages.join(", ")}`
+    : null;
+}
+
+function renderEvidence(page) {
+  const summary = evidenceSummary(page);
+  const sourceById = new Map(
+    (page.sources ?? []).map((source) => [source.id, source]),
+  );
+  const claims = (page.claims ?? []).map((claim) => {
+    const citedSources = (claim.sourceIds ?? []).map((sourceId) =>
+      sourceById.get(sourceId)
+    ).filter(Boolean);
+    const citations = citedSources.length > 0
+      ? citedSources.map((source) => {
+        const location = sourceLocation(source);
+        return `<button type="button" class="note-source-link" ` +
+          `data-source-id="${source.id}">${escapeHtml(source.title)}` +
+          `${location ? ` · ${escapeHtml(location)}` : ""}</button>`;
+      }).join("")
+      : "<span>No catalogued source</span>";
+    return `<li><p>${escapeHtml(claim.text)}</p>` +
+      `<div class="note-claim-citations">${citations}</div></li>`;
+  }).join("");
+  const sources = (page.sources ?? []).map((source) => {
+    const detail = [source.action, sourceLocation(source)].filter(Boolean)
+      .join(" · ");
+    return `<li><button type="button" class="note-source-link" ` +
+      `data-source-id="${source.id}">${escapeHtml(source.title)}</button>` +
+      `<small>${escapeHtml(detail)}</small>` +
+      `<p>${escapeHtml(source.summary)}</p></li>`;
+  }).join("");
+  const related = (page.related ?? []).map((item) =>
+    `<li><a href="/?note=${encodeURIComponent(item.id)}" ` +
+    `data-id="${item.id}" class="related-link">${
+      escapeHtml(item.title)
+    }</a><small>${
+      item.kind === "explicit" ? "Reviewed wiki link" : "Semantic suggestion"
+    }</small></li>`
+  ).join("");
+
+  evidenceContent.innerHTML = `
+    <div class="evidence-summary" aria-label="Evidence summary">
+      <span><strong>${summary.sourceCount}</strong> sources</span>
+      <span><strong>${summary.claimCount}</strong> cited claims</span>
+      <span><strong>${summary.explicitLinkCount}</strong> reviewed links</span>
+    </div>
+    <section class="evidence-section">
+      <h3>Claim evidence</h3>
+      ${
+    claims
+      ? `<ol class="note-claim-list">${claims}</ol>`
+      : '<p class="evidence-empty">No claim-level citations recorded.</p>'
+  }
+    </section>
+    <section class="evidence-section">
+      <h3>Sources</h3>
+      ${
+    sources
+      ? `<ul class="note-sources">${sources}</ul>`
+      : '<p class="evidence-empty">No source provenance recorded.</p>'
+  }
+    </section>
+    <section class="evidence-section">
+      <h3>Related pages</h3>
+      ${
+    related
+      ? `<ul class="related-pages">${related}</ul>`
+      : '<p class="evidence-empty">No related pages yet.</p>'
+  }
+    </section>`;
+
+  evidenceContent.querySelectorAll(".note-source-link").forEach((element) => {
+    element.addEventListener("click", async () => {
+      await openSourcesModal(Number(element.dataset.sourceId));
+    });
+  });
+  evidenceContent.querySelectorAll(".related-link").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      if (
+        event.button !== 0 || event.metaKey || event.ctrlKey ||
+        event.shiftKey || event.altKey
+      ) return;
+      event.preventDefault();
+      loadNote(Number(element.dataset.id));
+    });
+  });
+}
+
+async function loadNote(id, listButton, updateHistory = true) {
+  const data = await api(`notes/${encodeURIComponent(id)}`);
   if (updateHistory) {
     const url = new URL(location.href);
     if (url.searchParams.get("note") !== String(id)) {
@@ -1636,101 +1770,28 @@ async function loadNote(id, liEl, updateHistory = true) {
       history.pushState({}, "", url);
     }
   }
-  document.querySelectorAll("#note-list li").forEach((el) =>
-    el.classList.remove("active")
+  document.querySelectorAll("#note-list [data-id]").forEach((element) => {
+    element.classList.remove("active");
+  });
+  const activeItem = listButton ?? document.querySelector(
+    `#note-list [data-id="${CSS.escape(String(id))}"]`,
   );
-  if (liEl) liEl.classList.add("active");
+  activeItem?.classList.add("active");
 
-  const data = await api(`notes/${encodeURIComponent(id)}`);
-  const viewer = document.getElementById("note-content");
-
-  const html = `<h1>${escapeHtml(data.title)}</h1>` +
-    `<div class="note-body">${data.bodyHtml}</div>`;
-
-  let relatedHtml = "";
-  if (data.related && data.related.length > 0) {
-    relatedHtml = '<hr style="border-color:#333;margin:1rem 0">' +
-      '<p style="color:#888;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem">Related</p>' +
-      '<ul style="list-style:none">' +
-      data.related.map((r) =>
-        `<li><a href="/?note=${
-          encodeURIComponent(r.id)
-        }" data-id="${r.id}" class="related-link">${
-          escapeHtml(r.title)
-        }</a> <small>${
-          r.kind === "explicit" ? "wiki link" : "semantic"
-        }</small></li>`
-      ).join("") +
-      "</ul>";
-  }
-
-  let sourcesHtml = "";
-  if (data.sources && data.sources.length > 0) {
-    sourcesHtml = '<hr><p class="note-section-label">Evidence sources</p>' +
-      '<ul class="note-sources">' +
-      data.sources.map((source) => {
-        const location = source.sourcePages?.length
-          ? ` · pages ${source.sourcePages.join(", ")}`
-          : "";
-        return `<li><button type="button" class="note-source-link" ` +
-          `data-source-id="${source.id}">${escapeHtml(source.title)}</button>` +
-          `<small>${escapeHtml(source.action)}${escapeHtml(location)}</small>` +
-          `<p>${escapeHtml(source.summary)}</p></li>`;
-      }).join("") +
-      "</ul>";
-  }
-
-  let claimsHtml = "";
-  if (data.claims && data.claims.length > 0) {
-    const sourceById = new Map(
-      (data.sources ?? []).map((source) => [source.id, source]),
-    );
-    claimsHtml = '<hr><details class="note-claims">' +
-      `<summary>Evidence by claim (${data.claims.length})</summary>` +
-      '<ol class="note-claim-list">' +
-      data.claims.map((claim) => {
-        const citedSources = (claim.sourceIds ?? []).map((sourceId) =>
-          sourceById.get(sourceId)
-        ).filter(Boolean);
-        const citations = citedSources.length > 0
-          ? citedSources.map((source) => {
-            const pages = source.sourcePages?.length
-              ? ` · pages ${source.sourcePages.join(", ")}`
-              : "";
-            return `<button type="button" class="note-source-link" ` +
-              `data-source-id="${source.id}">${escapeHtml(source.title)}` +
-              `${escapeHtml(pages)}</button>`;
-          }).join("")
-          : "<span>No catalogued source</span>";
-        return `<li><p>${escapeHtml(claim.text)}</p>` +
-          `<div class="note-claim-citations">${citations}</div></li>`;
-      }).join("") +
-      "</ol></details>";
-  }
-
-  viewer.innerHTML = html + relatedHtml + claimsHtml + sourcesHtml;
-
-  viewer.querySelectorAll(".note-source-link").forEach((element) => {
-    element.addEventListener("click", async () => {
-      closeModal(false);
-      await openSourcesModal(Number(element.dataset.sourceId));
-    });
-  });
-
-  viewer.querySelectorAll(".related-link").forEach((el) => {
-    el.addEventListener("click", (event) => {
-      if (
-        event.button !== 0 || event.metaKey || event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey
-      ) return;
-      event.preventDefault();
-      const relId = parseInt(el.dataset.id);
-      loadNote(relId);
-    });
-  });
-
-  openModal();
+  noteContent.innerHTML = `
+    <header class="reader-page-header">
+      <p class="reader-page-state">Compiled wiki page</p>
+      <h1>${escapeHtml(data.title)}</h1>
+      <p>${data.sources?.length ?? 0} supporting source${
+    data.sources?.length === 1 ? "" : "s"
+  } · ${data.claims?.length ?? 0} cited claim${
+    data.claims?.length === 1 ? "" : "s"
+  }</p>
+    </header>
+    <div class="note-body">${data.bodyHtml}</div>`;
+  renderEvidence(data);
+  updateReader({ type: "select-note", noteId: Number(id) });
+  noteContent.focus({ preventScroll: true });
 }
 
 // --- Search ---
@@ -1761,9 +1822,13 @@ async function doSearch(q) {
     list.innerHTML = "";
     for (const result of data.results ?? []) {
       const li = document.createElement("li");
-      li.textContent = result.title;
-      li.dataset.id = result.id;
-      li.addEventListener("click", () => loadNote(result.id, li));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "note-list-button";
+      button.textContent = result.title;
+      button.dataset.id = String(result.id);
+      button.addEventListener("click", () => loadNote(result.id, button));
+      li.appendChild(button);
       list.appendChild(li);
     }
     if (list.children.length === 0) {
@@ -1940,7 +2005,8 @@ async function loadGraph() {
     return nodeIds.has(s) && nodeIds.has(t);
   });
 
-  renderGraph();
+  graphUnavailable = false;
+  if (readerState.view === "connections") renderGraph();
 }
 
 const tooltip = select("#graph-tooltip");
@@ -1948,10 +2014,22 @@ const tooltip = select("#graph-tooltip");
 function renderGraph() {
   const svg = select("#graph");
   const panel = document.getElementById("graph-panel");
-  const width = panel.clientWidth - 10;
+  if (panel.classList.contains("hidden")) return;
+  simulation?.stop();
+  const width = Math.max(panel.clientWidth - 10, 320);
   const height = panel.clientHeight || panel.parentElement.clientHeight;
   svg.attr("viewBox", `0 0 ${width} ${height}`);
   svg.selectAll("*").remove();
+
+  if (graphUnavailable) {
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", height / 2)
+      .attr("text-anchor", "middle")
+      .attr("class", "placeholder-text")
+      .text("Connections are temporarily unavailable");
+    return;
+  }
 
   if (graphData.nodes.length === 0) {
     svg.append("text")
@@ -2034,8 +2112,16 @@ function renderGraph() {
     .join("circle")
     .attr("class", "node")
     .attr("r", nodeRadius)
+    .attr("role", "button")
+    .attr("tabindex", 0)
+    .attr("aria-label", (d) => `Open ${d.title}`)
     .style("cursor", "pointer")
     .on("click", (_event, d) => loadNote(d.id))
+    .on("keydown", (event, d) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      loadNote(d.id);
+    })
     .on("mouseover", (_event, d) => {
       highlightNeighborhood(d.id);
       const visibleConnections = degree.get(d.id) ?? 0;
@@ -2206,31 +2292,28 @@ if (initialNotes.status === "rejected") {
   document.getElementById("note-list").replaceChildren(item);
 }
 if (initialGraph.status === "rejected") {
-  const svg = select("#graph");
-  const panel = document.getElementById("graph-panel");
-  const width = panel.clientWidth - 10;
-  const height = panel.clientHeight || panel.parentElement.clientHeight;
-  svg.attr("viewBox", `0 0 ${width} ${height}`);
-  svg.selectAll("*").remove();
-  svg.append("text")
-    .attr("x", width / 2)
-    .attr("y", height / 2)
-    .attr("text-anchor", "middle")
-    .attr("class", "placeholder-text")
-    .text("Connections are temporarily unavailable");
+  graphUnavailable = true;
 }
 const requestedNoteId = Number(
   new URLSearchParams(location.search).get("note"),
 );
 if (Number.isSafeInteger(requestedNoteId) && requestedNoteId > 0) {
   await loadNote(requestedNoteId, undefined, false);
+} else if (initialNotes.status === "fulfilled" && currentNotes.length > 0) {
+  const firstNote = [...currentNotes].sort((a, b) =>
+    a.title.localeCompare(b.title)
+  )[0];
+  const url = new URL(location.href);
+  url.searchParams.set("note", String(firstNote.id));
+  history.replaceState({}, "", url);
+  await loadNote(firstNote.id, undefined, false);
 }
 globalThis.addEventListener("popstate", () => {
   const noteId = Number(new URLSearchParams(location.search).get("note"));
   if (Number.isSafeInteger(noteId) && noteId > 0) {
     loadNote(noteId, undefined, false);
-  } else closeModal(false);
+  } else clearReader(false);
 });
 globalThis.addEventListener("resize", () => {
-  if (simulation) renderGraph();
+  if (simulation && readerState.view === "connections") renderGraph();
 });
