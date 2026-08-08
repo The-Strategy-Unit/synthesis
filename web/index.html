@@ -288,11 +288,11 @@
       </aside>
     </div>
 
-    <div id="ask-modal" class="modal hidden">
+    <dialog id="ask-modal" class="modal" aria-labelledby="ask-title">
       <div class="modal-content ask-content">
         <button id="ask-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>Ask your wiki</h2>
+        <h2 id="ask-title">Ask your wiki</h2>
         <p class="modal-intro">
           Answers use compiled wiki pages and cite the pages they rely on.
         </p>
@@ -305,7 +305,7 @@
             Save synthesis
           </button>
         </div>
-        <p id="ask-status" role="status"></p>
+        <p id="ask-status" role="status" aria-live="polite"></p>
         <div id="ask-result" class="hidden">
           <label for="ask-answer">Reviewed synthesis</label>
           <p class="field-help">
@@ -317,13 +317,14 @@
           <ul id="ask-citations"></ul>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="discoveries-modal" class="modal hidden">
+    <dialog id="discoveries-modal" class="modal"
+      aria-labelledby="discoveries-title">
       <div class="modal-content discoveries-content">
         <button id="discoveries-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>Discoveries</h2>
+        <h2 id="discoveries-title">Discoveries</h2>
         <p class="modal-intro">
           Evidence-backed connections that may be useful but are still
           hypotheses. Confidence is model metadata, not proof. Only a confirmed
@@ -333,7 +334,7 @@
           <button id="discoveries-scan"
             type="button">Scan for connections</button>
         </div>
-        <p id="discoveries-status" role="status"></p>
+        <p id="discoveries-status" role="status" aria-live="polite"></p>
         <div class="discoveries-layout">
           <ul id="discoveries-list" aria-label="Open discoveries"></ul>
           <section id="discovery-detail" class="hidden">
@@ -359,13 +360,13 @@
           </section>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="lint-modal" class="modal hidden">
+    <dialog id="lint-modal" class="modal" aria-labelledby="lint-title">
       <div class="modal-content lint-content">
         <button id="lint-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>Wiki health</h2>
+        <h2 id="lint-title">Wiki health</h2>
         <p class="modal-intro">
           Read-only checks for broken structure, missing provenance, and recorded
           contradictions.
@@ -374,7 +375,7 @@
           <button id="lint-refresh" type="button">Run checks</button>
           <button id="lint-analyze" type="button">Analyze with AI</button>
         </div>
-        <p id="lint-status" role="status"></p>
+        <p id="lint-status" role="status" aria-live="polite"></p>
         <div id="lint-summary" class="hidden"></div>
         <ul id="lint-issues"></ul>
         <div id="lint-analysis" class="hidden">
@@ -382,13 +383,14 @@
           <ul id="lint-analysis-findings"></ul>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="provider-modal" class="modal hidden">
+    <dialog id="provider-modal" class="modal"
+      aria-labelledby="provider-title">
       <div class="modal-content provider-content">
         <button id="provider-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>AI provider</h2>
+        <h2 id="provider-title">AI provider</h2>
         <p class="modal-intro">
           Configure OpenAI-compatible chat and embedding endpoints. API keys are
           stored in your operating system credential store, never in the vault.
@@ -446,19 +448,19 @@
             </button>
           </div>
         </form>
-        <p id="provider-status" role="status"></p>
+        <p id="provider-status" role="status" aria-live="polite"></p>
         <div id="provider-diagnostics" class="hidden">
           <p id="provider-diagnostics-summary"></p>
           <ul id="provider-diagnostics-models"></ul>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="schema-modal" class="modal hidden">
+    <dialog id="schema-modal" class="modal" aria-labelledby="schema-title">
       <div class="modal-content schema-content">
         <button id="schema-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>Wiki schema</h2>
+        <h2 id="schema-title">Wiki schema</h2>
         <p class="modal-intro">
           Define how Synthesis organises pages, handles evidence and
           uncertainty, and stays within its product boundaries. This Markdown
@@ -470,20 +472,21 @@
         <div class="schema-actions">
           <button id="schema-save" type="button">Save schema</button>
         </div>
-        <p id="schema-status" role="status"></p>
+        <p id="schema-status" role="status" aria-live="polite"></p>
       </div>
-    </div>
+    </dialog>
 
-    <div id="sources-modal" class="modal hidden">
+    <dialog id="sources-modal" class="modal"
+      aria-labelledby="sources-title">
       <div class="modal-content sources-content">
         <button id="sources-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2>Source provenance</h2>
+        <h2 id="sources-title">Source provenance</h2>
         <p class="modal-intro">
           Review ingested sources and the wiki pages each source created or
           changed.
         </p>
-        <p id="sources-status" role="status"></p>
+        <p id="sources-status" role="status" aria-live="polite"></p>
         <div class="sources-layout">
           <ul id="sources-list" aria-label="Ingested sources"></ul>
           <section id="source-detail" class="hidden">
@@ -497,7 +500,7 @@
           </section>
         </div>
       </div>
-    </div>
+    </dialog>
 
     <script type="module" src="/app.bundle.js"></script>
   </body>

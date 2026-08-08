@@ -168,6 +168,26 @@ async function api(path, opts = {}) {
   return data;
 }
 
+function showModalDialog(dialog, initialFocus) {
+  if (dialog.open) return;
+  dialog.showModal();
+  initialFocus?.focus({ preventScroll: true });
+}
+
+function closeModalDialog(dialog) {
+  if (dialog.open) dialog.close();
+}
+
+function bindModalDismissal(dialog, dismiss) {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dismiss();
+  });
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    dismiss();
+  });
+}
+
 async function refreshShellCounts() {
   const [reviews, discoveries] = await Promise.allSettled([
     api("proposals"),
@@ -480,12 +500,11 @@ const askAnswer = document.getElementById("ask-answer");
 let reviewedWikiAnswer = null;
 
 function openAskModal() {
-  askModal.classList.remove("hidden");
-  askInput.focus();
+  showModalDialog(askModal, askInput);
 }
 
 function closeAskModal() {
-  askModal.classList.add("hidden");
+  closeModalDialog(askModal);
 }
 
 function setAskBusy(busy) {
@@ -582,9 +601,7 @@ async function saveReviewedWikiAnswer() {
 
 document.getElementById("ask-open-btn").addEventListener("click", openAskModal);
 document.getElementById("ask-close").addEventListener("click", closeAskModal);
-askModal.addEventListener("click", (event) => {
-  if (event.target === askModal) closeAskModal();
-});
+bindModalDismissal(askModal, closeAskModal);
 askSubmit.addEventListener("click", submitWikiQuestion);
 askSave.addEventListener("click", saveReviewedWikiAnswer);
 askInput.addEventListener("keydown", (event) => {
@@ -593,10 +610,6 @@ askInput.addEventListener("keydown", (event) => {
     submitWikiQuestion();
   }
 });
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeAskModal();
-});
-
 // --- Ingest proposal review ---
 
 const reviewStatus = document.getElementById("review-status");
@@ -1000,7 +1013,7 @@ function setDiscoveryBusy(busy) {
 }
 
 function closeDiscoveriesModal() {
-  discoveriesModal.classList.add("hidden");
+  closeModalDialog(discoveriesModal);
   selectedDiscoveryId = null;
 }
 
@@ -1120,7 +1133,7 @@ async function loadDiscoveries(preferredId) {
 }
 
 async function openDiscoveriesModal(preferredId) {
-  discoveriesModal.classList.remove("hidden");
+  showModalDialog(discoveriesModal);
   try {
     await loadDiscoveries(preferredId);
   } catch (error) {
@@ -1180,9 +1193,7 @@ document.getElementById("discoveries-close").addEventListener(
   "click",
   closeDiscoveriesModal,
 );
-discoveriesModal.addEventListener("click", (event) => {
-  if (event.target === discoveriesModal) closeDiscoveriesModal();
-});
+bindModalDismissal(discoveriesModal, closeDiscoveriesModal);
 discoveriesScan.addEventListener("click", scanDiscoveries);
 discoveryInvestigate.addEventListener(
   "click",
@@ -1196,10 +1207,6 @@ discoveryConfirm.addEventListener(
   "click",
   () => reviewSelectedDiscovery("confirm"),
 );
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeDiscoveriesModal();
-});
-
 // --- Provider onboarding ---
 
 const providerModal = document.getElementById("provider-modal");
@@ -1279,7 +1286,7 @@ function populateProviderForm(data) {
 }
 
 async function openProviderModal() {
-  providerModal.classList.remove("hidden");
+  showModalDialog(providerModal);
   providerStatus.textContent = "Loading provider settings...";
   setProviderBusy(true);
   try {
@@ -1375,7 +1382,7 @@ async function diagnoseActiveProvider() {
 }
 
 function closeProviderModal() {
-  providerModal.classList.add("hidden");
+  closeModalDialog(providerModal);
   llmKeyInput.value = "";
   embeddingKeyInput.value = "";
 }
@@ -1427,16 +1434,10 @@ document.getElementById("provider-close").addEventListener(
   "click",
   closeProviderModal,
 );
-providerModal.addEventListener("click", (event) => {
-  if (event.target === providerModal) closeProviderModal();
-});
+bindModalDismissal(providerModal, closeProviderModal);
 providerForm.addEventListener("submit", saveProvider);
 providerOllama.addEventListener("click", useOllamaPreset);
 providerDiagnose.addEventListener("click", diagnoseActiveProvider);
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeProviderModal();
-});
-
 // --- Wiki schema ---
 
 const schemaModal = document.getElementById("schema-modal");
@@ -1450,7 +1451,7 @@ function setSchemaBusy(busy) {
 }
 
 async function openSchemaModal() {
-  schemaModal.classList.remove("hidden");
+  showModalDialog(schemaModal);
   schemaStatus.textContent = "Loading schema...";
   setSchemaBusy(true);
   try {
@@ -1465,7 +1466,7 @@ async function openSchemaModal() {
 }
 
 function closeSchemaModal() {
-  schemaModal.classList.add("hidden");
+  closeModalDialog(schemaModal);
 }
 
 async function saveSchema() {
@@ -1495,13 +1496,8 @@ document.getElementById("schema-close").addEventListener(
   "click",
   closeSchemaModal,
 );
-schemaModal.addEventListener("click", (event) => {
-  if (event.target === schemaModal) closeSchemaModal();
-});
+bindModalDismissal(schemaModal, closeSchemaModal);
 schemaSave.addEventListener("click", saveSchema);
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeSchemaModal();
-});
 
 // --- Source provenance review ---
 
@@ -1522,7 +1518,7 @@ function safeSourceUrl(value) {
 }
 
 function closeSourcesModal() {
-  sourcesModal.classList.add("hidden");
+  closeModalDialog(sourcesModal);
   selectedSourceId = null;
 }
 
@@ -1587,7 +1583,7 @@ async function loadSourceDetail(sourceId, button) {
 }
 
 async function openSourcesModal(preferredSourceId) {
-  sourcesModal.classList.remove("hidden");
+  showModalDialog(sourcesModal);
   sourcesList.replaceChildren();
   sourceDetail.classList.add("hidden");
   sourcesStatus.textContent = "Loading sources...";
@@ -1640,12 +1636,7 @@ document.getElementById("sources-close").addEventListener(
   "click",
   closeSourcesModal,
 );
-sourcesModal.addEventListener("click", (event) => {
-  if (event.target === sourcesModal) closeSourcesModal();
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeSourcesModal();
-});
+bindModalDismissal(sourcesModal, closeSourcesModal);
 
 // --- Deterministic wiki health checks ---
 
@@ -1661,7 +1652,7 @@ const lintAnalysisFindings = document.getElementById(
 );
 
 function closeLintModal() {
-  lintModal.classList.add("hidden");
+  closeModalDialog(lintModal);
 }
 
 function lintCount(label, count) {
@@ -1764,18 +1755,13 @@ async function analyzeWikiHealth() {
 }
 
 document.getElementById("lint-open-btn").addEventListener("click", () => {
-  lintModal.classList.remove("hidden");
+  showModalDialog(lintModal);
   runWikiLint();
 });
 document.getElementById("lint-close").addEventListener("click", closeLintModal);
-lintModal.addEventListener("click", (event) => {
-  if (event.target === lintModal) closeLintModal();
-});
+bindModalDismissal(lintModal, closeLintModal);
 lintRefresh.addEventListener("click", runWikiLint);
 lintAnalyze.addEventListener("click", analyzeWikiHealth);
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeLintModal();
-});
 
 function escapeHtml(str) {
   return String(str)

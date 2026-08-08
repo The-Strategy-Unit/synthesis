@@ -137,10 +137,14 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="proposal-decision-summary" role="status"/);
     assert.match(index, /id="ingest-stages"/);
     assert.doesNotMatch(index, /id="review-modal"/);
+    assert.match(index, /<dialog id="ask-modal" class="modal"/);
+    assert.match(index, /<dialog id="sources-modal" class="modal"/);
+    assert.doesNotMatch(index, /<div id="[^"]+-modal" class="modal/);
     assert.match(style, /#primary-nav/);
     assert.match(style, /\.source-panel/);
     assert.match(style, /#knowledge-layout/);
     assert.match(style, /\.proposal-change-decision/);
+    assert.match(style, /\.modal::backdrop/);
     assert.match(bundle, /add-source-btn/);
     assert.match(bundle, /reader_workspace/);
     assert.match(bundle, /review_workflow/);
