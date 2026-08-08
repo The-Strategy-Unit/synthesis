@@ -83,83 +83,144 @@
         </nav>
 
         <main id="main">
-          <header class="knowledge-toolbar">
-            <div>
-              <p class="workspace-eyebrow">Knowledge</p>
-              <h1 id="workspace-title">Compiled wiki</h1>
-            </div>
-            <div class="workspace-actions">
-              <button id="evidence-toggle" class="workspace-secondary hidden"
-                type="button" aria-controls="evidence-panel"
-                aria-expanded="true">Evidence</button>
-              <div class="view-switch" role="group"
-                aria-label="Knowledge view">
-                <button id="page-view-btn" class="active" type="button"
-                  aria-pressed="true">Page</button>
-                <button id="connections-view-btn" type="button"
-                  aria-pressed="false">Connections</button>
+          <section id="wiki-workspace">
+            <header class="knowledge-toolbar">
+              <div>
+                <p class="workspace-eyebrow">Knowledge</p>
+                <h1 id="workspace-title">Compiled wiki</h1>
               </div>
-            </div>
-          </header>
-
-          <div id="knowledge-layout">
-            <aside id="sidebar">
-              <div class="sidebar-heading">
-                <h2>Wiki pages</h2>
-                <span id="page-count" aria-label="0 wiki pages">0</span>
+              <div class="workspace-actions">
+                <button id="evidence-toggle" class="workspace-secondary hidden"
+                  type="button" aria-controls="evidence-panel"
+                  aria-expanded="true">Evidence</button>
+                <div class="view-switch" role="group"
+                  aria-label="Knowledge view">
+                  <button id="page-view-btn" class="active" type="button"
+                    aria-pressed="true">Page</button>
+                  <button id="connections-view-btn" type="button"
+                    aria-pressed="false">Connections</button>
+                </div>
               </div>
-              <ul id="note-list"></ul>
-            </aside>
+            </header>
 
-            <section id="reader-panel" aria-label="Wiki page">
-              <div id="reader-empty" class="reader-empty">
-                <p class="workspace-eyebrow">Compiled knowledge</p>
-                <h2>Select a wiki page</h2>
-                <p>
+            <div id="knowledge-layout">
+              <aside id="sidebar">
+                <div class="sidebar-heading">
+                  <h2>Wiki pages</h2>
+                  <span id="page-count" aria-label="0 wiki pages">0</span>
+                </div>
+                <ul id="note-list"></ul>
+              </aside>
+
+              <section id="reader-panel" aria-label="Wiki page">
+                <div id="reader-empty" class="reader-empty">
+                  <p class="workspace-eyebrow">Compiled knowledge</p>
+                  <h2>Select a wiki page</h2>
+                  <p>
                   Read the durable synthesis, then inspect its supporting
                   claims, sources, and connections without losing context.
                 </p>
-                <button id="reader-add-source" type="button">
+                  <button id="reader-add-source" type="button">
                   Add your first source
                 </button>
-              </div>
-              <article id="note-content" class="hidden" tabindex="-1"></article>
-            </section>
-
-            <aside id="evidence-panel" class="hidden"
-              aria-labelledby="evidence-title">
-              <header>
-                <div>
-                  <p class="workspace-eyebrow">Provenance</p>
-                  <h2 id="evidence-title">Evidence &amp; context</h2>
                 </div>
-                <button id="evidence-close" type="button"
-                  aria-label="Hide evidence panel">&times;</button>
-              </header>
-              <div id="evidence-content"></div>
-            </aside>
+                <article id="note-content" class="hidden"
+                  tabindex="-1"></article>
+              </section>
 
-            <section id="graph-panel" class="hidden"
-              aria-labelledby="connections-title">
-              <div class="graph-heading">
-                <div>
-                  <p class="workspace-eyebrow">Explore</p>
-                  <h2 id="connections-title">Knowledge connections</h2>
-                </div>
-                <div class="threshold-control">
-                  <label>Min semantic similarity
+              <aside id="evidence-panel" class="hidden"
+                aria-labelledby="evidence-title">
+                <header>
+                  <div>
+                    <p class="workspace-eyebrow">Provenance</p>
+                    <h2 id="evidence-title">Evidence &amp; context</h2>
+                  </div>
+                  <button id="evidence-close" type="button"
+                    aria-label="Hide evidence panel">&times;</button>
+                </header>
+                <div id="evidence-content"></div>
+              </aside>
+
+              <section id="graph-panel" class="hidden"
+                aria-labelledby="connections-title">
+                <div class="graph-heading">
+                  <div>
+                    <p class="workspace-eyebrow">Explore</p>
+                    <h2 id="connections-title">Knowledge connections</h2>
+                  </div>
+                  <div class="threshold-control">
+                    <label>Min semantic similarity
                     <span id="threshold-value">0.75</span></label>
-                  <input type="range" id="similarity-slider" min="0" max="1"
-                    step="0.025" value="0.75" />
+                    <input type="range" id="similarity-slider" min="0" max="1"
+                      step="0.025" value="0.75" />
+                  </div>
                 </div>
+                <div class="graph-legend" aria-label="Connection types">
+                  <span><i class="legend-explicit"></i>Wiki link</span>
+                  <span><i class="legend-semantic"></i>Semantic</span>
+                </div>
+                <svg id="graph" aria-label="Knowledge connection map"></svg>
+              </section>
+            </div>
+          </section>
+
+          <section id="review-workspace" class="hidden"
+            aria-labelledby="review-title">
+            <header class="review-workspace-header">
+              <div>
+                <p class="workspace-eyebrow">Human review</p>
+                <h1 id="review-title">Review proposed changes</h1>
+                <p>
+                  AI proposals remain separate from the compiled wiki until
+                  every change has an explicit decision.
+                </p>
               </div>
-              <div class="graph-legend" aria-label="Connection types">
-                <span><i class="legend-explicit"></i>Wiki link</span>
-                <span><i class="legend-semantic"></i>Semantic</span>
-              </div>
-              <svg id="graph" aria-label="Knowledge connection map"></svg>
-            </section>
-          </div>
+            </header>
+            <p id="review-status" role="status" aria-live="polite"></p>
+            <div class="review-layout">
+              <aside class="review-queue" aria-labelledby="review-queue-title">
+                <div class="review-queue-heading">
+                  <h2 id="review-queue-title">Pending sources</h2>
+                  <span id="review-queue-count">0</span>
+                </div>
+                <ul id="proposal-list" aria-label="Pending proposals"></ul>
+              </aside>
+              <section id="proposal-detail" class="hidden"
+                aria-labelledby="proposal-source-title">
+                <header class="proposal-source-header">
+                  <div>
+                    <p class="workspace-eyebrow">Source proposal</p>
+                    <h2 id="proposal-source-title"></h2>
+                    <p id="proposal-source-meta"></p>
+                    <p id="proposal-source-summary"></p>
+                  </div>
+                  <button id="proposal-source-inspect"
+                    class="workspace-secondary" type="button">
+                    Inspect source
+                  </button>
+                </header>
+                <div class="review-guidance">
+                  <strong>Nothing is selected automatically.</strong>
+                  Compare each proposal with its source, then choose Include or
+                  Exclude. You can edit included text before applying it.
+                </div>
+                <h3>Proposed changes</h3>
+                <ol id="proposal-changes"></ol>
+                <div class="review-actions">
+                  <p id="proposal-decision-summary" role="status"
+                    aria-live="polite"></p>
+                  <div>
+                    <button id="proposal-reject" type="button">
+                      Reject proposal
+                    </button>
+                    <button id="proposal-approve" type="button">
+                      Review every change
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
         </main>
       </div>
 
@@ -201,6 +262,24 @@
               </select>
             </div>
           </details>
+          <div class="ingest-progress" aria-labelledby="ingest-progress-title">
+            <p id="ingest-progress-title">Preparation progress</p>
+            <ol id="ingest-stages">
+              <li data-ingest-step="read" data-state="pending">
+                <span>1</span>
+                <div><strong>Read source</strong><small>Extract source content</small></div>
+              </li>
+              <li data-ingest-step="draft" data-state="pending">
+                <span>2</span>
+                <div><strong>Draft changes</strong><small>Compare with the wiki</small></div>
+              </li>
+              <li data-ingest-step="review" data-state="pending">
+                <span>3</span>
+                <div><strong>Ready for review</strong><small>Nothing changes automatically</small></div>
+              </li>
+            </ol>
+            <p>Completed proposals remain available in Review.</p>
+          </div>
           <div class="source-actions">
             <button id="ingest-btn" type="button">Prepare for review</button>
             <span id="ingest-status" role="status" aria-live="polite"></span>
@@ -236,35 +315,6 @@
           <textarea id="ask-answer" rows="10"></textarea>
           <h3>Cited wiki pages</h3>
           <ul id="ask-citations"></ul>
-        </div>
-      </div>
-    </div>
-
-    <div id="review-modal" class="modal hidden">
-      <div class="modal-content review-content">
-        <button id="review-close" class="modal-close" type="button"
-          aria-label="Close">&times;</button>
-        <h2>Review proposed wiki changes</h2>
-        <p class="modal-intro">
-          Ingested sources remain separate from durable wiki knowledge until
-          you approve their proposed changes. Review provenance, uncertainty,
-          and connections before accepting them.
-        </p>
-        <p id="review-status" role="status"></p>
-        <div class="review-layout">
-          <ul id="proposal-list" aria-label="Pending proposals"></ul>
-          <section id="proposal-detail" class="hidden">
-            <h3 id="proposal-source-title"></h3>
-            <p id="proposal-source-meta"></p>
-            <p id="proposal-source-summary"></p>
-            <h4>Proposed changes</h4>
-            <ol id="proposal-changes"></ol>
-            <div class="review-actions">
-              <button id="proposal-reject" type="button">Reject</button>
-              <button id="proposal-approve"
-                type="button">Approve changes</button>
-            </div>
-          </section>
         </div>
       </div>
     </div>

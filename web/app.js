@@ -13,6 +13,12 @@ import {
   initialReaderState,
   reduceReaderState,
 } from "./reader_workspace.js";
+import {
+  formatPageRanges,
+  ingestProgress,
+  REVIEW_DECISIONS,
+  reviewDecisionSummary,
+} from "./review_workflow.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 // --- Config (fetched from backend) ---
@@ -355,7 +361,46 @@ const evidenceClose = document.getElementById("evidence-close");
 const graphPanel = document.getElementById("graph-panel");
 const knowledgeLayout = document.getElementById("knowledge-layout");
 const workspaceTitle = document.getElementById("workspace-title");
+const wikiWorkspace = document.getElementById("wiki-workspace");
+const reviewWorkspace = document.getElementById("review-workspace");
+const wikiNavigationButton = document.getElementById("wiki-nav-btn");
+const reviewNavigationButton = document.getElementById("review-open-btn");
 let readerState = initialReaderState();
+let primaryWorkspace = "wiki";
+
+function renderPrimaryWorkspace() {
+  const reviewing = primaryWorkspace === "review";
+  wikiWorkspace.classList.toggle("hidden", reviewing);
+  reviewWorkspace.classList.toggle("hidden", !reviewing);
+  wikiNavigationButton.classList.toggle("active", !reviewing);
+  reviewNavigationButton.classList.toggle("active", reviewing);
+  if (reviewing) {
+    wikiNavigationButton.removeAttribute("aria-current");
+    reviewNavigationButton.setAttribute("aria-current", "page");
+    simulation?.stop();
+  } else {
+    reviewNavigationButton.removeAttribute("aria-current");
+    wikiNavigationButton.setAttribute("aria-current", "page");
+  }
+}
+
+function setPrimaryWorkspace(workspace, updateHistory = true) {
+  primaryWorkspace = workspace === "review" ? "review" : "wiki";
+  renderPrimaryWorkspace();
+  if (!updateHistory) return;
+  const url = new URL(location.href);
+  if (primaryWorkspace === "review") url.searchParams.set("view", "review");
+  else {
+    url.searchParams.delete("view");
+    url.searchParams.delete("proposal");
+  }
+  if (url.href !== location.href) history.pushState({}, "", url);
+}
+
+function showWikiWorkspace(updateHistory = true) {
+  setPrimaryWorkspace("wiki", updateHistory);
+  updateReader({ type: "show-page" });
+}
 
 function renderReaderWorkspace() {
   const pageVisible = readerState.view === "page";
@@ -418,11 +463,10 @@ evidenceClose.addEventListener("click", () => {
 document.getElementById("reader-add-source").addEventListener("click", () => {
   addSourceButton.click();
 });
-document.getElementById("wiki-nav-btn").addEventListener("click", () => {
-  updateReader({ type: "show-page" });
-});
+wikiNavigationButton.addEventListener("click", () => showWikiWorkspace());
 
 renderReaderWorkspace();
+renderPrimaryWorkspace();
 
 // --- Cited wiki query and reviewed write-back ---
 
@@ -555,64 +599,101 @@ document.addEventListener("keydown", (event) => {
 
 // --- Ingest proposal review ---
 
-const reviewModal = document.getElementById("review-modal");
 const reviewStatus = document.getElementById("review-status");
 const proposalList = document.getElementById("proposal-list");
 const proposalDetail = document.getElementById("proposal-detail");
 const proposalChanges = document.getElementById("proposal-changes");
 const proposalApprove = document.getElementById("proposal-approve");
 const proposalReject = document.getElementById("proposal-reject");
+const proposalDecisionSummary = document.getElementById(
+  "proposal-decision-summary",
+);
+const proposalSourceInspect = document.getElementById(
+  "proposal-source-inspect",
+);
 let selectedProposalId = null;
+let selectedProposalSourceId = null;
 let proposalBusy = false;
+
+function proposalDecisions() {
+  return [...proposalChanges.querySelectorAll(".proposal-change-decision")]
+    .map((control) => control.value);
+}
 
 function selectedProposalChanges() {
   return [...proposalChanges.querySelectorAll(".proposal-change")].flatMap(
     (item) => {
-      const include = item.querySelector(".proposal-change-select");
+      const decision = item.querySelector(".proposal-change-decision");
       const body = item.querySelector(".proposal-body-edit");
-      if (!include?.checked || !body) return [];
+      if (decision?.value !== REVIEW_DECISIONS.include || !body) return [];
       return [{ index: Number(item.dataset.changeIndex), body: body.value }];
     },
   );
 }
 
 function updateProposalApprovalControls() {
-  const count = selectedProposalChanges().length;
-  proposalApprove.textContent = count > 0
-    ? `Approve ${count} selected`
-    : "Select changes to approve";
-  proposalApprove.disabled = proposalBusy || count === 0;
+  const summary = reviewDecisionSummary(proposalDecisions());
+  proposalDecisionSummary.textContent = summary.pending > 0
+    ? `${summary.pending} decision${
+      summary.pending === 1 ? "" : "s"
+    } remaining · ${summary.include} include · ${summary.exclude} exclude`
+    : `${summary.include} to apply · ${summary.exclude} excluded`;
+  proposalApprove.textContent = summary.pending > 0
+    ? `Review ${summary.pending} remaining`
+    : summary.include > 0
+    ? `Apply ${summary.include} reviewed change${
+      summary.include === 1 ? "" : "s"
+    }`
+    : "Include at least one change";
+  proposalApprove.disabled = proposalBusy || !summary.canApprove;
 }
 
 function setProposalBusy(busy) {
   proposalBusy = busy;
   proposalReject.disabled = busy;
-  proposalChanges.querySelectorAll("input, textarea").forEach((control) => {
+  proposalChanges.querySelectorAll("select, textarea").forEach((control) => {
     control.disabled = busy;
   });
   updateProposalApprovalControls();
 }
 
-function closeReviewModal() {
-  reviewModal.classList.add("hidden");
-  selectedProposalId = null;
+function setProposalLocation(proposalId) {
+  const url = new URL(location.href);
+  url.searchParams.set("view", "review");
+  if (proposalId) url.searchParams.set("proposal", String(proposalId));
+  else url.searchParams.delete("proposal");
+  history.replaceState({}, "", url);
 }
 
-function proposalChangeItem(change, index) {
+function proposalEvidence(change, source) {
+  const evidence = document.createElement("aside");
+  evidence.className = "proposal-evidence";
+  const heading = document.createElement("h4");
+  heading.textContent = "Source context & provenance";
+  const title = document.createElement("strong");
+  title.textContent = source.title;
+  const summary = document.createElement("p");
+  summary.textContent = source.summary
+    ? `Source summary: ${source.summary}`
+    : "No source summary is available.";
+  const pages = document.createElement("p");
+  pages.className = "proposal-evidence-pages";
+  const ranges = formatPageRanges(change.sourcePages);
+  pages.textContent = ranges
+    ? `Referenced PDF pages ${ranges}`
+    : `Source type: ${source.sourceType}`;
+  evidence.append(heading, title, summary, pages);
+  return evidence;
+}
+
+function proposalChangeItem(change, index, source) {
   const item = document.createElement("li");
   item.className = "proposal-change";
   item.dataset.changeIndex = String(index);
+  item.dataset.decision = REVIEW_DECISIONS.pending;
 
   const heading = document.createElement("div");
   heading.className = "proposal-change-heading";
-  const includeLabel = document.createElement("label");
-  includeLabel.className = "proposal-change-include";
-  const include = document.createElement("input");
-  include.type = "checkbox";
-  include.className = "proposal-change-select";
-  include.checked = true;
-  include.addEventListener("change", updateProposalApprovalControls);
-  includeLabel.append(include, document.createTextNode("Include"));
   const action = document.createElement("span");
   action.className = "proposal-action";
   action.dataset.action = change.action;
@@ -621,7 +702,27 @@ function proposalChangeItem(change, index) {
   title.textContent = change.page.title;
   const type = document.createElement("small");
   type.textContent = change.page.type;
-  heading.append(includeLabel, action, title, type);
+  heading.append(action, title, type);
+
+  const decisionLabel = document.createElement("label");
+  decisionLabel.className = "proposal-decision";
+  decisionLabel.textContent = "Decision";
+  const decision = document.createElement("select");
+  decision.className = "proposal-change-decision";
+  decision.setAttribute("aria-label", `Decision for ${change.page.title}`);
+  for (
+    const [value, label] of [
+      [REVIEW_DECISIONS.pending, "Decision required"],
+      [REVIEW_DECISIONS.include, "Include in wiki"],
+      [REVIEW_DECISIONS.exclude, "Exclude from approval"],
+    ]
+  ) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    decision.appendChild(option);
+  }
+  decisionLabel.appendChild(decision);
 
   const comparison = document.createElement("div");
   comparison.className = "proposal-comparison";
@@ -660,6 +761,12 @@ function proposalChangeItem(change, index) {
     "aria-label",
     `Proposed body for ${change.page.title}`,
   );
+  proposedBody.readOnly = true;
+  decision.addEventListener("change", () => {
+    item.dataset.decision = decision.value;
+    proposedBody.readOnly = decision.value !== REVIEW_DECISIONS.include;
+    updateProposalApprovalControls();
+  });
   proposedPanel.append(proposedHeading, proposedBody);
   comparison.appendChild(proposedPanel);
 
@@ -670,18 +777,20 @@ function proposalChangeItem(change, index) {
   const links = change.page.links?.length
     ? `Links: ${change.page.links.join(", ")}`
     : "No explicit links";
-  const pages = change.sourcePages?.length
-    ? `Source pages: ${change.sourcePages.join(", ")}`
-    : null;
-  metadata.textContent = [tags, links, pages].filter(Boolean).join(" · ");
-  item.append(heading, comparison, metadata);
+  metadata.textContent = [tags, links].join(" · ");
+  item.append(
+    heading,
+    decisionLabel,
+    proposalEvidence(change, source),
+    comparison,
+    metadata,
+  );
 
   if (change.pageId) {
     const current = document.createElement("button");
     current.type = "button";
     current.textContent = "Open current page";
     current.addEventListener("click", () => {
-      closeReviewModal();
       loadNote(change.pageId);
     });
     item.appendChild(current);
@@ -691,6 +800,7 @@ function proposalChangeItem(change, index) {
 
 function showProposal(proposal) {
   selectedProposalId = proposal.id;
+  selectedProposalSourceId = proposal.source.id;
   document.getElementById("proposal-source-title").textContent = proposal.source
     .title;
   document.getElementById("proposal-source-meta").textContent =
@@ -700,7 +810,9 @@ function showProposal(proposal) {
   document.getElementById("proposal-source-summary").textContent = proposal
     .source.summary;
   proposalChanges.replaceChildren(
-    ...proposal.changes.map(proposalChangeItem),
+    ...proposal.changes.map((change, index) =>
+      proposalChangeItem(change, index, proposal.source)
+    ),
   );
   proposalDetail.classList.remove("hidden");
   setProposalBusy(false);
@@ -708,6 +820,7 @@ function showProposal(proposal) {
 
 async function loadProposalDetail(proposalId, button) {
   selectedProposalId = proposalId;
+  setProposalLocation(proposalId);
   for (const item of proposalList.querySelectorAll("button")) {
     item.classList.toggle("active", item === button);
   }
@@ -726,11 +839,16 @@ async function loadProposalDetail(proposalId, button) {
 
 async function loadPendingProposals(preferredId) {
   proposalList.replaceChildren();
+  proposalChanges.replaceChildren();
   proposalDetail.classList.add("hidden");
   selectedProposalId = null;
+  selectedProposalSourceId = null;
   reviewStatus.textContent = "Loading pending proposals...";
   const data = await api("proposals");
   const proposals = data.proposals ?? [];
+  document.getElementById("review-queue-count").textContent = String(
+    proposals.length,
+  );
   setShellQueueCount(
     "review-count",
     proposals.length,
@@ -758,6 +876,7 @@ async function loadPendingProposals(preferredId) {
     if (proposal.id === preferredId) button.dataset.preferred = "true";
   }
   if (proposals.length === 0) {
+    setProposalLocation(null);
     reviewStatus.textContent = "No changes are waiting for review.";
     return;
   }
@@ -768,8 +887,8 @@ async function loadPendingProposals(preferredId) {
   (preferred ?? proposalList.querySelector("button"))?.click();
 }
 
-async function openReviewModal(preferredId) {
-  reviewModal.classList.remove("hidden");
+async function openReviewWorkspace(preferredId, updateHistory = true) {
+  setPrimaryWorkspace("review", updateHistory);
   try {
     await loadPendingProposals(preferredId);
   } catch (error) {
@@ -779,9 +898,15 @@ async function openReviewModal(preferredId) {
 
 async function approveSelectedProposal() {
   if (!selectedProposalId) return;
+  const summary = reviewDecisionSummary(proposalDecisions());
+  if (summary.pending > 0) {
+    reviewStatus.textContent =
+      "Decide whether to include or exclude every proposed change.";
+    return;
+  }
   const changes = selectedProposalChanges();
   if (changes.length === 0) {
-    reviewStatus.textContent = "Select at least one change to approve.";
+    reviewStatus.textContent = "Include at least one change before applying.";
     return;
   }
   setProposalBusy(true);
@@ -813,7 +938,6 @@ async function approveSelectedProposal() {
       };
       reviewStatus.textContent = labels[data.stage] ?? data.error ?? data.stage;
       if (data.stage === "discoveries" && data.discoveries?.length) {
-        closeReviewModal();
         await openDiscoveriesModal(data.discoveries[0].id);
       }
       if (data.stage === "error") throw new Error(data.error);
@@ -845,21 +969,13 @@ async function rejectSelectedProposal() {
   }
 }
 
-document.getElementById("review-open-btn").addEventListener(
-  "click",
-  () => openReviewModal(),
-);
-document.getElementById("review-close").addEventListener(
-  "click",
-  closeReviewModal,
-);
-reviewModal.addEventListener("click", (event) => {
-  if (event.target === reviewModal) closeReviewModal();
+reviewNavigationButton.addEventListener("click", () => {
+  if (primaryWorkspace !== "review") openReviewWorkspace();
 });
 proposalApprove.addEventListener("click", approveSelectedProposal);
 proposalReject.addEventListener("click", rejectSelectedProposal);
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeReviewModal();
+proposalSourceInspect.addEventListener("click", () => {
+  if (selectedProposalSourceId) openSourcesModal(selectedProposalSourceId);
 });
 
 // --- Reviewed discoveries ---
@@ -1763,10 +1879,15 @@ function renderEvidence(page) {
 
 async function loadNote(id, listButton, updateHistory = true) {
   const data = await api(`notes/${encodeURIComponent(id)}`);
+  setPrimaryWorkspace("wiki", false);
   if (updateHistory) {
     const url = new URL(location.href);
+    url.searchParams.delete("view");
+    url.searchParams.delete("proposal");
     if (url.searchParams.get("note") !== String(id)) {
       url.searchParams.set("note", String(id));
+      history.pushState({}, "", url);
+    } else if (url.href !== location.href) {
       history.pushState({}, "", url);
     }
   }
@@ -1811,6 +1932,7 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 async function doSearch(q) {
+  showWikiWorkspace();
   const list = document.getElementById("note-list");
 
   list.innerHTML =
@@ -1847,12 +1969,34 @@ async function doSearch(q) {
 
 const ingestSourceType = document.getElementById("ingest-source-type");
 const ingestInput = document.getElementById("ingest-input");
+const ingestStages = document.getElementById("ingest-stages");
 const ingestPlaceholders = {
   auto: "Paste source text, a YouTube ID, or a URL...",
   text: "Paste source text...",
   video: "Paste a YouTube video ID or URL...",
   playlist: "Paste a YouTube playlist ID or URL...",
 };
+
+function renderIngestProgress(stage) {
+  const progress = ingestProgress(stage);
+  for (const step of ingestStages.querySelectorAll("[data-ingest-step]")) {
+    step.dataset.state = progress[step.dataset.ingestStep];
+  }
+}
+
+function resetIngestProgress() {
+  if (ingestInput.disabled) return;
+  renderIngestProgress(null);
+  document.getElementById("ingest-status").textContent = "";
+}
+
+addSourceButton.addEventListener("click", () => {
+  const file = document.getElementById("ingest-file").files?.[0];
+  if (shellState.sourceOpen && !ingestInput.value.trim() && !file) {
+    resetIngestProgress();
+  }
+});
+ingestInput.addEventListener("input", resetIngestProgress);
 
 ingestSourceType.addEventListener("change", () => {
   ingestInput.placeholder = ingestPlaceholders[ingestSourceType.value];
@@ -1878,6 +2022,7 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   ingestSourceType.disabled = true;
   fileInput.disabled = true;
   document.getElementById("ingest-btn").disabled = true;
+  renderIngestProgress("ingesting");
 
   let completed = false;
   let stagedProposalId = null;
@@ -1912,6 +2057,9 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
 
     await consumeSse(res, async (data) => {
       if (data.stage === "warning") ingestWarning = data.error;
+      if (data.stage !== "warning" && data.stage !== "error") {
+        renderIngestProgress(data.stage);
+      }
       const labels = {
         ingesting: "Downloading or reading source...",
         ingested: "Source ready",
@@ -1936,7 +2084,7 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       if (data.stage === "proposal") {
         stagedProposalId = data.proposal?.id;
         updateShell({ type: "close-source" });
-        await openReviewModal(stagedProposalId);
+        await openReviewWorkspace(stagedProposalId);
       }
       if (data.stage === "done") {
         completed = true;
@@ -1948,7 +2096,7 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       if (data.stage === "error") throw new Error(data.error);
     });
   } catch (err) {
-    status.textContent = `❌ ${err.message}`;
+    status.textContent = `Could not prepare source: ${err.message}`;
   } finally {
     input.disabled = false;
     titleInput.disabled = false;
@@ -1969,6 +2117,7 @@ document.getElementById("ingest-file").addEventListener("change", (event) => {
   document.getElementById("ingest-file-name").textContent = file
     ? file.name
     : "";
+  resetIngestProgress();
 });
 
 document.getElementById("ingest-input").addEventListener("keydown", (e) => {
@@ -2294,25 +2443,43 @@ if (initialNotes.status === "rejected") {
 if (initialGraph.status === "rejected") {
   graphUnavailable = true;
 }
-const requestedNoteId = Number(
-  new URLSearchParams(location.search).get("note"),
-);
-if (Number.isSafeInteger(requestedNoteId) && requestedNoteId > 0) {
-  await loadNote(requestedNoteId, undefined, false);
-} else if (initialNotes.status === "fulfilled" && currentNotes.length > 0) {
-  const firstNote = [...currentNotes].sort((a, b) =>
-    a.title.localeCompare(b.title)
-  )[0];
-  const url = new URL(location.href);
-  url.searchParams.set("note", String(firstNote.id));
-  history.replaceState({}, "", url);
-  await loadNote(firstNote.id, undefined, false);
-}
-globalThis.addEventListener("popstate", () => {
-  const noteId = Number(new URLSearchParams(location.search).get("note"));
+async function restoreLocationState(initial = false) {
+  const params = new URLSearchParams(location.search);
+  if (params.get("view") === "review") {
+    const proposalId = Number(params.get("proposal"));
+    await openReviewWorkspace(
+      Number.isSafeInteger(proposalId) && proposalId > 0
+        ? proposalId
+        : undefined,
+      false,
+    );
+    return;
+  }
+
+  setPrimaryWorkspace("wiki", false);
+  const noteId = Number(params.get("note"));
   if (Number.isSafeInteger(noteId) && noteId > 0) {
-    loadNote(noteId, undefined, false);
+    await loadNote(noteId, undefined, false);
+    return;
+  }
+  if (
+    initial && initialNotes.status === "fulfilled" && currentNotes.length > 0
+  ) {
+    const firstNote = [...currentNotes].sort((a, b) =>
+      a.title.localeCompare(b.title)
+    )[0];
+    const url = new URL(location.href);
+    url.searchParams.set("note", String(firstNote.id));
+    history.replaceState({}, "", url);
+    await loadNote(firstNote.id, undefined, false);
   } else clearReader(false);
+}
+
+await restoreLocationState(true);
+globalThis.addEventListener("popstate", () => {
+  restoreLocationState().catch((error) => {
+    console.error("Could not restore workspace", error);
+  });
 });
 globalThis.addEventListener("resize", () => {
   if (simulation && readerState.view === "connections") renderGraph();
