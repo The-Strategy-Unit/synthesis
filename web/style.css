@@ -89,9 +89,16 @@ body {
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 999px;
+  background: transparent;
   color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
   font-size: 0.72rem;
   white-space: nowrap;
+}
+
+#provider-mode:hover {
+  background: var(--panel-2);
 }
 
 #provider-mode[data-mode="local"] {
@@ -102,6 +109,11 @@ body {
 #provider-mode[data-mode="remote"] {
   border-color: var(--accent);
   color: var(--accent-soft);
+}
+
+#provider-mode[data-mode="checking"] {
+  border-color: var(--border);
+  color: var(--text-muted);
 }
 
 #provider-mode[data-mode="unavailable"] {
@@ -181,6 +193,14 @@ body {
   border-color: rgba(123, 184, 255, 0.35);
   color: var(--text);
   font-weight: 650;
+}
+
+.nav-item:disabled,
+.primary-action:disabled,
+#lint-analyze:disabled,
+#discoveries-scan:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
 }
 
 .nav-badge {
@@ -934,6 +954,7 @@ body {
 }
 
 #nav-toggle:focus-visible,
+#provider-mode:focus-visible,
 .nav-item:focus-visible,
 .primary-action:focus-visible,
 .secondary-action:focus-visible,

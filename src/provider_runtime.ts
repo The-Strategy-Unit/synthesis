@@ -45,6 +45,20 @@ export interface ProviderDiagnostics {
   };
 }
 
+export interface ProviderReadiness {
+  mode: ProviderMode;
+  source: ActiveProviders["source"];
+  ready: boolean;
+  chat: {
+    requiredModels: string[];
+    missingModels: string[];
+  };
+  embedding: {
+    requiredModels: string[];
+    missingModels: string[];
+  };
+}
+
 export class ProviderRuntimeError extends Error {
   constructor(message: string) {
     super(message);
@@ -188,6 +202,67 @@ export async function checkProviderConnection(
   ];
 }
 
+/**
+ * Check that every configured model is advertised by the provider without
+ * loading a model or sending user content. This is deliberately lighter than
+ * diagnostics so it is safe to run when the application starts.
+ */
+export async function checkProviderReadiness(
+  providers: ActiveProviders,
+  timeoutMs = Math.min(config.security.modelTimeoutMs, 3_000),
+): Promise<ProviderReadiness> {
+  const requiredChatModels = [
+    ...new Set([
+      providers.llm.extractModel,
+      providers.llm.consolidateModel,
+      providers.llm.integrateModel,
+      providers.llm.rewriteModel,
+    ]),
+  ];
+  const requiredEmbeddingModels = [providers.embedding.model];
+  const sameEndpoint = providers.llm.apiBase === providers.embedding.apiBase &&
+    providers.llm.apiKey === providers.embedding.apiKey;
+  const [chatModels, embeddingModels] = sameEndpoint
+    ? await checkProviderConnection(
+      providers.llm.apiBase,
+      providers.llm.apiKey,
+      timeoutMs,
+    ).then((models) => [models, models])
+    : await Promise.all([
+      checkProviderConnection(
+        providers.llm.apiBase,
+        providers.llm.apiKey,
+        timeoutMs,
+      ),
+      checkProviderConnection(
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+        timeoutMs,
+      ),
+    ]);
+  const chatAvailable = new Set(chatModels);
+  const embeddingAvailable = new Set(embeddingModels);
+  const missingChat = requiredChatModels.filter((model) =>
+    !chatAvailable.has(model)
+  );
+  const missingEmbedding = requiredEmbeddingModels.filter((model) =>
+    !embeddingAvailable.has(model)
+  );
+  return {
+    mode: providerMode(providers),
+    source: providers.source,
+    ready: missingChat.length === 0 && missingEmbedding.length === 0,
+    chat: {
+      requiredModels: requiredChatModels,
+      missingModels: missingChat,
+    },
+    embedding: {
+      requiredModels: requiredEmbeddingModels,
+      missingModels: missingEmbedding,
+    },
+  };
+}
+
 function skippedProbe(): ProviderProbe {
   return {
     attempted: false,
@@ -316,37 +391,12 @@ async function probeEmbeddingProvider(
 export async function diagnoseProviders(
   providers: ActiveProviders,
 ): Promise<ProviderDiagnostics> {
-  const requiredChatModels = [
-    ...new Set([
-      providers.llm.extractModel,
-      providers.llm.consolidateModel,
-      providers.llm.integrateModel,
-      providers.llm.rewriteModel,
-    ]),
-  ];
-  const requiredEmbeddingModels = [providers.embedding.model];
-  const sameEndpoint = providers.llm.apiBase === providers.embedding.apiBase &&
-    providers.llm.apiKey === providers.embedding.apiKey;
-  const [chatModels, embeddingModels] = sameEndpoint
-    ? await checkProviderConnection(
-      providers.llm.apiBase,
-      providers.llm.apiKey,
-    ).then((models) => [models, models])
-    : await Promise.all([
-      checkProviderConnection(providers.llm.apiBase, providers.llm.apiKey),
-      checkProviderConnection(
-        providers.embedding.apiBase,
-        providers.embedding.apiKey,
-      ),
-    ]);
-  const chatAvailable = new Set(chatModels);
-  const embeddingAvailable = new Set(embeddingModels);
-  const missingChat = requiredChatModels.filter((model) =>
-    !chatAvailable.has(model)
+  const readiness = await checkProviderReadiness(
+    providers,
+    config.security.modelTimeoutMs,
   );
-  const missingEmbedding = requiredEmbeddingModels.filter((model) =>
-    !embeddingAvailable.has(model)
-  );
+  const missingChat = readiness.chat.missingModels;
+  const missingEmbedding = readiness.embedding.missingModels;
   const [chatProbe, embeddingResult] = await Promise.all([
     missingChat.length === 0
       ? probeChatProvider(
@@ -370,13 +420,13 @@ export async function diagnoseProviders(
       chatProbe.ok && embeddingResult.probe.ok,
     chat: {
       apiBase: providers.llm.apiBase,
-      requiredModels: requiredChatModels,
+      requiredModels: readiness.chat.requiredModels,
       missingModels: missingChat,
       probe: chatProbe,
     },
     embedding: {
       apiBase: providers.embedding.apiBase,
-      requiredModels: requiredEmbeddingModels,
+      requiredModels: readiness.embedding.requiredModels,
       missingModels: missingEmbedding,
       expectedDimensions: config.embed.dimensions,
       actualDimensions: embeddingResult.dimensions,

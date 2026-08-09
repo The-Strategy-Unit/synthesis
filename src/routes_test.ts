@@ -405,6 +405,76 @@ routeTest(
 );
 
 routeTest(
+  "provider readiness is lightweight and fails safely into knowledge-only mode",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db) => {
+        const providers = {
+          source: "environment" as const,
+          llm: {
+            apiBase: config.llm.apiBase,
+            apiKey: config.llm.apiKey,
+            extractModel: config.llm.extractModel,
+            consolidateModel: config.llm.consolidateModel,
+            integrateModel: config.llm.integrateModel,
+            rewriteModel: config.llm.rewriteModel,
+          },
+          embedding: {
+            apiBase: config.embed.apiBase,
+            apiKey: config.embed.apiKey,
+            model: config.embed.model,
+          },
+        };
+        const handle = createHandler(db, () => Promise.resolve(providers));
+        const models = [
+          ...new Set([
+            providers.llm.extractModel,
+            providers.llm.consolidateModel,
+            providers.llm.integrateModel,
+            providers.llm.rewriteModel,
+            providers.embedding.model,
+          ]),
+        ].map((id) => ({ id }));
+        let calls = 0;
+        globalThis.fetch = (input, init) => {
+          calls++;
+          assert.match(String(input), /\/models$/);
+          assert.equal(init?.method, undefined);
+          assert.equal(init?.body, undefined);
+          return Promise.resolve(Response.json({ data: models }));
+        };
+
+        const available = await handle(
+          new Request("http://localhost/api/provider/readiness"),
+        );
+        assert.equal(available.status, 200);
+        const availableBody = await available.json();
+        assert.equal(availableBody.readiness.ready, true);
+        assert.equal(availableBody.readiness.mode, "local");
+        assert.equal(calls, 1);
+
+        globalThis.fetch = () =>
+          Promise.reject(new Error("private provider transport detail"));
+        const unavailable = await handle(
+          new Request("http://localhost/api/provider/readiness"),
+        );
+        assert.equal(unavailable.status, 503);
+        const unavailableBody = await unavailable.json();
+        assert.equal(unavailableBody.code, "PROVIDER_UNAVAILABLE");
+        assert.match(unavailableBody.error, /keyword search remain available/);
+        assert.doesNotMatch(
+          JSON.stringify(unavailableBody),
+          /private provider transport detail/,
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest(
   "provider settings are tested, stored, and returned redacted",
   async () => {
     const originalFetch = globalThis.fetch;

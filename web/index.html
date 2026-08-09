@@ -15,7 +15,8 @@
           <button id="nav-toggle" type="button" aria-label="Open navigation"
             aria-controls="primary-nav" aria-expanded="false">&#9776;</button>
           <span class="logo">Synthesis</span>
-          <span id="provider-mode" data-mode="unknown">Checking mode...</span>
+          <button id="provider-mode" type="button" data-mode="checking"
+            aria-live="polite" aria-atomic="true">AI provider · checking</button>
         </div>
         <div class="search-box">
           <label class="visually-hidden" for="search-input">Search wiki</label>
@@ -24,7 +25,8 @@
         </div>
         <div class="topbar-actions">
           <button id="add-source-btn" class="primary-action" type="button"
-            aria-controls="source-panel" aria-expanded="false">
+            aria-controls="source-panel" aria-expanded="false"
+            aria-describedby="provider-mode">
             Add source
           </button>
           <div id="vault-tools" class="disclosure">
@@ -67,7 +69,8 @@
               <span id="discoveries-count" class="nav-badge hidden"
                 aria-label="No open discoveries">0</span>
             </button>
-            <button id="ask-open-btn" class="nav-item" type="button">
+            <button id="ask-open-btn" class="nav-item" type="button"
+              aria-describedby="provider-mode">
               <span>Ask wiki</span>
             </button>
           </div>
@@ -213,7 +216,8 @@
                     <button id="proposal-reject" type="button">
                       Reject proposal
                     </button>
-                    <button id="proposal-approve" type="button">
+                    <button id="proposal-approve" type="button"
+                      aria-describedby="provider-mode">
                       Review every change
                     </button>
                   </div>
@@ -281,7 +285,8 @@
             <p>Completed proposals remain available in Review.</p>
           </div>
           <div class="source-actions">
-            <button id="ingest-btn" type="button">Prepare for review</button>
+            <button id="ingest-btn" type="button"
+              aria-describedby="provider-mode">Prepare for review</button>
             <span id="ingest-status" role="status" aria-live="polite"></span>
           </div>
         </div>
@@ -331,7 +336,7 @@
           discovery becomes an explicit wiki link.
         </p>
         <div class="discoveries-toolbar">
-          <button id="discoveries-scan"
+          <button id="discoveries-scan" aria-describedby="provider-mode"
             type="button">Scan for connections</button>
         </div>
         <p id="discoveries-status" role="status" aria-live="polite"></p>
@@ -373,7 +378,8 @@
         </p>
         <div class="lint-actions">
           <button id="lint-refresh" type="button">Run checks</button>
-          <button id="lint-analyze" type="button">Analyze with AI</button>
+          <button id="lint-analyze" type="button"
+            aria-describedby="provider-mode">Analyze with AI</button>
         </div>
         <p id="lint-status" role="status" aria-live="polite"></p>
         <div id="lint-summary" class="hidden"></div>

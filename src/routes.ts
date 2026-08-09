@@ -47,6 +47,7 @@ import {
 import { answerWiki, validateWikiAnswer, type WikiQueryPage } from "./query.ts";
 import {
   type ActiveProviders,
+  checkProviderReadiness,
   diagnoseProviders,
   environmentProviders,
   providerMode,
@@ -539,6 +540,27 @@ export function createHandler(
             mode: providerMode(activeProvider),
             embeddingDimensions: config.embed.dimensions,
           });
+        }
+        if (path === "/api/provider/readiness" && method === "GET") {
+          let providers: ActiveProviders | undefined;
+          try {
+            providers = await resolveProviders();
+            return json({
+              readiness: await checkProviderReadiness(providers),
+            });
+          } catch {
+            const mode = providers
+              ? providerMode(providers)
+              : providerMode(environmentProviders());
+            return errorResponse(
+              503,
+              "PROVIDER_UNAVAILABLE",
+              mode === "local"
+                ? "Local AI is unavailable. Existing wiki knowledge and keyword search remain available."
+                : "Remote AI is unavailable. Existing wiki knowledge and keyword search remain available.",
+              requestId,
+            );
+          }
         }
         if (path === "/api/provider/diagnose" && method === "POST") {
           requireIngester(identity);

@@ -19,6 +19,10 @@ import {
   REVIEW_DECISIONS,
   reviewDecisionSummary,
 } from "./review_workflow.js";
+import {
+  providerCapabilities,
+  providerPresentation,
+} from "./provider_readiness.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 // --- Config (fetched from backend) ---
@@ -508,9 +512,10 @@ function closeAskModal() {
 }
 
 function setAskBusy(busy) {
-  askInput.disabled = busy;
+  const modelActions = providerCapabilities(providerState.phase).modelActions;
+  askInput.disabled = busy || !modelActions;
   askAnswer.disabled = busy;
-  askSubmit.disabled = busy;
+  askSubmit.disabled = busy || !modelActions;
   askSave.disabled = busy;
 }
 
@@ -646,19 +651,26 @@ function selectedProposalChanges() {
 
 function updateProposalApprovalControls() {
   const summary = reviewDecisionSummary(proposalDecisions());
+  const modelActions = providerCapabilities(providerState.phase).modelActions;
   proposalDecisionSummary.textContent = summary.pending > 0
     ? `${summary.pending} decision${
       summary.pending === 1 ? "" : "s"
     } remaining · ${summary.include} include · ${summary.exclude} exclude`
     : `${summary.include} to apply · ${summary.exclude} excluded`;
-  proposalApprove.textContent = summary.pending > 0
+  proposalApprove.textContent = !modelActions
+    ? "AI provider required to apply"
+    : summary.pending > 0
     ? `Review ${summary.pending} remaining`
     : summary.include > 0
     ? `Apply ${summary.include} reviewed change${
       summary.include === 1 ? "" : "s"
     }`
     : "Include at least one change";
-  proposalApprove.disabled = proposalBusy || !summary.canApprove;
+  proposalApprove.disabled = proposalBusy || !summary.canApprove ||
+    !modelActions;
+  proposalApprove.title = modelActions
+    ? ""
+    : "Applying proposed changes requires an available AI provider.";
 }
 
 function setProposalBusy(busy) {
@@ -1006,7 +1018,8 @@ const discoveriesScan = document.getElementById("discoveries-scan");
 let selectedDiscoveryId = null;
 
 function setDiscoveryBusy(busy) {
-  discoveriesScan.disabled = busy;
+  discoveriesScan.disabled = busy ||
+    !providerCapabilities(providerState.phase).modelActions;
   discoveryInvestigate.disabled = busy;
   discoveryReject.disabled = busy;
   discoveryConfirm.disabled = busy;
@@ -1225,6 +1238,9 @@ const providerDiagnosticsModels = document.getElementById(
 );
 const llmKeyInput = document.getElementById("provider-llm-key");
 const embeddingKeyInput = document.getElementById("provider-embed-key");
+const askOpenButton = document.getElementById("ask-open-btn");
+const ingestButton = document.getElementById("ingest-btn");
+let providerState = { phase: "checking", mode: "unknown" };
 
 function setProviderBusy(busy) {
   for (const control of providerForm.elements) control.disabled = busy;
@@ -1233,25 +1249,63 @@ function setProviderBusy(busy) {
   providerDiagnose.disabled = busy;
 }
 
-function updateProviderMode(data) {
-  const mode = data.mode ?? "unknown";
-  providerModeBadge.dataset.mode = mode;
-  providerModeBadge.textContent = mode === "local"
-    ? "Local · Ollama-compatible"
-    : mode === "remote"
-    ? "Remote · BYOK"
-    : "Provider unknown";
+function renderProviderState(nextState) {
+  providerState = { ...providerState, ...nextState };
+  const presentation = providerPresentation(providerState);
+  const capabilities = providerCapabilities(providerState.phase);
+  providerModeBadge.dataset.mode = presentation.badgeMode;
+  providerModeBadge.textContent = presentation.text;
+  providerModeBadge.title = presentation.description;
+  providerModeBadge.setAttribute(
+    "aria-label",
+    `${presentation.text}. ${presentation.description} Open AI provider settings.`,
+  );
+
+  addSourceButton.disabled = !capabilities.modelActions;
+  askOpenButton.disabled = !capabilities.modelActions;
+  discoveriesScan.disabled = !capabilities.modelActions;
+  lintAnalyze.disabled = !capabilities.modelActions;
+  ingestButton.disabled = !capabilities.modelActions;
+  searchInput.placeholder = capabilities.modelActions
+    ? "Search your knowledge base..."
+    : "Search wiki pages (keyword)...";
+  const unavailableHelp =
+    "AI is unavailable. Reading, evidence, review queues, and keyword search still work.";
+  for (
+    const control of [
+      addSourceButton,
+      askOpenButton,
+      discoveriesScan,
+      lintAnalyze,
+      ingestButton,
+    ]
+  ) {
+    control.title = capabilities.modelActions ? "" : unavailableHelp;
+  }
+  updateProposalApprovalControls();
 }
 
 async function refreshProviderMode() {
+  renderProviderState({ phase: "checking" });
+  let configured;
   try {
-    const data = await api("provider");
-    updateProviderMode(data);
-    return data;
+    configured = await api("provider");
+    renderProviderState({ phase: "configured", mode: configured.mode });
   } catch {
-    providerModeBadge.dataset.mode = "unavailable";
-    providerModeBadge.textContent = "Knowledge-only · provider unavailable";
+    renderProviderState({ phase: "unavailable" });
     return null;
+  }
+  renderProviderState({ phase: "checking", mode: configured.mode });
+  try {
+    const data = await api("provider/readiness");
+    renderProviderState({
+      phase: data.readiness?.ready ? "ready" : "unavailable",
+      mode: data.readiness?.mode ?? configured.mode,
+    });
+    return { ...configured, readiness: data.readiness };
+  } catch {
+    renderProviderState({ phase: "unavailable", mode: configured.mode });
+    return { ...configured, readiness: null };
   }
 }
 
@@ -1291,9 +1345,10 @@ async function openProviderModal() {
   setProviderBusy(true);
   try {
     const data = await api("provider");
-    updateProviderMode(data);
     populateProviderForm(data);
-    providerStatus.textContent = data.source === "environment"
+    providerStatus.textContent = providerState.phase === "unavailable"
+      ? "AI is currently unavailable. Existing wiki knowledge remains usable; update settings or run diagnostics."
+      : data.source === "environment"
       ? "Default provider is active. Run diagnostics to verify its models."
       : data.configured
       ? "Provider is configured."
@@ -1371,10 +1426,15 @@ async function diagnoseActiveProvider() {
       body: "{}",
     });
     renderProviderDiagnostics(data.diagnostics);
+    renderProviderState({
+      phase: data.diagnostics.ready ? "ready" : "unavailable",
+      mode: data.diagnostics.mode,
+    });
     providerStatus.textContent = data.diagnostics.ready
       ? "Provider diagnostics passed."
       : "Resolve the listed model or compatibility issue, then diagnose again.";
   } catch (error) {
+    renderProviderState({ phase: "unavailable" });
     providerStatus.textContent = error.message;
   } finally {
     setProviderBusy(false);
@@ -1430,6 +1490,7 @@ document.getElementById("provider-open-btn").addEventListener(
   "click",
   openProviderModal,
 );
+providerModeBadge.addEventListener("click", openProviderModal);
 document.getElementById("provider-close").addEventListener(
   "click",
   closeProviderModal,
@@ -1703,7 +1764,8 @@ async function runWikiLint() {
     lintStatus.textContent = error.message;
   } finally {
     lintRefresh.disabled = false;
-    lintAnalyze.disabled = false;
+    lintAnalyze.disabled = !providerCapabilities(providerState.phase)
+      .modelActions;
   }
 }
 
@@ -1750,7 +1812,8 @@ async function analyzeWikiHealth() {
     lintStatus.textContent = error.message;
   } finally {
     lintRefresh.disabled = false;
-    lintAnalyze.disabled = false;
+    lintAnalyze.disabled = !providerCapabilities(providerState.phase)
+      .modelActions;
   }
 }
 
@@ -1926,7 +1989,10 @@ async function doSearch(q) {
   searchInput.disabled = true;
 
   try {
-    const data = await api(`search?q=${encodeURIComponent(q)}`);
+    const searchMode = providerCapabilities(providerState.phase).searchMode;
+    const data = await api(
+      `search?q=${encodeURIComponent(q)}&mode=${searchMode}`,
+    );
     list.innerHTML = "";
     for (const result of data.results ?? []) {
       const li = document.createElement("li");
@@ -2088,7 +2154,9 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
     titleInput.disabled = false;
     ingestSourceType.disabled = false;
     fileInput.disabled = false;
-    document.getElementById("ingest-btn").disabled = false;
+    document.getElementById("ingest-btn").disabled = !providerCapabilities(
+      providerState.phase,
+    ).modelActions;
     if (completed) {
       input.value = "";
       titleInput.value = "";
@@ -2413,7 +2481,7 @@ function renderGraphFiltered(threshold) {
 // --- Init ---
 
 await fetchConfig();
-await refreshProviderMode();
+void refreshProviderMode();
 await refreshShellCounts();
 const [initialNotes, initialGraph] = await Promise.allSettled([
   loadNoteList(),

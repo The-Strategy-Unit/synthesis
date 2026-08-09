@@ -4,6 +4,7 @@ import { config } from "./config.ts";
 import type { ProviderProfile } from "./provider_profile.ts";
 import {
   checkProviderConnection,
+  checkProviderReadiness,
   diagnoseProviders,
   environmentProviders,
   providerMode,
@@ -122,6 +123,50 @@ Deno.test("provider health check uses /models and redacts transport failures", a
       checkProviderConnection("https://api.example.test/v1", "secret"),
       ProviderRuntimeError,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("provider readiness checks model lists without loading models", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const providers = environmentProviders();
+    const availableModels = [
+      ...new Set([
+        providers.llm.extractModel,
+        providers.llm.consolidateModel,
+        providers.llm.integrateModel,
+        providers.llm.rewriteModel,
+        providers.embedding.model,
+      ]),
+    ].map((id) => ({ id }));
+    const requests: string[] = [];
+    globalThis.fetch = (input, init) => {
+      requests.push(String(input));
+      assert.equal(init?.method, undefined);
+      assert.equal(init?.body, undefined);
+      return Promise.resolve(Response.json({ data: availableModels }));
+    };
+
+    const ready = await checkProviderReadiness(providers);
+    assert.equal(ready.ready, true);
+    assert.equal(ready.mode, "local");
+    assert.deepEqual(ready.chat.missingModels, []);
+    assert.deepEqual(ready.embedding.missingModels, []);
+    assert.deepEqual(requests, [`${providers.llm.apiBase}/models`]);
+
+    globalThis.fetch = () =>
+      Promise.resolve(Response.json({
+        data: availableModels.filter(({ id }) =>
+          id !== providers.embedding.model
+        ),
+      }));
+    const missing = await checkProviderReadiness(providers);
+    assert.equal(missing.ready, false);
+    assert.deepEqual(missing.embedding.missingModels, [
+      providers.embedding.model,
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }

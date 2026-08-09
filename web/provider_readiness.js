@@ -1,0 +1,50 @@
+const MODES = new Set(["local", "remote"]);
+const PHASES = new Set(["configured", "checking", "ready", "unavailable"]);
+
+export function providerPresentation(state = {}) {
+  const mode = MODES.has(state.mode) ? state.mode : "unknown";
+  const phase = PHASES.has(state.phase) ? state.phase : "checking";
+  const location = mode === "local"
+    ? "Local AI"
+    : mode === "remote"
+    ? "Remote AI"
+    : "AI provider";
+
+  if (phase === "ready") {
+    return {
+      badgeMode: mode,
+      text: `${location} · ready`,
+      description:
+        "AI synthesis and semantic search are available. Wiki answers still require review.",
+    };
+  }
+  if (phase === "unavailable") {
+    return {
+      badgeMode: "unavailable",
+      text: "Knowledge-only · AI unavailable",
+      description:
+        "Existing wiki pages, evidence, review queues, and keyword search remain available.",
+    };
+  }
+  if (phase === "configured") {
+    return {
+      badgeMode: "checking",
+      text: `${location} · configured`,
+      description:
+        "Provider settings are configured but availability is not verified.",
+    };
+  }
+  return {
+    badgeMode: "checking",
+    text: `${location} · checking`,
+    description: "Checking configured model availability in the background.",
+  };
+}
+
+export function providerCapabilities(phase) {
+  const modelActions = phase === "ready";
+  return {
+    modelActions,
+    searchMode: modelActions ? "hybrid" : "keyword",
+  };
+}
