@@ -168,7 +168,7 @@ export interface IngestUndoChange {
   restoredBody?: string;
 }
 
-const INTEGRATION_STOP_WORDS = new Set([
+const SEARCH_STOP_WORDS = new Set([
   "a",
   "an",
   "and",
@@ -177,22 +177,53 @@ const INTEGRATION_STOP_WORDS = new Set([
   "at",
   "be",
   "by",
+  "can",
+  "could",
+  "do",
+  "does",
   "for",
   "from",
+  "how",
   "in",
   "is",
   "it",
   "of",
   "on",
   "or",
+  "should",
   "that",
   "the",
   "this",
   "to",
   "was",
   "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "would",
   "with",
 ]);
+
+export function keywordSearchQueries(value: string): string[] {
+  const tokens = [
+    ...value.normalize("NFKC").toLocaleLowerCase("en-US")
+      .matchAll(/[\p{L}\p{N}_]+/gu),
+  ].map((match) => match[0]);
+  const uniqueTokens = [...new Set(tokens)].slice(0, 16);
+  if (uniqueTokens.length === 0) return [];
+
+  const meaningfulTokens = uniqueTokens.filter((token) =>
+    !SEARCH_STOP_WORDS.has(token)
+  );
+  const terms = meaningfulTokens.length > 0 ? meaningfulTokens : uniqueTokens;
+  const quotedTerms = terms.map((term) => `"${term.replaceAll('"', '""')}"`);
+  const precise = quotedTerms.join(" AND ");
+  const broad = quotedTerms.join(" OR ");
+  return broad === precise ? [precise] : [precise, broad];
+}
 
 export function initDatabase(db: DatabaseSync): void {
   load(db);
@@ -491,12 +522,18 @@ export class DB {
     query: string,
     limit = config.search.resultLimit,
   ): Array<{ id: number; title: string; rank: number }> {
+    const searches = keywordSearchQueries(query);
+    if (searches.length === 0) return [];
     const stmt = this.db.prepare(
       "SELECT rowid as id, title, rank FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?",
     );
-    return stmt.all(query, limit) as Array<
-      { id: number; title: string; rank: number }
-    >;
+    for (const search of searches) {
+      const results = stmt.all(search, limit) as Array<
+        { id: number; title: string; rank: number }
+      >;
+      if (results.length > 0) return results;
+    }
+    return [];
   }
 
   findIntegrationCandidates(
@@ -507,7 +544,7 @@ export class DB {
 
     const terms = [...text.toLowerCase().matchAll(/[\p{L}\p{N}]+/gu)]
       .map((match) => match[0])
-      .filter((term) => term.length >= 2 && !INTEGRATION_STOP_WORDS.has(term));
+      .filter((term) => term.length >= 2 && !SEARCH_STOP_WORDS.has(term));
     const uniqueTerms = [...new Set(terms)].slice(0, 16);
     if (uniqueTerms.length === 0) return [];
 

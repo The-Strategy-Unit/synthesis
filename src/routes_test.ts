@@ -372,6 +372,7 @@ routeTest(
           `/api/sources/${sourceId}`,
           "/api/graph",
           "/api/search?q=mechanism",
+          "/api/search?q=What%20is%20mechanism%3F&mode=keyword",
           "/api/lint",
         ];
         const responses = await Promise.all(
@@ -389,10 +390,12 @@ routeTest(
           target: secondId,
           kind: "explicit",
         }]);
-        const search = await responses[5].json();
-        assert.equal(search.results[0].id, firstId);
-        assert.equal(search.results[0].matchType, "keyword");
-        const lint = await responses[6].json();
+        for (const response of responses.slice(5, 7)) {
+          const search = await response.json();
+          assert.equal(search.results[0].id, firstId);
+          assert.equal(search.results[0].matchType, "keyword");
+        }
+        const lint = await responses[7].json();
         assert.equal(lint.pageCount, 2);
       });
     } finally {

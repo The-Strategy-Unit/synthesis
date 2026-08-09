@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import { config } from "./config.ts";
-import { DB } from "./db.ts";
+import { DB, keywordSearchQueries } from "./db.ts";
 
 function dbTest(name: string, fn: () => void | Promise<void>): void {
   Deno.test({
@@ -76,6 +76,80 @@ dbTest("duplicate file paths preserve the original note", async () => {
     });
     assert.equal(db.getAllNotes().length, 1);
   });
+});
+
+dbTest(
+  "keyword search treats user text as text instead of FTS syntax",
+  async () => {
+    await withTempDb((db, dir) => {
+      const teamId = db.addNote(
+        "Cross-Functional Team Composition",
+        `${dir}/team.md`,
+        null,
+        "text",
+      );
+      const qualityId = db.addNote(
+        "Quality Improvement Definition",
+        `${dir}/quality.md`,
+        null,
+        "text",
+      );
+      const communicationId = db.addNote(
+        "SBARR Communication Framework",
+        `${dir}/communication.md`,
+        null,
+        "text",
+      );
+      db.indexNote(
+        teamId,
+        "Cross-Functional Team Composition",
+        "A team brings together clinical and operational perspectives.",
+      );
+      db.indexNote(
+        qualityId,
+        "Quality Improvement Definition",
+        "Quality improvement is a structured approach to systems change.",
+      );
+      db.indexNote(
+        communicationId,
+        "SBARR Communication Framework",
+        "Standardized communication supports safe handovers.",
+      );
+
+      assert.deepEqual(
+        db.searchKeyword("cross-functional team").map((result) => result.id),
+        [teamId],
+      );
+      assert.deepEqual(
+        db.searchKeyword("What is quality improvement?").map((result) =>
+          result.id
+        ),
+        [qualityId],
+      );
+      assert.deepEqual(
+        db.searchKeyword("structured communication").map((result) => result.id)
+          .sort((a, b) => a - b),
+        [qualityId, communicationId].sort((a, b) => a - b),
+        "a broader OR search should run only when every meaningful term has no match",
+      );
+      assert.deepEqual(db.searchKeyword("?!"), []);
+    });
+  },
+);
+
+Deno.test("keyword queries are bounded, quoted, and stop-word aware", () => {
+  assert.deepEqual(keywordSearchQueries("What is quality improvement?"), [
+    '"quality" AND "improvement"',
+    '"quality" OR "improvement"',
+  ]);
+  assert.deepEqual(keywordSearchQueries("cross-functional team"), [
+    '"cross" AND "functional" AND "team"',
+    '"cross" OR "functional" OR "team"',
+  ]);
+  assert.deepEqual(keywordSearchQueries("AND OR NOT ?"), [
+    '"not"',
+  ]);
+  assert.deepEqual(keywordSearchQueries("?!"), []);
 });
 
 dbTest("catalog replacement is complete and transactional", async () => {
