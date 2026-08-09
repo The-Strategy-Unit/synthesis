@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   providerCapabilities,
+  providerEmptyState,
   providerPresentation,
 } from "./provider_readiness.js";
 
@@ -41,6 +42,14 @@ Deno.test("offline provider state selects deterministic keyword search", () => {
     modelActions: true,
     searchMode: "hybrid",
   });
+  assert.deepEqual(providerEmptyState("unavailable"), {
+    action: "configure-provider",
+    label: "Configure AI provider",
+  });
+  assert.deepEqual(providerEmptyState("ready"), {
+    action: "add-source",
+    label: "Add your first source",
+  });
 });
 
 Deno.test("model-dependent controls expose the shared provider status", async () => {
@@ -54,6 +63,7 @@ Deno.test("model-dependent controls expose the shared provider status", async ()
   for (
     const id of [
       "add-source-btn",
+      "reader-add-source",
       "ask-open-btn",
       "proposal-approve",
       "ingest-btn",

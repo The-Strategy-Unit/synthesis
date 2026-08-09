@@ -24,6 +24,7 @@ import {
 } from "./review_workflow.js";
 import {
   providerCapabilities,
+  providerEmptyState,
   providerPresentation,
 } from "./provider_readiness.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
@@ -380,6 +381,7 @@ const pageViewButton = document.getElementById("page-view-btn");
 const connectionsViewButton = document.getElementById("connections-view-btn");
 const readerPanel = document.getElementById("reader-panel");
 const readerEmpty = document.getElementById("reader-empty");
+const readerAddSourceButton = document.getElementById("reader-add-source");
 const noteContent = document.getElementById("note-content");
 const evidencePanel = document.getElementById("evidence-panel");
 const evidenceContent = document.getElementById("evidence-content");
@@ -487,8 +489,12 @@ evidenceClose.addEventListener("click", () => {
   updateReader({ type: "hide-evidence" });
   evidenceToggle.focus();
 });
-document.getElementById("reader-add-source").addEventListener("click", () => {
-  addSourceButton.click();
+readerAddSourceButton.addEventListener("click", () => {
+  if (providerEmptyState(providerState.phase).action === "add-source") {
+    addSourceButton.click();
+  } else {
+    openProviderModal();
+  }
 });
 wikiNavigationButton.addEventListener("click", () => showWikiWorkspace());
 
@@ -1269,6 +1275,11 @@ function renderProviderState(nextState) {
   discoveriesScan.disabled = !capabilities.modelActions;
   lintAnalyze.disabled = !capabilities.modelActions;
   ingestButton.disabled = !capabilities.modelActions;
+  const emptyState = providerEmptyState(providerState.phase);
+  readerAddSourceButton.textContent = emptyState.label;
+  readerAddSourceButton.title = capabilities.modelActions
+    ? ""
+    : "Configure an AI provider before preparing the first source.";
   searchInput.placeholder = capabilities.modelActions
     ? "Search your knowledge base..."
     : "Search wiki pages (keyword)...";

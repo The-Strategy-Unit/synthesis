@@ -48,3 +48,9 @@ export function providerCapabilities(phase) {
     searchMode: modelActions ? "hybrid" : "keyword",
   };
 }
+
+export function providerEmptyState(phase) {
+  return phase === "ready"
+    ? { action: "add-source", label: "Add your first source" }
+    : { action: "configure-provider", label: "Configure AI provider" };
+}
