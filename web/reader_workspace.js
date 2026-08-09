@@ -1,3 +1,5 @@
+import { formatPageRanges } from "./review_workflow.js";
+
 export function initialReaderState() {
   return {
     evidenceOpen: true,
@@ -44,4 +46,39 @@ export function evidenceSummary(page) {
       related.filter((item) => item.kind === "semantic").length,
     sourceCount: Array.isArray(page?.sources) ? page.sources.length : 0,
   };
+}
+
+export function compactEvidenceText(value, maxLength = 180) {
+  const fullText = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (fullText.length <= maxLength) {
+    return { fullText, preview: fullText, truncated: false };
+  }
+  const candidate = fullText.slice(0, maxLength + 1);
+  const wordBoundary = candidate.lastIndexOf(" ");
+  const end = wordBoundary >= Math.floor(maxLength * 0.65)
+    ? wordBoundary
+    : maxLength;
+  return {
+    fullText,
+    preview: `${fullText.slice(0, end).trimEnd()}…`,
+    truncated: true,
+  };
+}
+
+export function evidenceSourceLocation(source) {
+  const pages = formatPageRanges(source?.sourcePages);
+  return pages ? `pages ${pages}` : null;
+}
+
+export function evidenceActionLabel(action) {
+  switch (action) {
+    case "new":
+      return "Added";
+    case "merge":
+      return "Updated";
+    case "contradict":
+      return "Conflict recorded";
+    default:
+      return null;
+  }
 }

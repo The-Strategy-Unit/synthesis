@@ -2128,6 +2128,24 @@ body {
   line-height: 1.45;
 }
 
+#evidence-content .note-source-summary,
+#evidence-content .note-claim-full {
+  margin-top: 0.55rem;
+}
+
+#evidence-content .note-source-summary summary,
+#evidence-content .note-claim-full summary {
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+#evidence-content .note-source-summary[open] summary,
+#evidence-content .note-claim-full[open] summary {
+  margin-bottom: 0.35rem;
+}
+
 #evidence-content .note-claim-list {
   display: grid;
   gap: 0.65rem;

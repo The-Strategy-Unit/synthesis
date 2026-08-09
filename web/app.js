@@ -9,6 +9,9 @@ import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
 import { classifyIngestSource } from "./ingest_source.js";
 import {
+  compactEvidenceText,
+  evidenceActionLabel,
+  evidenceSourceLocation,
   evidenceSummary,
   initialReaderState,
   reduceReaderState,
@@ -1835,39 +1838,46 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-function sourceLocation(source) {
-  return source.sourcePages?.length
-    ? `pages ${source.sourcePages.join(", ")}`
-    : null;
-}
-
 function renderEvidence(page) {
   const summary = evidenceSummary(page);
   const sourceById = new Map(
     (page.sources ?? []).map((source) => [source.id, source]),
   );
   const claims = (page.claims ?? []).map((claim) => {
+    const text = compactEvidenceText(claim.text);
     const citedSources = (claim.sourceIds ?? []).map((sourceId) =>
       sourceById.get(sourceId)
     ).filter(Boolean);
     const citations = citedSources.length > 0
       ? citedSources.map((source) => {
-        const location = sourceLocation(source);
+        const location = evidenceSourceLocation(source);
         return `<button type="button" class="note-source-link" ` +
           `data-source-id="${source.id}">${escapeHtml(source.title)}` +
           `${location ? ` · ${escapeHtml(location)}` : ""}</button>`;
       }).join("")
       : "<span>No catalogued source</span>";
-    return `<li><p>${escapeHtml(claim.text)}</p>` +
-      `<div class="note-claim-citations">${citations}</div></li>`;
+    const fullClaim = text.truncated
+      ? `<details class="note-claim-full"><summary>Read full claim</summary>` +
+        `<p>${escapeHtml(text.fullText)}</p></details>`
+      : "";
+    return `<li><p>${escapeHtml(text.preview)}</p>` +
+      `<div class="note-claim-citations">${citations}</div>` +
+      `${fullClaim}</li>`;
   }).join("");
   const sources = (page.sources ?? []).map((source) => {
-    const detail = [source.action, sourceLocation(source)].filter(Boolean)
-      .join(" · ");
+    const summaryText = String(source.summary ?? "").trim();
+    const detail = [
+      evidenceActionLabel(source.action),
+      evidenceSourceLocation(source),
+    ].filter(Boolean).join(" · ");
+    const sourceSummary = summaryText
+      ? `<details class="note-source-summary"><summary>Source summary</summary>` +
+        `<p>${escapeHtml(summaryText)}</p></details>`
+      : "";
     return `<li><button type="button" class="note-source-link" ` +
       `data-source-id="${source.id}">${escapeHtml(source.title)}</button>` +
       `<small>${escapeHtml(detail)}</small>` +
-      `<p>${escapeHtml(source.summary)}</p></li>`;
+      `${sourceSummary}</li>`;
   }).join("");
   const related = (page.related ?? []).map((item) =>
     `<li><a href="/?note=${encodeURIComponent(item.id)}" ` +

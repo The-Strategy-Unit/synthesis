@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  compactEvidenceText,
+  evidenceActionLabel,
+  evidenceSourceLocation,
   evidenceSummary,
   initialReaderState,
   reduceReaderState,
@@ -57,6 +60,38 @@ Deno.test("evidence summary distinguishes reviewed links from semantic links", (
       sourceCount: 1,
     },
   );
+});
+
+Deno.test("evidence text stays scannable without discarding the full claim", () => {
+  const longClaim = `A structured claim ${"with evidence ".repeat(30)}`;
+  const compact = compactEvidenceText(longClaim, 80);
+  assert.equal(compact.truncated, true);
+  assert.ok(compact.preview.length <= 81);
+  assert.match(compact.preview, /…$/);
+  assert.equal(compact.fullText, longClaim.trim());
+  assert.deepEqual(compactEvidenceText("  Short\n claim  "), {
+    fullText: "Short claim",
+    preview: "Short claim",
+    truncated: false,
+  });
+});
+
+Deno.test("source evidence uses readable page ranges and actions", () => {
+  assert.equal(
+    evidenceSourceLocation({
+      sourcePages: Array.from({ length: 50 }, (_, index) => index + 1),
+    }),
+    "pages 1–50",
+  );
+  assert.equal(
+    evidenceSourceLocation({ sourcePages: [1, 2, 4] }),
+    "pages 1–2, 4",
+  );
+  assert.equal(evidenceSourceLocation({}), null);
+  assert.equal(evidenceActionLabel("new"), "Added");
+  assert.equal(evidenceActionLabel("merge"), "Updated");
+  assert.equal(evidenceActionLabel("contradict"), "Conflict recorded");
+  assert.equal(evidenceActionLabel("unknown"), null);
 });
 
 Deno.test("reader workspace replaces the note modal and demotes the graph", async () => {
