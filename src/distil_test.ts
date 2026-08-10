@@ -211,7 +211,11 @@ Deno.test("LLM output is validated before integration or consolidation", async (
       distil("Source text", apiBase, "test-key"),
       /LLM response exceeded the output token limit/,
     );
-    assert.equal(fetchCalls, 1, "truncated extraction must not consolidate");
+    assert.equal(
+      fetchCalls,
+      2,
+      "truncated extraction retries once and must not consolidate",
+    );
 
     fetchCalls = 0;
     globalThis.fetch = () => {
@@ -331,10 +335,235 @@ Deno.test("integration guards numeric corrections and near-duplicate pages", asy
 
     const messages = requestBody?.messages as Array<{ content: string }>;
     const payload = JSON.parse(messages[1].content) as {
-      new_notes: Array<{ body: string }>;
+      new_notes: Array<{ body: string; incoming_index: number }>;
     };
+    assert.deepEqual(
+      payload.new_notes.map((note) => note.incoming_index),
+      [0, 1],
+    );
     assert.ok(payload.new_notes[0].body.length > 200);
     assert.match(payload.new_notes[0].body, /6\.5 days rather than 5 days/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("integration reconciles indexed local-model underproduction", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  const newNotes: DistilNote[] = [{
+    title: "Distinct operating model",
+    type: "concept",
+    body: "A distinct operating model coordinates regional analytics work.",
+    tags: ["operations"],
+    links: [],
+  }, {
+    title: "Clinical escalation protocols",
+    type: "concept",
+    body: "The protocol adds a documented escalation contact.",
+    tags: ["clinical"],
+    links: [],
+  }, {
+    title: "Evaluation framework",
+    type: "concept",
+    body: "An evaluation framework measures operational outcomes.",
+    tags: ["evaluation"],
+    links: [],
+  }];
+  const existingNotes = [{
+    id: 8,
+    title: "Clinical escalation protocol",
+    body: "The protocol defines the escalation path.",
+  }, {
+    id: 9,
+    title: "Evaluation methods",
+    body: "Evaluation methods compare operational outcomes.",
+  }];
+
+  try {
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse(JSON.stringify({
+        decisions: [{
+          incoming_index: 0,
+          action: "new",
+        }, {
+          incoming_index: 2,
+          action: "merge",
+          existing_id: 9,
+        }],
+      })));
+    };
+
+    assert.deepEqual(
+      await integrate(
+        newNotes,
+        existingNotes,
+        "http://stub.invalid/v1",
+        "test-key",
+        "test-model",
+      ),
+      [
+        { action: "new" },
+        { action: "merge", existing_id: 8 },
+        { action: "merge", existing_id: 9 },
+      ],
+    );
+    assert.equal(fetchCalls, 2, "incomplete output retries before fallback");
+
+    fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse(JSON.stringify({
+        decisions: [{
+          incoming_index: 0,
+          action: "new",
+        }, {
+          incoming_index: 0,
+          action: "new",
+        }, {
+          incoming_index: 2,
+          action: "merge",
+          existing_id: 9,
+        }],
+      })));
+    };
+    await assert.rejects(
+      integrate(
+        newNotes,
+        existingNotes,
+        "http://stub.invalid/v1",
+        "test-key",
+        "test-model",
+      ),
+      /duplicate incoming_index 0/,
+    );
+    assert.equal(fetchCalls, 2, "duplicate indexes remain a hard failure");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("integration discards ambiguous unindexed underproduction", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  try {
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse(JSON.stringify({
+        decisions: [{ action: "merge", existing_id: 7 }],
+      })));
+    };
+
+    assert.deepEqual(
+      await integrate(
+        [{
+          title: "Operational audit result",
+          type: "concept",
+          body: "The audit reports a stable operational result.",
+          tags: ["audit"],
+          links: [],
+        }, {
+          title: "Unrelated workforce model",
+          type: "concept",
+          body: "A workforce model allocates specialist capacity.",
+          tags: ["workforce"],
+          links: [],
+        }],
+        [{
+          id: 7,
+          title: "Operational audit result",
+          body: "The audit records a stable operational result.",
+        }],
+        "http://stub.invalid/v1",
+        "test-key",
+        "test-model",
+      ),
+      [
+        { action: "merge", existing_id: 7 },
+        { action: "new" },
+      ],
+    );
+    assert.equal(fetchCalls, 2, "ambiguous output retries before fallback");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("integration safely falls back after repeated malformed JSON", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  try {
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse("not JSON"));
+    };
+
+    assert.deepEqual(
+      await integrate(
+        [{
+          title: "Operational audit result",
+          type: "concept",
+          body: "The audit reports a stable operational result.",
+          tags: ["audit"],
+          links: [],
+        }, {
+          title: "Community capacity model",
+          type: "concept",
+          body: "A community model estimates available service capacity.",
+          tags: ["community"],
+          links: [],
+        }],
+        [{
+          id: 7,
+          title: "Operational audit result",
+          body: "The audit records a stable operational result.",
+        }],
+        "http://stub.invalid/v1",
+        "test-key",
+        "test-model",
+      ),
+      [
+        { action: "merge", existing_id: 7 },
+        { action: "new" },
+      ],
+    );
+    assert.equal(fetchCalls, 2, "malformed JSON is retried before fallback");
+
+    fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls++;
+      return Promise.resolve(chatResponse(JSON.stringify({
+        decisions: [{ action: "replace" }, { action: "new" }],
+      })));
+    };
+    await assert.rejects(
+      integrate(
+        [{
+          title: "Operational audit result",
+          type: "concept",
+          body: "The audit reports a stable operational result.",
+          tags: ["audit"],
+          links: [],
+        }, {
+          title: "Community capacity model",
+          type: "concept",
+          body: "A community model estimates available service capacity.",
+          tags: ["community"],
+          links: [],
+        }],
+        [{
+          id: 7,
+          title: "Operational audit result",
+          body: "The audit records a stable operational result.",
+        }],
+        "http://stub.invalid/v1",
+        "test-key",
+        "test-model",
+      ),
+      /action is invalid/,
+    );
+    assert.equal(fetchCalls, 2, "invalid actions remain a hard failure");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -389,6 +618,49 @@ Deno.test("distil permits candidate links before final consolidation", async () 
       2,
       "valid candidate links must not trigger a retry",
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("consolidation safely bounds valid local-model overproduction", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+
+  try {
+    globalThis.fetch = () => {
+      fetchCalls++;
+      if (fetchCalls === 1) {
+        return Promise.resolve(chatResponse(JSON.stringify({
+          items: [{
+            title: "Candidate finding",
+            type: "concept",
+            body: "The source contains durable findings.",
+            tags: ["finding"],
+            links: [],
+          }],
+        })));
+      }
+      const notes = Array.from({ length: 13 }, (_, index) => ({
+        title: `Finding ${index + 1}`,
+        type: "concept",
+        body: `Durable finding ${index + 1}.`,
+        tags: ["finding"],
+        links: index === 0 ? ["Finding 12", "Finding 13"] : [],
+      }));
+      return Promise.resolve(chatResponse(JSON.stringify({ notes })));
+    };
+
+    const result = await distil(
+      "Source text",
+      "http://stub.invalid/v1",
+      "test-key",
+    );
+
+    assert.equal(result.notes.length, 12);
+    assert.equal(result.notes.at(-1)?.title, "Finding 12");
+    assert.deepEqual(result.notes[0].links, ["Finding 12"]);
+    assert.equal(fetchCalls, 2, "valid excess pages should not waste a retry");
   } finally {
     globalThis.fetch = originalFetch;
   }

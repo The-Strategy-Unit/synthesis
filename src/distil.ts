@@ -1,7 +1,11 @@
 // Distil: transcript → extract (small model, parallel) → consolidate (big model)
 
 import { config } from "./config.ts";
-import { parseJsonResponse, structuredChatCompletion } from "./llm.ts";
+import {
+  LlmServiceError,
+  parseJsonResponse,
+  structuredChatCompletion,
+} from "./llm.ts";
 import { validateWikiPage, type WikiPage } from "./wiki.ts";
 import {
   DEFAULT_WIKI_SCHEMA,
@@ -152,7 +156,9 @@ function parseNoteArray(
 ): DistilNote[] {
   if (!Array.isArray(value)) throw new Error(`${context} must be an array`);
   if (value.length === 0 || value.length > maxItems) {
-    throw new Error(`${context} must contain 1-${maxItems} notes`);
+    throw new Error(
+      `${context} must contain 1-${maxItems} notes; received ${value.length}`,
+    );
   }
   const notes = value.map((note, index) =>
     parseNote(note, `${context}[${index}]`)
@@ -217,7 +223,8 @@ const CONSOLIDATE_PROMPT =
 Rules:
 - Merge near-duplicate candidates into single pages.
 - Remove redundant or trivial items.
-- Produce 5-12 final pages.
+- Rank final pages from most to least durable and useful.
+- Produce 5-12 final pages. HARD LIMIT: never return more than 12 notes. If more candidates are useful, keep only the 12 most important.
 - Each title: 2-6 words, descriptive, unique. Titles serve as labels in a knowledge graph.
 - Preserve or correct each page type using only "concept", "entity", or "synthesis".
 - Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
@@ -228,6 +235,22 @@ Rules:
 
 Respond with ONLY JSON, no markdown fences:
 {"notes": [{"title": "...", "type": "concept", "body": "...", "tags": ["..."], "links": ["..."], "source_pages": [1]}]}`;
+
+function parseConsolidatedNotes(value: unknown): DistilNote[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Consolidation response.notes must be an array");
+  }
+  if (value.length > MAX_CANDIDATES) {
+    throw new Error(
+      `Consolidation response.notes exceeds the safe limit of ${MAX_CANDIDATES}; received ${value.length}`,
+    );
+  }
+  return parseNoteArray(
+    value.slice(0, MAX_FINAL_NOTES),
+    "Consolidation response.notes",
+    MAX_FINAL_NOTES,
+  );
+}
 
 function plainSummaryText(value: string): string {
   return value
@@ -299,11 +322,7 @@ async function consolidateCandidates(
         parseJsonResponse(content, "Consolidation response"),
         "Consolidation response",
       );
-      const notes = parseNoteArray(
-        parsed.notes,
-        "Consolidation response.notes",
-        MAX_FINAL_NOTES,
-      );
+      const notes = parseConsolidatedNotes(parsed.notes);
       return {
         summary: sourceSummary(notes),
         notes,
@@ -435,11 +454,11 @@ const INTEGRATE_PROMPT =
 - "merge": the note is a refinement/addition to an existing note — provide the existing note's id
 - "contradict": the note contradicts or challenges an existing note — provide the existing note's id
 
-You MUST respond with ONLY a JSON object (no markdown fences, no commentary). The format is:
+Every new note includes an "incoming_index". Copy that exact index into its decision. You MUST respond with ONLY a JSON object (no markdown fences, no commentary). The format is:
 
-{"decisions": [{"action": "new"}, {"action": "merge", "existing_id": 42}, {"action": "contradict", "existing_id": 17}]}
+{"decisions": [{"incoming_index": 0, "action": "new"}, {"incoming_index": 1, "action": "merge", "existing_id": 42}, {"incoming_index": 2, "action": "contradict", "existing_id": 17}]}
 
-The decisions array must have exactly the same length and order as the input new_notes array.`;
+Return exactly one decision for every incoming_index. Never omit, duplicate, or invent an incoming_index.`;
 
 export interface IntegrationDecision {
   action: "new" | "merge" | "contradict";
@@ -581,6 +600,119 @@ function safeguardIntegrationDecisions(
   });
 }
 
+function parseIntegrationDecisions(
+  value: unknown,
+  expectedCount: number,
+  existingIds: Set<number>,
+  allowIncompleteFallback: boolean,
+): IntegrationDecision[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Integration response.decisions must be an array");
+  }
+  const parsed = value.map((item, responseIndex) => {
+    const decision = asRecord(
+      item,
+      `Integration response.decisions[${responseIndex}]`,
+    );
+    if (
+      decision.action !== "new" && decision.action !== "merge" &&
+      decision.action !== "contradict"
+    ) {
+      throw new Error(
+        `Integration response.decisions[${responseIndex}].action is invalid`,
+      );
+    }
+    let integration: IntegrationDecision;
+    if (decision.action === "new") {
+      if (decision.existing_id !== undefined) {
+        throw new Error(
+          `Integration response.decisions[${responseIndex}] must not include existing_id for action new`,
+        );
+      }
+      integration = { action: "new" };
+    } else {
+      if (
+        !Number.isSafeInteger(decision.existing_id) ||
+        !existingIds.has(decision.existing_id as number)
+      ) {
+        throw new Error(
+          `Integration response.decisions[${responseIndex}].existing_id is not a supplied note ID`,
+        );
+      }
+      integration = {
+        action: decision.action,
+        existing_id: decision.existing_id as number,
+      };
+    }
+    return { incomingIndex: decision.incoming_index, integration };
+  });
+
+  const includesIndexes = parsed.some((decision) =>
+    decision.incomingIndex !== undefined
+  );
+  if (!includesIndexes) {
+    if (parsed.length === expectedCount) {
+      return parsed.map((decision) => decision.integration);
+    }
+    if (
+      !allowIncompleteFallback || parsed.length === 0 ||
+      parsed.length > expectedCount
+    ) {
+      throw new Error(
+        `Integration response returned ${parsed.length} decisions; expected ${expectedCount}`,
+      );
+    }
+    // Without indexes, an omission makes every positional mapping ambiguous.
+    // Default all candidates to new; deterministic safeguards still merge
+    // strong duplicates and preserve numeric contradictions.
+    return Array.from(
+      { length: expectedCount },
+      (): IntegrationDecision => ({ action: "new" }),
+    );
+  }
+
+  const ordered: Array<IntegrationDecision | undefined> = Array(expectedCount);
+  for (let responseIndex = 0; responseIndex < parsed.length; responseIndex++) {
+    const { incomingIndex, integration } = parsed[responseIndex];
+    if (
+      !Number.isSafeInteger(incomingIndex) || Number(incomingIndex) < 0 ||
+      Number(incomingIndex) >= expectedCount
+    ) {
+      throw new Error(
+        `Integration response.decisions[${responseIndex}].incoming_index is invalid`,
+      );
+    }
+    const index = Number(incomingIndex);
+    if (ordered[index] !== undefined) {
+      throw new Error(
+        `Integration response contains duplicate incoming_index ${index}`,
+      );
+    }
+    ordered[index] = integration;
+  }
+  const missing = Array.from(
+    { length: expectedCount },
+    (_, index) => index,
+  ).filter((index) => ordered[index] === undefined);
+  if (missing.length > 0 && !allowIncompleteFallback) {
+    throw new Error(
+      `Integration response omitted incoming_index ${missing.join(", ")}`,
+    );
+  }
+  return Array.from(
+    { length: expectedCount },
+    (_, index) => ordered[index] ?? { action: "new" },
+  );
+}
+
+function isRepeatedMalformedIntegrationJson(error: unknown): boolean {
+  return error instanceof LlmServiceError &&
+    error.message.startsWith(
+      "Integration response was invalid after one retry:",
+    ) && error.cause instanceof LlmServiceError &&
+    error.cause.message === "Integration response was not valid JSON";
+}
+
 export async function integrate(
   newNotes: DistilNote[],
   existingNotes: Array<{ id: number; title: string; body?: string }>,
@@ -594,7 +726,8 @@ export async function integrate(
   }
 
   const userContent = JSON.stringify({
-    new_notes: newNotes.map((n) => ({
+    new_notes: newNotes.map((n, incomingIndex) => ({
+      incoming_index: incomingIndex,
       title: n.title,
       type: n.type,
       body: n.body.slice(0, 1_200),
@@ -608,68 +741,42 @@ export async function integrate(
   });
 
   const existingIds = new Set(existingNotes.map((note) => note.id));
-  const decisions = await structuredChatCompletion(
-    "Integration response",
-    apiBase,
-    apiKey,
-    model,
-    promptWithWikiSchema(INTEGRATE_PROMPT, schema),
-    userContent,
-    {
-      temperature: config.llm.integrateTemperature,
-      maxTokens: config.llm.integrateMaxTokens,
-      jsonMode: true,
-    },
-    (content) => {
-      const parsed = asRecord(
-        parseJsonResponse(content, "Integration response"),
-        "Integration response",
-      );
-      if (!Array.isArray(parsed.decisions)) {
-        throw new Error("Integration response.decisions must be an array");
-      }
-      if (parsed.decisions.length !== newNotes.length) {
-        throw new Error(
-          `Integration response returned ${parsed.decisions.length} decisions; expected ${newNotes.length}`,
+  let parseAttempts = 0;
+  let decisions: IntegrationDecision[];
+  try {
+    decisions = await structuredChatCompletion(
+      "Integration response",
+      apiBase,
+      apiKey,
+      model,
+      promptWithWikiSchema(INTEGRATE_PROMPT, schema),
+      userContent,
+      {
+        temperature: config.llm.integrateTemperature,
+        maxTokens: config.llm.integrateMaxTokens,
+        jsonMode: true,
+      },
+      (content) => {
+        parseAttempts++;
+        const parsed = asRecord(
+          parseJsonResponse(content, "Integration response"),
+          "Integration response",
         );
-      }
-
-      return parsed.decisions.map((value, index): IntegrationDecision => {
-        const decision = asRecord(
-          value,
-          `Integration response.decisions[${index}]`,
+        return parseIntegrationDecisions(
+          parsed.decisions,
+          newNotes.length,
+          existingIds,
+          parseAttempts > 1,
         );
-        if (
-          decision.action !== "new" && decision.action !== "merge" &&
-          decision.action !== "contradict"
-        ) {
-          throw new Error(
-            `Integration response.decisions[${index}].action is invalid`,
-          );
-        }
-        if (decision.action === "new") {
-          if (decision.existing_id !== undefined) {
-            throw new Error(
-              `Integration response.decisions[${index}] must not include existing_id for action new`,
-            );
-          }
-          return { action: "new" };
-        }
-        if (
-          !Number.isSafeInteger(decision.existing_id) ||
-          !existingIds.has(decision.existing_id as number)
-        ) {
-          throw new Error(
-            `Integration response.decisions[${index}].existing_id is not a supplied note ID`,
-          );
-        }
-        return {
-          action: decision.action,
-          existing_id: decision.existing_id as number,
-        };
-      });
-    },
-  );
+      },
+    );
+  } catch (error) {
+    if (!isRepeatedMalformedIntegrationJson(error)) throw error;
+    decisions = Array.from(
+      { length: newNotes.length },
+      (): IntegrationDecision => ({ action: "new" }),
+    );
+  }
   return safeguardIntegrationDecisions(newNotes, existingNotes, decisions);
 }
 
