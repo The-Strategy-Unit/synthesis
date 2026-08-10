@@ -13,6 +13,9 @@ export interface ChatCompletionOptions {
   jsonMode?: boolean;
 }
 
+const MAX_TRUNCATION_RETRY_TOKENS = 16_000;
+const OUTPUT_TOKEN_LIMIT_ERROR = "LLM response exceeded the output token limit";
+
 function asRecord(value: unknown, context: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${context} must be an object`);
@@ -115,7 +118,7 @@ export async function chatCompletion(
     });
   }
   if (choice.finish_reason === "length") {
-    throw new LlmServiceError("LLM response exceeded the output token limit");
+    throw new LlmServiceError(OUTPUT_TOKEN_LIMIT_ERROR);
   }
 
   let message: Record<string, unknown>;
@@ -162,14 +165,48 @@ export async function structuredChatCompletion<T>(
   options: ChatCompletionOptions,
   parse: (content: string) => T,
 ): Promise<T> {
-  const content = await chatCompletion(
-    apiBase,
-    apiKey,
-    model,
-    systemPrompt,
-    userContent,
-    options,
-  );
+  let completionOptions = options;
+  let completionPrompt = systemPrompt;
+  let content: string;
+  try {
+    content = await chatCompletion(
+      apiBase,
+      apiKey,
+      model,
+      completionPrompt,
+      userContent,
+      completionOptions,
+    );
+  } catch (error) {
+    if (
+      !(error instanceof LlmServiceError) ||
+      error.message !== OUTPUT_TOKEN_LIMIT_ERROR
+    ) {
+      throw error;
+    }
+    const currentLimit = options.maxTokens ?? config.llm.maxTokens;
+    const retryLimit = Math.min(
+      MAX_TRUNCATION_RETRY_TOKENS,
+      Math.ceil(currentLimit * 2),
+    );
+    if (retryLimit <= currentLimit) throw error;
+    completionOptions = {
+      ...options,
+      maxTokens: retryLimit,
+      temperature: 0,
+    };
+    completionPrompt = `${systemPrompt}
+
+Your previous response reached its output limit. Return one complete, concise JSON object within the increased token budget. Preserve every required item and field.`;
+    content = await chatCompletion(
+      apiBase,
+      apiKey,
+      model,
+      completionPrompt,
+      userContent,
+      completionOptions,
+    );
+  }
   try {
     return parse(content);
   } catch {
@@ -177,9 +214,9 @@ export async function structuredChatCompletion<T>(
       apiBase,
       apiKey,
       model,
-      `${systemPrompt}\n\nYour previous response failed validation. Return exactly one valid JSON object matching every requested field and limit, with no Markdown fences or commentary.`,
+      `${completionPrompt}\n\nYour previous response failed validation. Return exactly one valid JSON object matching every requested field and limit, with no Markdown fences or commentary.`,
       userContent,
-      { ...options, temperature: 0 },
+      { ...completionOptions, temperature: 0 },
     );
     try {
       return parse(corrected);

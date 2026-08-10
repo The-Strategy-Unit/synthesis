@@ -155,3 +155,68 @@ Deno.test("structured chat retries validation once but not provider failures", a
     globalThis.fetch = originalFetch;
   }
 });
+
+Deno.test("structured chat retries truncated output with a bounded budget", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  const bodies: Array<Record<string, unknown>> = [];
+  const parse = (content: string) =>
+    parseJsonResponse(content, "Test response") as { ok: boolean };
+  try {
+    globalThis.fetch = (_input, init) => {
+      calls++;
+      bodies.push(JSON.parse(String(init?.body)));
+      return Promise.resolve(
+        calls === 1
+          ? completion('{"ok":', "length")
+          : completion('{"ok":true}'),
+      );
+    };
+
+    assert.deepEqual(
+      await structuredChatCompletion(
+        "Test response",
+        "https://provider.example/v1",
+        "secret",
+        "model",
+        "System",
+        "User",
+        { jsonMode: true, maxTokens: 2_000, temperature: 0.4 },
+        parse,
+      ),
+      { ok: true },
+    );
+    assert.equal(calls, 2);
+    assert.equal(bodies[0].max_tokens, 2_000);
+    assert.equal(bodies[1].max_tokens, 4_000);
+    assert.equal(bodies[1].temperature, 0);
+    assert.match(
+      JSON.stringify(bodies[1].messages),
+      /previous response reached its output limit/,
+    );
+
+    calls = 0;
+    bodies.length = 0;
+    globalThis.fetch = (_input, init) => {
+      calls++;
+      bodies.push(JSON.parse(String(init?.body)));
+      return Promise.resolve(completion('{"ok":', "length"));
+    };
+    await assert.rejects(
+      structuredChatCompletion(
+        "Test response",
+        "https://provider.example/v1",
+        "secret",
+        "model",
+        "System",
+        "User",
+        { jsonMode: true, maxTokens: 16_000 },
+        parse,
+      ),
+      /exceeded the output token limit/,
+    );
+    assert.equal(calls, 1, "the hard cap prevents unbounded retries");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
