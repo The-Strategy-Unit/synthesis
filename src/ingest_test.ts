@@ -1,12 +1,40 @@
 import assert from "node:assert/strict";
 
+import { defaultYtDlpExecutable } from "./config.ts";
+import { ingestText, parseVtt } from "./ingest.ts";
 import {
-  ingestText,
   normalizeYouTubePlaylistInput,
   normalizeYouTubeVideoInput,
-  parseVtt,
   validateYouTubeUrl,
-} from "./ingest.ts";
+} from "./youtube_url.ts";
+
+Deno.test("yt-dlp uses the platform executable name", () => {
+  const missing = () => false;
+  assert.equal(
+    defaultYtDlpExecutable(
+      "windows",
+      String.raw`C:\demo\synthesis.exe`,
+      missing,
+    ),
+    "yt-dlp.exe",
+  );
+  assert.equal(
+    defaultYtDlpExecutable("linux", "/demo/synthesis", missing),
+    "yt-dlp",
+  );
+  assert.equal(
+    defaultYtDlpExecutable("darwin", "/demo/synthesis", missing),
+    "yt-dlp",
+  );
+  assert.equal(
+    defaultYtDlpExecutable(
+      "windows",
+      String.raw`C:\demo\synthesis.exe`,
+      (path) => path === String.raw`C:\demo\yt-dlp.exe`,
+    ),
+    String.raw`C:\demo\yt-dlp.exe`,
+  );
+});
 
 Deno.test("validateYouTubeUrl accepts canonical HTTPS YouTube hosts", () => {
   const accepted = [

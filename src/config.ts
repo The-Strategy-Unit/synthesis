@@ -1,6 +1,8 @@
 // Central configuration — all settings in one place.
 // Values can be overridden via environment variables, with validation.
 
+import { posix, win32 } from "node:path";
+
 type ReasoningEffort = "high" | "medium" | "low" | "max" | "none";
 
 function envValue(key: string): string | undefined {
@@ -102,6 +104,23 @@ function defaultAppDataDir(): string {
     default:
       return `${envValue("XDG_CONFIG_HOME") ?? `${home}/.config`}/synthesis`;
   }
+}
+
+export function defaultYtDlpExecutable(
+  os: typeof Deno.build.os = Deno.build.os,
+  executablePath: string = Deno.execPath(),
+  isFile: (path: string) => boolean = (path) => {
+    try {
+      return Deno.statSync(path).isFile;
+    } catch {
+      return false;
+    }
+  },
+): string {
+  const paths = os === "windows" ? win32 : posix;
+  const fileName = os === "windows" ? "yt-dlp.exe" : "yt-dlp";
+  const adjacent = paths.join(paths.dirname(executablePath), fileName);
+  return isFile(adjacent) ? adjacent : fileName;
 }
 
 export const config = {
@@ -269,7 +288,7 @@ export const config = {
   ingest: {
     maxChars: Math.max(1000, envInt("SYNTHESIS_MAX_CHARS", 12000)),
     overlap: envClamped("SYNTHESIS_CHUNK_OVERLAP", 0, 2000, 500),
-    ytDlpPath: env("SYNTHESIS_YT_DLP_PATH", "yt-dlp"),
+    ytDlpPath: env("SYNTHESIS_YT_DLP_PATH", defaultYtDlpExecutable()),
     ytDlpLang: env("SYNTHESIS_SUBTITLES_LANG", "en"),
     playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", true),
     maxPlaylistItems: envIntClamped(
