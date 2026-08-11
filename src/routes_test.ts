@@ -184,8 +184,33 @@ routeTest(
 
         const connectionChecks: string[] = [];
         globalThis.fetch = (input) => {
-          connectionChecks.push(String(input));
-          return Promise.resolve(Response.json({ data: [] }));
+          const url = String(input);
+          connectionChecks.push(url);
+          if (url.endsWith("/models")) {
+            return Promise.resolve(Response.json({
+              data: [{
+                id: url.startsWith(profile.embedding.apiBase)
+                  ? profile.embedding.model
+                  : profile.llm.model,
+              }],
+            }));
+          }
+          if (url.endsWith("/chat/completions")) {
+            return Promise.resolve(Response.json({
+              choices: [{
+                finish_reason: "stop",
+                message: { content: '{"ok":true}' },
+              }],
+            }));
+          }
+          if (url.endsWith("/embeddings")) {
+            return Promise.resolve(Response.json({
+              data: [{
+                embedding: Array(config.embed.dimensions).fill(0),
+              }],
+            }));
+          }
+          throw new Error(`Unexpected provider request: ${url}`);
         };
         const profile = {
           id: "default",
@@ -219,7 +244,9 @@ routeTest(
           /llm-secret|embedding-secret/,
         );
         assert.deepEqual(connectionChecks.sort(), [
+          "https://embed.example.test/v1/embeddings",
           "https://embed.example.test/v1/models",
+          "https://llm.example.test/v1/chat/completions",
           "https://llm.example.test/v1/models",
         ]);
         assert.equal(secrets.get("llm"), "llm-secret");
@@ -553,18 +580,23 @@ routeTest(
 );
 
 routeTest("playlist ingestion is hidden while disabled", async () => {
-  await withTempHandler(async (handle) => {
-    assert.equal(config.ingest.playlistEnabled, false);
-    const response = await handle(
-      new Request("http://localhost/api/ingest/playlist", {
-        method: "POST",
-        headers: mutationHeaders(),
-      }),
-    );
+  const original = config.ingest.playlistEnabled;
+  try {
+    config.ingest.playlistEnabled = false;
+    await withTempHandler(async (handle) => {
+      const response = await handle(
+        new Request("http://localhost/api/ingest/playlist", {
+          method: "POST",
+          headers: mutationHeaders(),
+        }),
+      );
 
-    assert.equal(response.status, 404);
-    assert.equal((await response.json()).code, "NOT_FOUND");
-  });
+      assert.equal(response.status, 404);
+      assert.equal((await response.json()).code, "NOT_FOUND");
+    });
+  } finally {
+    config.ingest.playlistEnabled = original;
+  }
 });
 
 routeTest(
@@ -775,7 +807,7 @@ routeTest(
         await Deno.mkdir(`${dir}/notes`, { recursive: true });
 
         const embedding = Array.from(
-          { length: 4096 },
+          { length: config.embed.dimensions },
           (_, index) => index === 0 ? 1 : 0,
         );
         const modelRequests: Array<{ url: string; model: unknown }> = [];

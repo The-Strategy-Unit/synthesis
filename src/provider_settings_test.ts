@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { config } from "./config.ts";
 import type { ProviderProfile } from "./provider_profile.ts";
 import {
   configureProviders,
@@ -17,7 +18,7 @@ const profile: ProviderProfile = {
   embedding: {
     apiBase: "https://embed.example.test/v1",
     model: "embedding-model",
-    dimensions: 4096,
+    dimensions: config.embed.dimensions,
   },
 };
 
@@ -37,6 +38,27 @@ class MemorySecrets implements SecretStore {
     this.values.delete(secret);
     return Promise.resolve();
   }
+}
+
+function compatibleProviderResponse(input: string | URL | Request): Response {
+  const url = String(input);
+  if (url.endsWith("/models")) {
+    const id = url.startsWith(profile.embedding.apiBase)
+      ? profile.embedding.model
+      : profile.llm.model;
+    return Response.json({ data: [{ id }] });
+  }
+  if (url.endsWith("/chat/completions")) {
+    return Response.json({
+      choices: [{ finish_reason: "stop", message: { content: '{"ok":true}' } }],
+    });
+  }
+  if (url.endsWith("/embeddings")) {
+    return Response.json({
+      data: [{ embedding: Array(config.embed.dimensions).fill(0) }],
+    });
+  }
+  throw new Error(`Unexpected provider request: ${url}`);
 }
 
 Deno.test("provider settings status never returns secret values", async () => {
@@ -76,7 +98,7 @@ Deno.test("provider settings status never returns secret values", async () => {
   assert.doesNotMatch(JSON.stringify(status), /secret-value/);
 });
 
-Deno.test("provider configuration checks connections before saving", async () => {
+Deno.test("provider configuration checks compatibility before saving", async () => {
   const originalFetch = globalThis.fetch;
   const secrets = new MemorySecrets();
   const calls: string[] = [];
@@ -88,7 +110,7 @@ Deno.test("provider configuration checks connections before saving", async () =>
         new Headers(init?.headers).get("Authorization") ?? "",
         /^Bearer (llm|embedding)-key$/,
       );
-      return Promise.resolve(Response.json({ data: [] }));
+      return Promise.resolve(compatibleProviderResponse(input));
     };
     const status = await configureProviders(
       {
@@ -106,7 +128,9 @@ Deno.test("provider configuration checks connections before saving", async () =>
       },
     );
     assert.deepEqual(calls.sort(), [
+      "https://embed.example.test/v1/embeddings",
       "https://embed.example.test/v1/models",
+      "https://llm.example.test/v1/chat/completions",
       "https://llm.example.test/v1/models",
     ]);
     assert.deepEqual(saved, profile);
@@ -124,11 +148,11 @@ Deno.test("provider updates retain stored keys when key fields are empty", async
   secrets.values.set("embedding", "stored-embedding-key");
   const authorizations: string[] = [];
   try {
-    globalThis.fetch = (_input, init) => {
+    globalThis.fetch = (input, init) => {
       authorizations.push(
         new Headers(init?.headers).get("Authorization") ?? "",
       );
-      return Promise.resolve(Response.json({ data: [] }));
+      return Promise.resolve(compatibleProviderResponse(input));
     };
     await configureProviders(
       {
@@ -145,6 +169,8 @@ Deno.test("provider updates retain stored keys when key fields are empty", async
 
     assert.deepEqual(authorizations.sort(), [
       "Bearer stored-embedding-key",
+      "Bearer stored-embedding-key",
+      "Bearer stored-llm-key",
       "Bearer stored-llm-key",
     ]);
     assert.equal(await secrets.get("llm"), "stored-llm-key");
@@ -160,7 +186,8 @@ Deno.test("provider configuration restores secrets when profile save fails", asy
   secrets.values.set("llm", "old-llm-key");
   secrets.values.set("embedding", "old-embedding-key");
   try {
-    globalThis.fetch = () => Promise.resolve(Response.json({ data: [] }));
+    globalThis.fetch = (input) =>
+      Promise.resolve(compatibleProviderResponse(input));
     await assert.rejects(
       configureProviders(
         {
@@ -181,4 +208,30 @@ Deno.test("provider configuration restores secrets when profile save fails", asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+Deno.test("provider configuration rejects incompatible vault dimensions", async () => {
+  const secrets = new MemorySecrets();
+  await assert.rejects(
+    configureProviders(
+      {
+        load: () => Promise.resolve(null),
+        save: () => Promise.reject(new Error("must not save")),
+      },
+      secrets,
+      {
+        profile: {
+          ...profile,
+          embedding: {
+            ...profile.embedding,
+            dimensions: config.embed.dimensions === 768 ? 4096 : 768,
+          },
+        },
+        llmApiKey: "llm-key",
+        embeddingApiKey: "embedding-key",
+      },
+    ),
+    /must match this vault/,
+  );
+  assert.equal(secrets.values.size, 0);
 });

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  findClaimCitations,
+  findSourceReferenceHashes,
+  findSourceReferencePages,
   parseWikiPage,
   renderWikiIndex,
   renderWikiLink,
@@ -84,6 +87,7 @@ links: ["Claim One"]
 # Evidence Map
 
 The available evidence supports the main claim.
+<!-- synthesis-claim:${hash} -->
 
 ## Related
 
@@ -97,12 +101,33 @@ The available evidence supports the main claim.
 });
 
 Deno.test("rendered wiki pages parse back into the same domain value", () => {
+  const hash = "c".repeat(64);
   const rendered = renderWikiPage(page, [{
     title: "Research report",
-    contentHash: "c".repeat(64),
+    contentHash: hash,
   }]);
   assert.deepEqual(parseWikiPage(rendered), page);
   assert.deepEqual(parseWikiPage(rendered.replaceAll("\n", "\r\n")), page);
+  assert.deepEqual(findClaimCitations(rendered), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+
+  const legacy = rendered.replace(`\n<!-- synthesis-claim:${hash} -->`, "");
+  assert.deepEqual(findClaimCitations(legacy), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+  assert.throws(
+    () =>
+      findClaimCitations(
+        rendered.replace(
+          `synthesis-claim:${hash}`,
+          `synthesis-claim:${"d".repeat(64)}`,
+        ),
+      ),
+    /source absent from the Sources section/,
+  );
 });
 
 Deno.test("wiki parsing rejects ambiguous or inconsistent Markdown", () => {
@@ -121,6 +146,14 @@ Deno.test("wiki parsing rejects ambiguous or inconsistent Markdown", () => {
   assert.throws(
     () => validateWikiPage({ ...page, body: "Claim.\n\n## Sources\n\nManual" }),
     /compiler-managed/,
+  );
+  assert.throws(
+    () =>
+      validateWikiPage({
+        ...page,
+        body: `Claim.\n<!-- synthesis-claim:${"a".repeat(64)} -->`,
+      }),
+    /compiler-managed claim citations/,
   );
 });
 
@@ -146,6 +179,15 @@ Deno.test("wiki sources require valid hashes and HTTP URLs", () => {
   );
   assert.throws(
     () =>
+      renderWikiPage(
+        page,
+        [{ title: "Source", contentHash: "a".repeat(64) }],
+        [{ text: page.body, sourceHashes: ["b".repeat(64)] }],
+      ),
+    /must cite sources present/,
+  );
+  assert.throws(
+    () =>
       renderWikiPage(page, [{
         title: "Source",
         url: "file:///private/source.txt",
@@ -153,6 +195,49 @@ Deno.test("wiki sources require valid hashes and HTTP URLs", () => {
       }]),
     /HTTP or HTTPS/,
   );
+
+  const pageAware = renderWikiPage(page, [{
+    title: "Page-aware report",
+    contentHash: "c".repeat(64),
+    pages: [7, 2, 7],
+  }]);
+  assert.match(pageAware, /Page-aware report; pages: 2, 7; SHA-256:/);
+  assert.deepEqual(
+    findSourceReferencePages(pageAware, "c".repeat(64)),
+    [2, 7],
+  );
+  assert.equal(
+    findSourceReferencePages(pageAware, "d".repeat(64)),
+    undefined,
+  );
+  const secondHash = "d".repeat(64);
+  const withMultipleSources = renderWikiPage(page, [{
+    title: "First source",
+    contentHash: "c".repeat(64),
+  }, {
+    title: "Second source",
+    contentHash: secondHash,
+  }]);
+  assert.deepEqual(
+    findSourceReferenceHashes(
+      `${withMultipleSources}
+<!-- synthesis-source:${secondHash} -->
+<!-- synthesis-source:${"E".repeat(64)} -->
+<!-- synthesis-source:invalid -->`,
+    ),
+    ["c".repeat(64), secondHash],
+  );
+  for (const pages of [[], [0], [1.5]]) {
+    assert.throws(
+      () =>
+        renderWikiPage(page, [{
+          title: "Invalid pages",
+          contentHash: "c".repeat(64),
+          pages,
+        }]),
+      /Source pages/,
+    );
+  }
 });
 
 Deno.test("wiki indexes group and sort pages deterministically", () => {

@@ -59,11 +59,11 @@ Deno.test({
       db = new FailingAttachDb(`${dir}/synthesis.db`);
 
       const embedding = Array.from(
-        { length: 4096 },
+        { length: config.embed.dimensions },
         (_, index) => index === 0 ? 1 : 0,
       );
       const failedEmbedding = Array.from(
-        { length: 4096 },
+        { length: config.embed.dimensions },
         (_, index) => index === 1 ? 1 : 0,
       );
       const requests: Array<{ url: string; body: Record<string, unknown> }> =

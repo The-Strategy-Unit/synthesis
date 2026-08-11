@@ -21,10 +21,7 @@ function validAnswer() {
     citations: [7, 11],
     suggested_page: {
       title: "Treatment evidence synthesis",
-      type: "synthesis",
-      body: "The evidence is mixed, with supporting and conflicting studies.",
       tags: ["treatment", "evidence"],
-      links: ["Treatment effect", "Confidence assessment"],
     },
   };
 }
@@ -35,37 +32,55 @@ Deno.test("wiki answers retain only supplied citations", () => {
     {
       answer: validAnswer().answer,
       citations: [7, 11],
-      suggestedPage: validAnswer().suggested_page,
+      suggestedPage: {
+        title: "Treatment evidence synthesis",
+        type: "synthesis",
+        body: validAnswer().answer,
+        tags: ["treatment", "evidence"],
+        links: ["Treatment effect", "Confidence assessment"],
+      },
     },
   );
 });
 
-Deno.test("wiki answers reject ungrounded or divergent write-back", () => {
+Deno.test("wiki answers reject ungrounded citations or invalid metadata", () => {
   const invalidAnswers = [
     { ...validAnswer(), citations: [] },
     { ...validAnswer(), citations: [999] },
     {
       ...validAnswer(),
-      suggested_page: { ...validAnswer().suggested_page, type: "concept" },
+      suggested_page: { tags: ["treatment"] },
     },
     {
       ...validAnswer(),
       suggested_page: {
         ...validAnswer().suggested_page,
-        body: "A different unreviewed answer.",
-      },
-    },
-    {
-      ...validAnswer(),
-      suggested_page: {
-        ...validAnswer().suggested_page,
-        links: ["Treatment effect"],
+        tags: "treatment",
       },
     },
   ];
   for (const answer of invalidAnswers) {
     assert.throws(() => validateWikiAnswer(answer, pages));
   }
+});
+
+Deno.test("wiki answer write-back is derived from validated claims", () => {
+  const result = validateWikiAnswer({
+    ...validAnswer(),
+    suggested_page: {
+      ...validAnswer().suggested_page,
+      type: "concept",
+      body: "A different unreviewed answer.",
+      links: ["Unsupported page"],
+    },
+  }, pages);
+
+  assert.equal(result.suggestedPage.type, "synthesis");
+  assert.equal(result.suggestedPage.body, result.answer);
+  assert.deepEqual(result.suggestedPage.links, [
+    "Treatment effect",
+    "Confidence assessment",
+  ]);
 });
 
 Deno.test("answerWiki sends bounded context and validates provider output", async () => {
@@ -120,7 +135,7 @@ Deno.test("answerWiki rejects malformed provider responses", async () => {
         "key",
         "model",
       ),
-      /choices must be a non-empty array/,
+      /choices must contain a completion/,
     );
   } finally {
     globalThis.fetch = originalFetch;

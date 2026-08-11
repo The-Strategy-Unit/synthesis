@@ -48,7 +48,8 @@ function requiredText(
 
 function isLoopbackHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
-  return host === "localhost" || host === "::1" || host === "127.0.0.1";
+  return host === "localhost" || host === "::1" || host === "[::1]" ||
+    host === "127.0.0.1";
 }
 
 /** Normalise a safe OpenAI-compatible base URL. */

@@ -51,6 +51,17 @@ Deno.test("provider endpoints reject unsafe locations", () => {
   }
 });
 
+Deno.test("provider endpoints accept IPv4 and IPv6 loopback HTTP", () => {
+  assert.equal(
+    validateApiBase("http://127.0.0.1:11434/v1", "apiBase"),
+    "http://127.0.0.1:11434/v1",
+  );
+  assert.equal(
+    validateApiBase("http://[::1]:11434/v1", "apiBase"),
+    "http://[::1]:11434/v1",
+  );
+});
+
 Deno.test("provider profiles require a supported embedding dimension", () => {
   for (const dimensions of [63, 32769, 1024.5, "1024"]) {
     assert.throws(

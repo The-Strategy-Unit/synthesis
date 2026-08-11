@@ -1,4 +1,5 @@
 import { config } from "./config.ts";
+import { chatCompletion, parseJsonResponse } from "./llm.ts";
 import type { ProviderProfileStore } from "./provider_profile_store.ts";
 import type { ProviderSecret, SecretStore } from "./secret_store.ts";
 
@@ -13,6 +14,35 @@ export interface ActiveProviders {
     rewriteModel: string;
   };
   embedding: { apiBase: string; apiKey: string; model: string };
+}
+
+export type ProviderMode = "local" | "remote";
+
+export interface ProviderProbe {
+  attempted: boolean;
+  ok: boolean;
+  latencyMs: number | null;
+  error: string | null;
+}
+
+export interface ProviderDiagnostics {
+  mode: ProviderMode;
+  source: ActiveProviders["source"];
+  ready: boolean;
+  chat: {
+    apiBase: string;
+    requiredModels: string[];
+    missingModels: string[];
+    probe: ProviderProbe;
+  };
+  embedding: {
+    apiBase: string;
+    requiredModels: string[];
+    missingModels: string[];
+    expectedDimensions: number;
+    actualDimensions: number | null;
+    probe: ProviderProbe;
+  };
 }
 
 export class ProviderRuntimeError extends Error {
@@ -48,6 +78,28 @@ export function environmentProviders(): ActiveProviders {
       model: config.embed.model,
     },
   };
+}
+
+function isLoopbackApiBase(apiBase: string): boolean {
+  try {
+    const host = new URL(apiBase).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" ||
+      host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+export function providerMode(
+  providers: {
+    llm: { apiBase: string };
+    embedding: { apiBase: string };
+  },
+): ProviderMode {
+  return isLoopbackApiBase(providers.llm.apiBase) &&
+      isLoopbackApiBase(providers.embedding.apiBase)
+    ? "local"
+    : "remote";
 }
 
 /** Resolve a saved desktop profile, or preserve environment configuration. */
@@ -94,7 +146,7 @@ export async function checkProviderConnection(
   apiBase: string,
   apiKey: string,
   timeoutMs = config.security.modelTimeoutMs,
-): Promise<void> {
+): Promise<string[]> {
   let response: Response;
   try {
     response = await fetch(`${apiBase}/models`, {
@@ -114,5 +166,221 @@ export async function checkProviderConnection(
       `Provider rejected connection (${response.status})`,
     );
   }
-  await response.body?.cancel();
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ProviderRuntimeError("Provider returned an invalid model list");
+  }
+  if (!payload || typeof payload !== "object") {
+    throw new ProviderRuntimeError("Provider returned an invalid model list");
+  }
+  const data = (payload as Record<string, unknown>).data;
+  if (!Array.isArray(data)) {
+    throw new ProviderRuntimeError("Provider returned an invalid model list");
+  }
+  return [
+    ...new Set(data.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const id = (item as Record<string, unknown>).id;
+      return typeof id === "string" && id.trim() ? [id.trim()] : [];
+    })),
+  ];
+}
+
+function skippedProbe(): ProviderProbe {
+  return {
+    attempted: false,
+    ok: false,
+    latencyMs: null,
+    error: null,
+  };
+}
+
+function failedProbe(startedAt: number, error: unknown): ProviderProbe {
+  return {
+    attempted: true,
+    ok: false,
+    latencyMs: Math.round(performance.now() - startedAt),
+    error: error instanceof Error
+      ? error.message
+      : "Compatibility probe failed",
+  };
+}
+
+async function probeChatProvider(
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<ProviderProbe> {
+  const startedAt = performance.now();
+  try {
+    const content = await chatCompletion(
+      apiBase,
+      apiKey,
+      model,
+      "Return exactly one JSON object and no commentary.",
+      'Reply with {"ok":true}.',
+      { temperature: 0, maxTokens: 32, jsonMode: true },
+    );
+    const parsed = parseJsonResponse(content, "Provider chat probe");
+    if (
+      !parsed || typeof parsed !== "object" ||
+      (parsed as Record<string, unknown>).ok !== true
+    ) {
+      throw new ProviderRuntimeError(
+        "Chat model did not follow the required JSON response format",
+      );
+    }
+    return {
+      attempted: true,
+      ok: true,
+      latencyMs: Math.round(performance.now() - startedAt),
+      error: null,
+    };
+  } catch (error) {
+    return failedProbe(startedAt, error);
+  }
+}
+
+async function probeEmbeddingProvider(
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<{ probe: ProviderProbe; dimensions: number | null }> {
+  const startedAt = performance.now();
+  let dimensions: number | null = null;
+  try {
+    const response = await fetch(`${apiBase}/embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        input: "Synthesis provider compatibility check",
+      }),
+      signal: AbortSignal.timeout(config.security.modelTimeoutMs),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new ProviderRuntimeError(
+        `Embedding model rejected the compatibility check (${response.status})`,
+      );
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ProviderRuntimeError(
+        "Embedding model returned an invalid response",
+      );
+    }
+    const embedding = (payload as {
+      data?: Array<{ embedding?: unknown }>;
+    })?.data?.[0]?.embedding;
+    if (
+      !Array.isArray(embedding) || embedding.length === 0 ||
+      !embedding.every((value) =>
+        typeof value === "number" && Number.isFinite(value)
+      )
+    ) {
+      throw new ProviderRuntimeError(
+        "Embedding model returned an invalid vector",
+      );
+    }
+    dimensions = embedding.length;
+    if (dimensions !== config.embed.dimensions) {
+      throw new ProviderRuntimeError(
+        `Embedding model returned ${dimensions} dimensions; this vault requires ${config.embed.dimensions}`,
+      );
+    }
+    return {
+      dimensions,
+      probe: {
+        attempted: true,
+        ok: true,
+        latencyMs: Math.round(performance.now() - startedAt),
+        error: null,
+      },
+    };
+  } catch (error) {
+    return {
+      dimensions,
+      probe: failedProbe(startedAt, error),
+    };
+  }
+}
+
+export async function diagnoseProviders(
+  providers: ActiveProviders,
+): Promise<ProviderDiagnostics> {
+  const requiredChatModels = [
+    ...new Set([
+      providers.llm.extractModel,
+      providers.llm.consolidateModel,
+      providers.llm.integrateModel,
+      providers.llm.rewriteModel,
+    ]),
+  ];
+  const requiredEmbeddingModels = [providers.embedding.model];
+  const sameEndpoint = providers.llm.apiBase === providers.embedding.apiBase &&
+    providers.llm.apiKey === providers.embedding.apiKey;
+  const [chatModels, embeddingModels] = sameEndpoint
+    ? await checkProviderConnection(
+      providers.llm.apiBase,
+      providers.llm.apiKey,
+    ).then((models) => [models, models])
+    : await Promise.all([
+      checkProviderConnection(providers.llm.apiBase, providers.llm.apiKey),
+      checkProviderConnection(
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+      ),
+    ]);
+  const chatAvailable = new Set(chatModels);
+  const embeddingAvailable = new Set(embeddingModels);
+  const missingChat = requiredChatModels.filter((model) =>
+    !chatAvailable.has(model)
+  );
+  const missingEmbedding = requiredEmbeddingModels.filter((model) =>
+    !embeddingAvailable.has(model)
+  );
+  const [chatProbe, embeddingResult] = await Promise.all([
+    missingChat.length === 0
+      ? probeChatProvider(
+        providers.llm.apiBase,
+        providers.llm.apiKey,
+        providers.llm.consolidateModel,
+      )
+      : Promise.resolve(skippedProbe()),
+    missingEmbedding.length === 0
+      ? probeEmbeddingProvider(
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+        providers.embedding.model,
+      )
+      : Promise.resolve({ probe: skippedProbe(), dimensions: null }),
+  ]);
+  return {
+    mode: providerMode(providers),
+    source: providers.source,
+    ready: missingChat.length === 0 && missingEmbedding.length === 0 &&
+      chatProbe.ok && embeddingResult.probe.ok,
+    chat: {
+      apiBase: providers.llm.apiBase,
+      requiredModels: requiredChatModels,
+      missingModels: missingChat,
+      probe: chatProbe,
+    },
+    embedding: {
+      apiBase: providers.embedding.apiBase,
+      requiredModels: requiredEmbeddingModels,
+      missingModels: missingEmbedding,
+      expectedDimensions: config.embed.dimensions,
+      actualDimensions: embeddingResult.dimensions,
+      probe: embeddingResult.probe,
+    },
+  };
 }

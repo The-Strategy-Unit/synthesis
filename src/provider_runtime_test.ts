@@ -4,6 +4,9 @@ import { config } from "./config.ts";
 import type { ProviderProfile } from "./provider_profile.ts";
 import {
   checkProviderConnection,
+  diagnoseProviders,
+  environmentProviders,
+  providerMode,
   ProviderRuntimeError,
   resolveActiveProviders,
 } from "./provider_runtime.ts";
@@ -99,7 +102,13 @@ Deno.test("provider health check uses /models and redacts transport failures", a
       assert.deepEqual(init?.headers, { Authorization: "Bearer secret" });
       return Promise.resolve(Response.json({ data: [] }));
     };
-    await checkProviderConnection("https://api.example.test/v1", "secret");
+    assert.deepEqual(
+      await checkProviderConnection(
+        "https://api.example.test/v1",
+        "secret",
+      ),
+      [],
+    );
 
     globalThis.fetch = () =>
       Promise.resolve(new Response(null, { status: 401 }));
@@ -112,6 +121,115 @@ Deno.test("provider health check uses /models and redacts transport failures", a
     await assert.rejects(
       checkProviderConnection("https://api.example.test/v1", "secret"),
       ProviderRuntimeError,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("provider diagnostics identify local mode and missing models", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const providers = environmentProviders();
+    assert.equal(providerMode(providers), "local");
+    assert.equal(
+      providerMode({
+        llm: { apiBase: "http://[::1]:11434/v1" },
+        embedding: { apiBase: "http://[::1]:11434/v1" },
+      }),
+      "local",
+    );
+    assert.equal(
+      providerMode({
+        llm: { ...providers.llm, apiBase: "https://llm.example.test/v1" },
+        embedding: providers.embedding,
+      }),
+      "remote",
+    );
+
+    let calls = 0;
+    globalThis.fetch = () => {
+      calls++;
+      return Promise.resolve(Response.json({ data: [] }));
+    };
+    const missing = await diagnoseProviders(providers);
+    assert.equal(calls, 1, "a shared Ollama endpoint should be checked once");
+    assert.equal(missing.mode, "local");
+    assert.equal(missing.ready, false);
+    assert.equal(missing.chat.probe.attempted, false);
+    assert.equal(missing.embedding.probe.attempted, false);
+    assert.deepEqual(missing.embedding.missingModels, [
+      providers.embedding.model,
+    ]);
+    assert.doesNotMatch(JSON.stringify(missing), /ollama.*key/i);
+
+    const availableModels = [
+      ...new Set([
+        providers.llm.extractModel,
+        providers.llm.consolidateModel,
+        providers.llm.integrateModel,
+        providers.llm.rewriteModel,
+        providers.embedding.model,
+      ]),
+    ].map((id) => ({ id }));
+    globalThis.fetch = (input) => {
+      const url = String(input);
+      if (url.endsWith("/models")) {
+        return Promise.resolve(Response.json({ data: availableModels }));
+      }
+      if (url.endsWith("/chat/completions")) {
+        return Promise.resolve(Response.json({
+          choices: [{
+            finish_reason: "stop",
+            message: { content: '{"ok":true}' },
+          }],
+        }));
+      }
+      if (url.endsWith("/embeddings")) {
+        return Promise.resolve(Response.json({
+          data: [{ embedding: Array(config.embed.dimensions).fill(0) }],
+        }));
+      }
+      throw new Error(`Unexpected provider URL ${url}`);
+    };
+    const ready = await diagnoseProviders(providers);
+    assert.equal(ready.ready, true);
+    assert.equal(ready.chat.probe.ok, true);
+    assert.equal(ready.embedding.probe.ok, true);
+    assert.equal(ready.embedding.actualDimensions, config.embed.dimensions);
+    assert.equal(ready.embedding.expectedDimensions, config.embed.dimensions);
+    assert.equal(typeof ready.chat.probe.latencyMs, "number");
+    assert.equal(typeof ready.embedding.probe.latencyMs, "number");
+
+    globalThis.fetch = (input) => {
+      const url = String(input);
+      if (url.endsWith("/models")) {
+        return Promise.resolve(Response.json({ data: availableModels }));
+      }
+      if (url.endsWith("/chat/completions")) {
+        return Promise.resolve(Response.json({
+          choices: [{
+            finish_reason: "stop",
+            message: { content: '{"ok":true}' },
+          }],
+        }));
+      }
+      return Promise.resolve(Response.json({
+        data: [{ embedding: Array(64).fill(0) }],
+      }));
+    };
+    const incompatible = await diagnoseProviders(providers);
+    assert.equal(incompatible.ready, false);
+    assert.equal(incompatible.embedding.actualDimensions, 64);
+    assert.match(
+      incompatible.embedding.probe.error ?? "",
+      /returned 64 dimensions/,
+    );
+
+    globalThis.fetch = () => Promise.resolve(Response.json({ models: [] }));
+    await assert.rejects(
+      checkProviderConnection(providers.llm.apiBase, providers.llm.apiKey),
+      /invalid model list/,
     );
   } finally {
     globalThis.fetch = originalFetch;

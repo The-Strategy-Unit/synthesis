@@ -4,6 +4,23 @@ import { load } from "sqlite-vec";
 import { config } from "./config.ts";
 
 const EMBEDDING_DIM = config.embed.dimensions;
+const RECIPROCAL_RANK_OFFSET = 60;
+
+function normalizedSearchText(value: string): string {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("en-US").replace(
+    /\s+/g,
+    " ",
+  );
+}
+
+function titleMatchBoost(query: string, title: string): number {
+  const normalizedQuery = normalizedSearchText(query);
+  const normalizedTitle = normalizedSearchText(title);
+  if (normalizedTitle === normalizedQuery) return 1;
+  if (normalizedTitle.startsWith(normalizedQuery)) return 0.25;
+  if (normalizedTitle.includes(normalizedQuery)) return 0.1;
+  return 0;
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS notes (
@@ -50,6 +67,34 @@ CREATE TABLE IF NOT EXISTS note_sources (
   FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
   FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS ingest_proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id INTEGER NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'rejected')),
+  proposal_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT,
+  FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS discoveries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fingerprint TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'investigating', 'confirmed', 'rejected')),
+  relationship_type TEXT NOT NULL,
+  explanation TEXT NOT NULL,
+  significance TEXT NOT NULL,
+  page_ids_json TEXT NOT NULL,
+  source_ids_json TEXT NOT NULL,
+  production_method TEXT NOT NULL,
+  model TEXT NOT NULL,
+  confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  created_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT
+);
 `;
 
 export interface SourceRecord {
@@ -63,10 +108,64 @@ export interface SourceRecord {
   created_at: string;
 }
 
+export interface IngestProposalRecord {
+  id: number;
+  source_id: number;
+  status: "pending" | "approved" | "rejected";
+  proposal_json: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export type DiscoveryStatus =
+  | "pending"
+  | "investigating"
+  | "confirmed"
+  | "rejected";
+
+export interface DiscoveryRecord {
+  id: number;
+  fingerprint: string;
+  status: DiscoveryStatus;
+  relationship_type: string;
+  explanation: string;
+  significance: string;
+  page_ids_json: string;
+  source_ids_json: string;
+  production_method: string;
+  model: string;
+  confidence: number;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
 export interface IntegrationCandidate {
   id: number;
   title: string;
   body: string;
+}
+
+export interface CatalogSource {
+  contentHash: string;
+  title: string;
+  sourceUrl: string | null;
+  sourceType: string;
+  filePath: string;
+  summary: string;
+}
+
+export interface CatalogNote {
+  title: string;
+  filePath: string;
+  body: string;
+  sourceHashes: string[];
+}
+
+export interface IngestUndoChange {
+  action: "new" | "merge" | "contradict";
+  title: string;
+  filePath: string;
+  restoredBody?: string;
 }
 
 const INTEGRATION_STOP_WORDS = new Set([
@@ -172,6 +271,121 @@ export class DB {
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(contentHash, title, sourceUrl, sourceType, filePath, summary);
     return Number(info.lastInsertRowid);
+  }
+
+  addIngestProposal(sourceId: number, proposalJson: string): number {
+    const info = this.db.prepare(
+      `INSERT INTO ingest_proposals (source_id, proposal_json)
+       VALUES (?, ?)`,
+    ).run(sourceId, proposalJson);
+    return Number(info.lastInsertRowid);
+  }
+
+  getIngestProposal(id: number): IngestProposalRecord | undefined {
+    if (!Number.isSafeInteger(id) || id < 1) return undefined;
+    return this.db.prepare(
+      "SELECT * FROM ingest_proposals WHERE id = ?",
+    ).get(id) as IngestProposalRecord | undefined;
+  }
+
+  getIngestProposalForSource(
+    sourceId: number,
+  ): IngestProposalRecord | undefined {
+    if (!Number.isSafeInteger(sourceId) || sourceId < 1) return undefined;
+    return this.db.prepare(
+      "SELECT * FROM ingest_proposals WHERE source_id = ?",
+    ).get(sourceId) as IngestProposalRecord | undefined;
+  }
+
+  getIngestProposals(
+    status?: IngestProposalRecord["status"],
+  ): IngestProposalRecord[] {
+    if (status === undefined) {
+      return this.db.prepare(
+        "SELECT * FROM ingest_proposals ORDER BY created_at DESC, id DESC",
+      ).all() as unknown as IngestProposalRecord[];
+    }
+    return this.db.prepare(
+      `SELECT * FROM ingest_proposals
+       WHERE status = ?
+       ORDER BY created_at DESC, id DESC`,
+    ).all(status) as unknown as IngestProposalRecord[];
+  }
+
+  reviewIngestProposal(
+    id: number,
+    status: "approved" | "rejected",
+  ): boolean {
+    if (!Number.isSafeInteger(id) || id < 1) return false;
+    const info = this.db.prepare(
+      `UPDATE ingest_proposals
+       SET status = ?, reviewed_at = datetime('now')
+       WHERE id = ? AND status = 'pending'`,
+    ).run(status, id);
+    return Number(info.changes) === 1;
+  }
+
+  addDiscovery(
+    discovery: Omit<
+      DiscoveryRecord,
+      "id" | "status" | "created_at" | "reviewed_at"
+    >,
+  ): number | undefined {
+    const info = this.db.prepare(
+      `INSERT OR IGNORE INTO discoveries
+       (fingerprint, relationship_type, explanation, significance,
+        page_ids_json, source_ids_json, production_method, model, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      discovery.fingerprint,
+      discovery.relationship_type,
+      discovery.explanation,
+      discovery.significance,
+      discovery.page_ids_json,
+      discovery.source_ids_json,
+      discovery.production_method,
+      discovery.model,
+      discovery.confidence,
+    );
+    return Number(info.changes) === 1
+      ? Number(info.lastInsertRowid)
+      : undefined;
+  }
+
+  getDiscovery(id: number): DiscoveryRecord | undefined {
+    if (!Number.isSafeInteger(id) || id < 1) return undefined;
+    return this.db.prepare(
+      "SELECT * FROM discoveries WHERE id = ?",
+    ).get(id) as DiscoveryRecord | undefined;
+  }
+
+  getDiscoveries(status?: DiscoveryStatus): DiscoveryRecord[] {
+    if (status === undefined) {
+      return this.db.prepare(
+        "SELECT * FROM discoveries ORDER BY created_at DESC, id DESC",
+      ).all() as unknown as DiscoveryRecord[];
+    }
+    return this.db.prepare(
+      `SELECT * FROM discoveries
+       WHERE status = ?
+       ORDER BY created_at DESC, id DESC`,
+    ).all(status) as unknown as DiscoveryRecord[];
+  }
+
+  reviewDiscovery(
+    id: number,
+    status: Exclude<DiscoveryStatus, "pending">,
+  ): boolean {
+    if (!Number.isSafeInteger(id) || id < 1) return false;
+    const allowedCurrent = status === "investigating"
+      ? "status = 'pending'"
+      : "status IN ('pending', 'investigating')";
+    const info = this.db.prepare(
+      `UPDATE discoveries
+       SET status = ?, reviewed_at = datetime('now')
+       WHERE id = ? AND ${allowedCurrent}`,
+    ).run(status, id);
+    return Number(info.changes) === 1;
   }
 
   attachNoteSource(noteId: number, sourceId: number, action: string): void {
@@ -451,6 +665,108 @@ export class DB {
     this.db.exec("DELETE FROM links");
   }
 
+  /** Atomically replace SQLite's derived catalog from validated vault files. */
+  replaceCatalog(sources: CatalogSource[], notes: CatalogNote[]): void {
+    this.withTransaction(() => {
+      this.db.exec(`
+        DELETE FROM discoveries;
+        DELETE FROM ingest_proposals;
+        DELETE FROM note_sources;
+        DELETE FROM links;
+        DELETE FROM embeddings;
+        DELETE FROM notes_fts;
+        DELETE FROM notes;
+        DELETE FROM sources;
+      `);
+
+      const sourceIds = new Map<string, number>();
+      for (const source of sources) {
+        sourceIds.set(
+          source.contentHash,
+          this.addSource(
+            source.contentHash,
+            source.title,
+            source.sourceUrl,
+            source.sourceType,
+            source.filePath,
+            source.summary,
+          ),
+        );
+      }
+
+      for (const note of notes) {
+        const primarySource = note.sourceHashes.length > 0
+          ? sources.find((source) =>
+            source.contentHash === note.sourceHashes[0]
+          )
+          : undefined;
+        const noteId = this.addNote(
+          note.title,
+          note.filePath,
+          primarySource?.sourceUrl ?? null,
+          primarySource?.sourceType ?? null,
+        );
+        this.indexNote(noteId, note.title, note.body);
+        for (const sourceHash of note.sourceHashes) {
+          const sourceId = sourceIds.get(sourceHash);
+          if (sourceId === undefined) {
+            throw new Error(
+              `Catalog note "${note.title}" references unknown source ${sourceHash}`,
+            );
+          }
+          this.attachNoteSource(noteId, sourceId, "reference");
+        }
+      }
+    });
+  }
+
+  /** Apply catalog changes for a hash-verified ingest undo. */
+  undoIngest(sourceHash: string, changes: IngestUndoChange[]): void {
+    this.withTransaction(() => {
+      const source = this.getSourceByHash(sourceHash);
+      if (!source) {
+        throw new Error(`Undo source ${sourceHash} is not cataloged`);
+      }
+
+      for (const change of changes) {
+        const note = this.getNoteByFilePath(change.filePath);
+        if (!note || note.title !== change.title) {
+          throw new Error(`Undo page "${change.title}" is not cataloged`);
+        }
+        if (change.action === "new") {
+          this.deleteNote(note.id);
+          continue;
+        }
+        if (change.restoredBody === undefined) {
+          throw new Error(`Undo page "${change.title}" has no restored body`);
+        }
+        this.indexNote(note.id, note.title, change.restoredBody);
+        this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(
+          note.id,
+        );
+        this.db.prepare(
+          "DELETE FROM links WHERE source_note_id = ? OR target_note_id = ?",
+        ).run(note.id, note.id);
+        this.db.prepare(
+          "DELETE FROM note_sources WHERE note_id = ? AND source_id = ?",
+        ).run(note.id, source.id);
+        const remaining = this.getSourceProvenanceForNote(note.id)[0];
+        this.db.prepare(
+          "UPDATE notes SET source_url = ?, source_type = ? WHERE id = ?",
+        ).run(
+          remaining?.source_url ?? null,
+          remaining?.source_type ?? null,
+          note.id,
+        );
+      }
+
+      this.db.prepare("DELETE FROM ingest_proposals WHERE source_id = ?").run(
+        source.id,
+      );
+      this.db.exec("DELETE FROM discoveries");
+    });
+  }
+
   findNearest(
     excludeId: number,
     embedding: number[],
@@ -624,31 +940,53 @@ export class DB {
       Promise.resolve(this.searchKeyword(query, limit)),
       DB.embedText(query, apiBase, apiKey, embedModel).catch(() => null),
     ]);
-    const scores = new Map<number, { score: number; matchType: string }>();
-    for (const r of kw) {
-      scores.set(r.id, {
-        score: 1 / (1 + Math.abs(r.rank)),
-        matchType: "keyword",
-      });
-    }
-    if (qEmb) {
-      for (const r of this.searchSemantic(qEmb, limit)) {
-        const ex = scores.get(r.note_id);
-        scores.set(
-          r.note_id,
-          ex
-            ? { score: (ex.score + r.similarity) / 2, matchType: "both" }
-            : { score: r.similarity, matchType: "semantic" },
-        );
-      }
-    }
-    return Array.from(scores.entries())
-      .map(([id, v]) => ({
+    const fused = new Map<number, {
+      id: number;
+      title: string;
+      score: number;
+      keyword: boolean;
+      semantic: boolean;
+    }>();
+    const addRank = (
+      id: number,
+      title: string,
+      rank: number,
+      kind: "keyword" | "semantic",
+    ) => {
+      const result = fused.get(id) ?? {
         id,
-        title: this.getNote(id)?.title ?? "Untitled",
-        score: v.score,
-        matchType: v.matchType,
+        title,
+        score: titleMatchBoost(query, title),
+        keyword: false,
+        semantic: false,
+      };
+      result.score += 1 / (RECIPROCAL_RANK_OFFSET + rank + 1);
+      result[kind] = true;
+      fused.set(id, result);
+    };
+    kw.forEach((result, rank) =>
+      addRank(result.id, result.title, rank, "keyword")
+    );
+    if (qEmb) {
+      this.searchSemantic(qEmb, limit).forEach((result, rank) =>
+        addRank(result.note_id, result.title, rank, "semantic")
+      );
+    }
+    return [...fused.values()]
+      .map((result) => ({
+        id: result.id,
+        title: result.title,
+        score: result.score,
+        matchType: result.keyword && result.semantic
+          ? "both"
+          : result.keyword
+          ? "keyword"
+          : "semantic",
       }))
-      .sort((a, b) => b.score - a.score).slice(0, limit);
+      .sort((left, right) =>
+        right.score - left.score ||
+        left.title.localeCompare(right.title, "en-US")
+      )
+      .slice(0, limit);
   }
 }

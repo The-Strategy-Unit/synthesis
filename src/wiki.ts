@@ -22,7 +22,7 @@ export interface WikiIndexEntry {
 
 export interface WikiLogEntry {
   timestamp: string;
-  operation: "ingest" | "query" | "lint";
+  operation: "ingest" | "query" | "lint" | "discovery";
   subject: string;
   contentHash?: string;
   changes: WikiChange[];
@@ -32,6 +32,12 @@ export interface SourceReference {
   title: string;
   url?: string;
   contentHash: string;
+  pages?: number[];
+}
+
+export interface ClaimCitation {
+  text: string;
+  sourceHashes: string[];
 }
 
 const PAGE_TYPES = new Set<WikiPageType>([
@@ -45,7 +51,10 @@ const MAX_BODY_LENGTH = 20_000;
 const MAX_TAGS = 12;
 const MAX_TAG_LENGTH = 64;
 const MAX_LINKS = 50;
+const MAX_SOURCE_PAGES = 50;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const CLAIM_MARKER_PATTERN =
+  /^<!-- synthesis-claim:([a-f0-9]{64}(?:,[a-f0-9]{64})*) -->$/;
 
 function asRecord(value: unknown, context: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -101,6 +110,11 @@ function markdownBody(value: unknown): string {
   if (/^## (?:Related|Sources)\s*$/m.test(body)) {
     throw new Error(
       "Wiki page.body must not contain compiler-managed Related or Sources headings",
+    );
+  }
+  if (/^<!-- synthesis-claim:.* -->$/m.test(body)) {
+    throw new Error(
+      "Wiki page.body must not contain compiler-managed claim citations",
     );
   }
   return body;
@@ -225,8 +239,10 @@ function validateTimestamp(value: unknown): string {
 
 export function renderWikiLogEntry(entry: WikiLogEntry): string {
   const timestamp = validateTimestamp(entry.timestamp);
-  if (!["ingest", "query", "lint"].includes(entry.operation)) {
-    throw new Error("Wiki log operation must be ingest, query, or lint");
+  if (!["ingest", "query", "lint", "discovery"].includes(entry.operation)) {
+    throw new Error(
+      "Wiki log operation must be ingest, query, lint, or discovery",
+    );
   }
   const subject = requiredText(entry.subject, "Wiki log subject", 500);
   if (
@@ -311,7 +327,11 @@ export function parseWikiPage(markdown: string): WikiPage {
   const sourcesAt = afterHeading.indexOf("\n\n## Sources\n");
   const boundaries = [relatedAt, sourcesAt].filter((index) => index >= 0);
   const bodyEnd = boundaries.length > 0 ? Math.min(...boundaries) : undefined;
-  const body = afterHeading.slice(0, bodyEnd).trim();
+  const body = afterHeading.slice(0, bodyEnd).trim().split("\n")
+    .filter((line) => !CLAIM_MARKER_PATTERN.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
   return validateWikiPage({ title, type, body, tags, links });
 }
@@ -341,7 +361,27 @@ function validateSourceReference(source: SourceReference): SourceReference {
     url = parsed.href;
   }
 
-  return { title, url, contentHash: source.contentHash };
+  let pages: number[] | undefined;
+  if (source.pages !== undefined) {
+    if (
+      !Array.isArray(source.pages) ||
+      source.pages.length === 0 ||
+      source.pages.length > MAX_SOURCE_PAGES ||
+      source.pages.some((page) => !Number.isSafeInteger(page) || page < 1)
+    ) {
+      throw new Error(
+        `Source pages must contain 1-${MAX_SOURCE_PAGES} positive integers`,
+      );
+    }
+    pages = [...new Set(source.pages)].sort((left, right) => left - right);
+  }
+
+  return {
+    title,
+    url,
+    contentHash: source.contentHash,
+    ...(pages && { pages }),
+  };
 }
 
 function sourceLine(source: SourceReference): string {
@@ -349,15 +389,132 @@ function sourceLine(source: SourceReference): string {
   const location = source.url
     ? `[${safeTitle}](<${source.url.replaceAll(">", "%3E")}>)`
     : safeTitle;
-  return `- ${location}; SHA-256: \`${source.contentHash}\` <!-- synthesis-source:${source.contentHash} -->`;
+  const pages = source.pages?.length
+    ? `; pages: ${source.pages.join(", ")}`
+    : "";
+  return `- ${location}${pages}; SHA-256: \`${source.contentHash}\` <!-- synthesis-source:${source.contentHash} -->`;
+}
+
+/** Read page locations from one compiler-managed Markdown source reference. */
+export function findSourceReferencePages(
+  markdown: string,
+  contentHash: string,
+): number[] | undefined {
+  if (!SHA256_PATTERN.test(contentHash)) return undefined;
+  const line = markdown.split("\n").find((candidate) =>
+    candidate.includes(`synthesis-source:${contentHash}`)
+  );
+  const match = line?.match(/; pages: (\d+(?:, \d+)*); SHA-256:/);
+  if (!match) return undefined;
+  const pages = match[1].split(", ").map(Number);
+  if (
+    pages.length === 0 || pages.length > MAX_SOURCE_PAGES ||
+    pages.some((page) => !Number.isSafeInteger(page) || page < 1)
+  ) {
+    return undefined;
+  }
+  return [...new Set(pages)].sort((left, right) => left - right);
+}
+
+/** Read unique immutable source hashes from compiler-managed references. */
+export function findSourceReferenceHashes(markdown: string): string[] {
+  const hashes = markdown.matchAll(
+    /<!-- synthesis-source:([a-f0-9]{64}) -->/g,
+  );
+  return [...new Set(Array.from(hashes, (match) => match[1]))];
+}
+
+function claimBlocks(body: string): string[] {
+  return body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+}
+
+/** Read compiler-managed claim-to-source mappings, with a legacy fallback. */
+export function findClaimCitations(markdown: string): ClaimCitation[] {
+  const page = parseWikiPage(markdown);
+  const normalized = markdown.replace(/\r\n?/g, "\n");
+  const frontmatter = normalized.match(/^---\n[\s\S]*?\n---\n+/);
+  if (!frontmatter) throw new Error("Wiki page has invalid frontmatter");
+  const content = normalized.slice(frontmatter[0].length);
+  const headingEnd = content.indexOf("\n");
+  const afterHeading = content.slice(headingEnd + 1).replace(/^\n/, "");
+  const relatedAt = afterHeading.indexOf("\n\n## Related\n");
+  const sourcesAt = afterHeading.indexOf("\n\n## Sources\n");
+  const boundaries = [relatedAt, sourcesAt].filter((index) => index >= 0);
+  const bodyEnd = boundaries.length > 0 ? Math.min(...boundaries) : undefined;
+  const rawBlocks = claimBlocks(afterHeading.slice(0, bodyEnd).trim());
+  const sourceHashes = findSourceReferenceHashes(markdown);
+  const sourceSet = new Set(sourceHashes);
+  const hasMarkers = rawBlocks.some((block) =>
+    CLAIM_MARKER_PATTERN.test(block.split("\n").at(-1) ?? "")
+  );
+
+  if (!hasMarkers) {
+    return claimBlocks(page.body).map((text) => ({ text, sourceHashes }));
+  }
+
+  return rawBlocks.map((block, index) => {
+    const lines = block.split("\n");
+    const marker = lines.pop()?.match(CLAIM_MARKER_PATTERN);
+    if (!marker) {
+      throw new Error(`Wiki claim ${index + 1} is missing source citations`);
+    }
+    const hashes = [...new Set(marker[1].split(","))];
+    if (hashes.some((hash) => !sourceSet.has(hash))) {
+      throw new Error(
+        `Wiki claim ${
+          index + 1
+        } cites a source absent from the Sources section`,
+      );
+    }
+    const text = lines.join("\n").trim();
+    if (!text) throw new Error(`Wiki claim ${index + 1} must not be empty`);
+    return { text, sourceHashes: hashes };
+  });
 }
 
 export function renderWikiPage(
   pageValue: WikiPage,
   sourceValues: SourceReference[],
+  claimValues?: ClaimCitation[],
 ): string {
   const page = validateWikiPage(pageValue);
   const sources = sourceValues.map(validateSourceReference);
+  const sourceHashes = new Set(sources.map((source) => source.contentHash));
+  const blocks = claimBlocks(page.body);
+  const claims = claimValues ?? blocks.map((text) => ({
+    text,
+    sourceHashes: [...sourceHashes],
+  }));
+  if (
+    claims.length !== blocks.length ||
+    claims.some((claim, index) => claim.text.trim() !== blocks[index])
+  ) {
+    throw new Error("Wiki claim citations must match every body block");
+  }
+  if (sources.length === 0 && claimValues !== undefined) {
+    throw new Error("Wiki claim citations require a Sources section");
+  }
+  if (sources.length > 0) {
+    for (let index = 0; index < claims.length; index++) {
+      if (
+        claims[index].sourceHashes.length === 0 ||
+        claims[index].sourceHashes.some((hash) => !sourceHashes.has(hash))
+      ) {
+        throw new Error(
+          `Wiki claim ${
+            index + 1
+          } must cite sources present in the Sources section`,
+        );
+      }
+    }
+  }
+  const renderedBody = sources.length === 0
+    ? page.body
+    : claims.map((claim) =>
+      `${claim.text}\n<!-- synthesis-claim:${
+        [...new Set(claim.sourceHashes)].join(",")
+      } -->`
+    ).join("\n\n");
   const frontmatter = [
     "---",
     `title: ${JSON.stringify(page.title)}`,
@@ -366,7 +523,7 @@ export function renderWikiPage(
     `links: [${page.links.map((link) => JSON.stringify(link)).join(", ")}]`,
     "---",
   ];
-  const sections = [frontmatter.join("\n"), `# ${page.title}`, page.body];
+  const sections = [frontmatter.join("\n"), `# ${page.title}`, renderedBody];
 
   if (page.links.length > 0) {
     sections.push(

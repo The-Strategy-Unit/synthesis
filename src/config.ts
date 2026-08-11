@@ -121,6 +121,12 @@ export const config = {
       10 * 1024 * 1024,
       1024 * 1024,
     ),
+    maxUploadBytes: envIntClamped(
+      "SYNTHESIS_MAX_UPLOAD_BYTES",
+      1024 * 1024,
+      100 * 1024 * 1024,
+      25 * 1024 * 1024,
+    ),
     maxPastedTextChars: envIntClamped(
       "SYNTHESIS_MAX_PASTED_TEXT_CHARS",
       1000,
@@ -145,6 +151,12 @@ export const config = {
       2_000_000,
       500_000,
     ),
+    maxSubtitleBytes: envIntClamped(
+      "SYNTHESIS_MAX_SUBTITLE_BYTES",
+      1024 * 1024,
+      100 * 1024 * 1024,
+      10 * 1024 * 1024,
+    ),
     ytDlpTimeoutMs: envIntClamped(
       "SYNTHESIS_YT_DLP_TIMEOUT_MS",
       5000,
@@ -156,6 +168,12 @@ export const config = {
       5000,
       30 * 60 * 1000,
       3 * 60 * 1000,
+    ),
+    pdfParseTimeoutMs: envIntClamped(
+      "SYNTHESIS_PDF_PARSE_TIMEOUT_MS",
+      1000,
+      5 * 60 * 1000,
+      30 * 1000,
     ),
     ingestQueueSize: envIntClamped(
       "SYNTHESIS_INGEST_QUEUE_SIZE",
@@ -187,16 +205,16 @@ export const config = {
     apiBase: env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
     apiKey: env("SYNTHESIS_API_KEY", "ollama"),
 
-    // Model roles: small model for cheap parallel work, big model for synthesis
+    // Roles can be overridden independently; one model keeps local setup simple.
     extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.5:9b"),
-    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.6:27b"),
+    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.5:9b"),
     integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:9b"),
-    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.6:27b"),
+    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.5:9b"),
     // Kept for backward compat in API responses
-    model: env("SYNTHESIS_LLM_MODEL", "qwen3.6:27b"),
+    model: env("SYNTHESIS_LLM_MODEL", "qwen3.5:9b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
-    extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0.2),
+    extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),
     consolidateTemperature: envClamped(
       "SYNTHESIS_CONSOLIDATE_TEMPERATURE",
       0,
@@ -241,8 +259,11 @@ export const config = {
       env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
     ),
     apiKey: env("SYNTHESIS_EMBED_API_KEY", env("SYNTHESIS_API_KEY", "ollama")),
-    model: env("SYNTHESIS_EMBED_MODEL", "qwen3-embedding:8b"),
-    dimensions: Math.max(64, envInt("SYNTHESIS_EMBED_DIMENSIONS", 4096)),
+    model: env(
+      "SYNTHESIS_EMBED_MODEL",
+      "nomic-embed-text-v2-moe:latest",
+    ),
+    dimensions: Math.max(64, envInt("SYNTHESIS_EMBED_DIMENSIONS", 768)),
   },
 
   ingest: {
@@ -250,12 +271,18 @@ export const config = {
     overlap: envClamped("SYNTHESIS_CHUNK_OVERLAP", 0, 2000, 500),
     ytDlpPath: env("SYNTHESIS_YT_DLP_PATH", "yt-dlp"),
     ytDlpLang: env("SYNTHESIS_SUBTITLES_LANG", "en"),
-    playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", false),
+    playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", true),
     maxPlaylistItems: envIntClamped(
       "SYNTHESIS_MAX_PLAYLIST_ITEMS",
       1,
       100,
       10,
+    ),
+    maxPdfPages: envIntClamped(
+      "SYNTHESIS_MAX_PDF_PAGES",
+      1,
+      5000,
+      500,
     ),
   },
 
@@ -282,8 +309,11 @@ export const config = {
 
   build: {
     version: "0.1.0",
-    llmModel: env("SYNTHESIS_LLM_MODEL", "qwen3.6:27b"),
-    embedModel: env("SYNTHESIS_EMBED_MODEL", "qwen3-embedding:8b"),
+    llmModel: env("SYNTHESIS_LLM_MODEL", "qwen3.5:9b"),
+    embedModel: env(
+      "SYNTHESIS_EMBED_MODEL",
+      "nomic-embed-text-v2-moe:latest",
+    ),
   },
 };
 

@@ -1,7 +1,9 @@
 import { config } from "./config.ts";
 import type { DB } from "./db.ts";
+import { parseJsonResponse, structuredChatCompletion } from "./llm.ts";
 import type { WikiQueryPage } from "./query.ts";
 import { parseWikiPage, type WikiPage } from "./wiki.ts";
+import { DEFAULT_WIKI_SCHEMA, promptWithWikiSchema } from "./wiki_schema.ts";
 
 export type WikiLintSeverity = "error" | "warning" | "info";
 
@@ -295,61 +297,30 @@ export async function analyzeWikiHealth(
   apiBase: string,
   apiKey: string,
   model: string,
+  schema: string = DEFAULT_WIKI_SCHEMA,
 ): Promise<WikiLintAnalysis> {
   if (pages.length === 0 || pages.length > 12) {
     throw new Error("Wiki health analysis requires 1-12 context pages");
   }
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: ANALYSIS_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify({
-              report: { ...report, issues: report.issues.slice(0, 100) },
-              pages,
-            }),
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: Math.max(config.llm.maxTokens, 2_000),
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(config.security.modelTimeoutMs),
-    });
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "UnknownError";
-    if (name === "TimeoutError" || name === "AbortError") {
-      throw new Error("Wiki health analysis timed out");
-    }
-    throw new Error(
-      "Unable to contact the LLM service for wiki health analysis",
-    );
-  }
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new Error(
-      `LLM service rejected the wiki health analysis (${response.status})`,
-    );
-  }
-  const payload = asRecord(await response.json(), "LLM response");
-  if (!Array.isArray(payload.choices) || payload.choices.length === 0) {
-    throw new Error("LLM response.choices must be a non-empty array");
-  }
-  const choice = asRecord(payload.choices[0], "LLM response.choices[0]");
-  const message = asRecord(choice.message, "LLM response.choices[0].message");
-  const content = boundedText(
-    message.content,
-    "LLM response.choices[0].message.content",
-    100_000,
+  return await structuredChatCompletion(
+    "Wiki lint analysis",
+    apiBase,
+    apiKey,
+    model,
+    promptWithWikiSchema(ANALYSIS_PROMPT, schema),
+    JSON.stringify({
+      report: { ...report, issues: report.issues.slice(0, 100) },
+      pages,
+    }),
+    {
+      temperature: 0.1,
+      maxTokens: Math.max(config.llm.maxTokens, 2_000),
+      jsonMode: true,
+    },
+    (content) =>
+      validateWikiLintAnalysis(
+        parseJsonResponse(content, "Wiki lint analysis"),
+        pages,
+      ),
   );
-  return validateWikiLintAnalysis(JSON.parse(content), pages);
 }

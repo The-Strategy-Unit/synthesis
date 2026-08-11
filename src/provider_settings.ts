@@ -1,9 +1,14 @@
+import { config } from "./config.ts";
 import {
   type ProviderProfile,
   validateProviderProfile,
 } from "./provider_profile.ts";
 import type { ProviderProfileStore } from "./provider_profile_store.ts";
-import { checkProviderConnection } from "./provider_runtime.ts";
+import {
+  type ActiveProviders,
+  diagnoseProviders,
+  ProviderRuntimeError,
+} from "./provider_runtime.ts";
 import type { ProviderSecret, SecretStore } from "./secret_store.ts";
 
 type Profiles = Pick<ProviderProfileStore, "load" | "save">;
@@ -69,6 +74,49 @@ async function restoreSecret(
   else await store.set(name, previous);
 }
 
+function activeProviders(
+  profile: ProviderProfile,
+  llmApiKey: string,
+  embeddingApiKey: string,
+): ActiveProviders {
+  return {
+    source: "profile",
+    llm: {
+      apiBase: profile.llm.apiBase,
+      apiKey: llmApiKey,
+      extractModel: profile.llm.model,
+      consolidateModel: profile.llm.model,
+      integrateModel: profile.llm.model,
+      rewriteModel: profile.llm.model,
+    },
+    embedding: {
+      apiBase: profile.embedding.apiBase,
+      apiKey: embeddingApiKey,
+      model: profile.embedding.model,
+    },
+  };
+}
+
+function diagnosticsFailure(
+  diagnostics: Awaited<ReturnType<typeof diagnoseProviders>>,
+): ProviderRuntimeError {
+  const issues = [
+    diagnostics.chat.missingModels.length
+      ? `missing chat model(s): ${diagnostics.chat.missingModels.join(", ")}`
+      : diagnostics.chat.probe.error,
+    diagnostics.embedding.missingModels.length
+      ? `missing embedding model(s): ${
+        diagnostics.embedding.missingModels.join(", ")
+      }`
+      : diagnostics.embedding.probe.error,
+  ].filter((issue): issue is string => Boolean(issue));
+  return new ProviderRuntimeError(
+    `Provider compatibility check failed${
+      issues.length ? `: ${issues.join("; ")}` : ""
+    }`,
+  );
+}
+
 export async function providerSettingsStatus(
   profiles: Profiles,
   secrets: SecretStore | SecretStoreFactory,
@@ -101,6 +149,11 @@ export async function configureProviders(
   input: ProviderSettingsInput,
 ): Promise<ProviderSettingsStatus> {
   const profile = validateProviderProfile(input.profile);
+  if (profile.embedding.dimensions !== config.embed.dimensions) {
+    throw new ProviderSettingsInputError(
+      `embedding.dimensions must match this vault (${config.embed.dimensions})`,
+    );
+  }
   const store = await secretStore(secrets);
   const [previousLlmKey, previousEmbeddingKey] = await Promise.all([
     store.get("llm"),
@@ -112,10 +165,10 @@ export async function configureProviders(
     "embeddingApiKey",
     previousEmbeddingKey,
   );
-  await Promise.all([
-    checkProviderConnection(profile.llm.apiBase, llmKey),
-    checkProviderConnection(profile.embedding.apiBase, embeddingKey),
-  ]);
+  const diagnostics = await diagnoseProviders(
+    activeProviders(profile, llmKey, embeddingKey),
+  );
+  if (!diagnostics.ready) throw diagnosticsFailure(diagnostics);
 
   try {
     await store.set("llm", llmKey);

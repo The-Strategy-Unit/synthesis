@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { config } from "./config.ts";
 import { DB } from "./db.ts";
 
 function dbTest(name: string, fn: () => void | Promise<void>): void {
@@ -74,6 +75,84 @@ dbTest("duplicate file paths preserve the original note", async () => {
       source_type: "youtube",
     });
     assert.equal(db.getAllNotes().length, 1);
+  });
+});
+
+dbTest("catalog replacement is complete and transactional", async () => {
+  await withTempDb((db, dir) => {
+    const oldSourceId = db.addSource(
+      "old-source",
+      "Old source",
+      null,
+      "text",
+      `${dir}/old-source.txt`,
+      "Old summary",
+    );
+    const oldNoteId = db.addNote(
+      "Old note",
+      `${dir}/old-note.md`,
+      null,
+      "text",
+    );
+    db.indexNote(oldNoteId, "Old note", "Old searchable content.");
+    db.upsertEmbedding(oldNoteId, [
+      1,
+      ...Array<number>(config.embed.dimensions - 1).fill(0),
+    ]);
+    db.upsertLink(oldNoteId, oldNoteId, 1);
+    db.attachNoteSource(oldNoteId, oldSourceId, "new");
+    db.addIngestProposal(oldSourceId, '{"version":1,"changes":[]}');
+    db.addDiscovery({
+      fingerprint: "old-discovery",
+      relationship_type: "supports",
+      explanation: "Old explanation.",
+      significance: "Old significance.",
+      page_ids_json: JSON.stringify([oldNoteId]),
+      source_ids_json: JSON.stringify([oldSourceId]),
+      production_method: "test",
+      model: "test-model",
+      confidence: 0.5,
+    });
+
+    assert.throws(() =>
+      db.replaceCatalog([], [{
+        title: "Invalid replacement",
+        filePath: `${dir}/invalid.md`,
+        body: "Invalid body.",
+        sourceHashes: ["missing-source"],
+      }]), /unknown source/);
+    assert.equal(db.getNote(oldNoteId)?.title, "Old note");
+    assert.equal(db.getIngestProposals().length, 1);
+    assert.equal(db.getDiscoveries().length, 1);
+
+    db.replaceCatalog([{
+      contentHash: "new-source",
+      title: "New source",
+      sourceUrl: "https://example.test/new",
+      sourceType: "text",
+      filePath: `${dir}/new-source.txt`,
+      summary: "New summary",
+    }], [{
+      title: "New note",
+      filePath: `${dir}/new-note.md`,
+      body: "Replacement knowledge is searchable.",
+      sourceHashes: ["new-source"],
+    }]);
+
+    assert.equal(db.getSourceByHash("old-source"), undefined);
+    const newSource = db.getSourceByHash("new-source");
+    assert.ok(newSource);
+    const newNote = db.getNoteByExactTitle("New note");
+    assert.ok(newNote);
+    assert.deepEqual(
+      db.searchKeyword("searchable").map((result) => result.id),
+      [newNote.id],
+    );
+    assert.equal(db.getNotesForSource(newSource.id)[0].action, "reference");
+    assert.equal(db.getEmbedding(oldNoteId), null);
+    assert.deepEqual(db.getLinks(), []);
+    assert.deepEqual(db.getIngestProposals(), []);
+    assert.deepEqual(db.getDiscoveries(), []);
   });
 });
 
@@ -172,6 +251,104 @@ dbTest(
   },
 );
 
+dbTest("ingest proposals have a guarded review lifecycle", async () => {
+  await withTempDb((db, dir) => {
+    const firstSourceId = db.addSource(
+      "proposal-source-one",
+      "First proposal source",
+      null,
+      "text",
+      `${dir}/source-one.txt`,
+      "First summary",
+    );
+    const secondSourceId = db.addSource(
+      "proposal-source-two",
+      "Second proposal source",
+      null,
+      "text",
+      `${dir}/source-two.txt`,
+      "Second summary",
+    );
+    const firstProposal = JSON.stringify({ version: 1, changes: [] });
+    const secondProposal = JSON.stringify({ version: 1, changes: [1] });
+    const firstId = db.addIngestProposal(firstSourceId, firstProposal);
+    const secondId = db.addIngestProposal(secondSourceId, secondProposal);
+
+    assert.equal(db.getIngestProposal(firstId)?.proposal_json, firstProposal);
+    assert.equal(
+      db.getIngestProposalForSource(secondSourceId)?.id,
+      secondId,
+    );
+    assert.deepEqual(
+      db.getIngestProposals("pending").map((proposal) => proposal.id),
+      [secondId, firstId],
+    );
+    assert.equal(db.getIngestProposal(0), undefined);
+    assert.equal(db.getIngestProposalForSource(0), undefined);
+
+    assert.equal(db.reviewIngestProposal(firstId, "approved"), true);
+    assert.equal(db.getIngestProposal(firstId)?.status, "approved");
+    assert.ok(db.getIngestProposal(firstId)?.reviewed_at);
+    assert.equal(db.reviewIngestProposal(firstId, "rejected"), false);
+
+    assert.equal(db.reviewIngestProposal(secondId, "rejected"), true);
+    assert.equal(db.getIngestProposal(secondId)?.status, "rejected");
+    assert.deepEqual(db.getIngestProposals("pending"), []);
+    assert.deepEqual(
+      db.getIngestProposals().map((proposal) => proposal.id),
+      [secondId, firstId],
+    );
+  });
+});
+
+dbTest(
+  "discoveries are deduplicated and have guarded review states",
+  async () => {
+    await withTempDb((db) => {
+      const discovery = {
+        fingerprint: "supports|1,2|4",
+        relationship_type: "supports",
+        explanation: "The pages report compatible observations.",
+        significance: "The connection may focus a follow-up review.",
+        page_ids_json: "[1,2]",
+        source_ids_json: "[4]",
+        production_method: "llm_graph_review",
+        model: "local-model",
+        confidence: 0.72,
+      };
+      const firstId = db.addDiscovery(discovery);
+      assert.ok(firstId);
+      assert.equal(db.addDiscovery(discovery), undefined);
+      assert.equal(db.getDiscovery(firstId)?.status, "pending");
+      assert.deepEqual(
+        db.getDiscoveries("pending").map((item) => item.id),
+        [firstId],
+      );
+
+      assert.equal(db.reviewDiscovery(firstId, "investigating"), true);
+      assert.equal(db.getDiscovery(firstId)?.status, "investigating");
+      assert.equal(db.reviewDiscovery(firstId, "investigating"), false);
+      assert.equal(db.reviewDiscovery(firstId, "confirmed"), true);
+      assert.equal(db.getDiscovery(firstId)?.status, "confirmed");
+      assert.equal(db.reviewDiscovery(firstId, "rejected"), false);
+
+      const secondId = db.addDiscovery({
+        ...discovery,
+        fingerprint: "supports|1,2|4,5",
+        source_ids_json: "[4,5]",
+      });
+      assert.ok(secondId);
+      assert.equal(db.reviewDiscovery(secondId, "rejected"), true);
+      assert.equal(db.getDiscovery(secondId)?.status, "rejected");
+      assert.deepEqual(db.getDiscoveries("pending"), []);
+      assert.deepEqual(
+        db.getDiscoveries().map((item) => item.id),
+        [secondId, firstId],
+      );
+    });
+  },
+);
+
 dbTest(
   "incremental and full link recomputation maintain the expected graph",
   async () => {
@@ -185,7 +362,7 @@ dbTest(
         x,
         y,
         z,
-        ...Array<number>(4093).fill(0),
+        ...Array<number>(config.embed.dimensions - 3).fill(0),
       ];
       db.upsertEmbedding(first, vector(1, 0, 0));
       db.upsertEmbedding(second, vector(0.8, 0.6, 0));
@@ -319,7 +496,7 @@ dbTest("embedding vectors persist with integer note IDs", async () => {
   await withTempDb((db, dir) => {
     const noteId = db.addNote("Embedded", `${dir}/embedded.md`, null, "text");
     const embedding = Array.from(
-      { length: 4096 },
+      { length: config.embed.dimensions },
       (_, index) => index === 0 ? 1 : 0,
     );
 
@@ -328,3 +505,71 @@ dbTest("embedding vectors persist with integer note IDs", async () => {
     assert.deepEqual(db.getEmbedding(noteId), embedding);
   });
 });
+
+dbTest(
+  "hybrid search prioritizes literal matches and survives embedding failure",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempDb(async (db, dir) => {
+        const exactId = db.addNote(
+          "Plane Limitations",
+          `${dir}/plane-limitations.md`,
+          null,
+          "text",
+        );
+        const relatedId = db.addNote(
+          "Agent Flow Beta Status",
+          `${dir}/agent-flow.md`,
+          null,
+          "text",
+        );
+        db.indexNote(
+          exactId,
+          "Plane Limitations",
+          "Plane has several operational constraints.",
+        );
+        db.indexNote(
+          relatedId,
+          "Agent Flow Beta Status",
+          "A flexible feature remains limited during beta.",
+        );
+
+        const queryEmbedding = Array(config.embed.dimensions).fill(0);
+        queryEmbedding[0] = 1;
+        const exactEmbedding = Array(config.embed.dimensions).fill(0);
+        exactEmbedding[0] = 0.8;
+        exactEmbedding[1] = 0.6;
+        db.upsertEmbedding(exactId, exactEmbedding);
+        db.upsertEmbedding(relatedId, queryEmbedding);
+
+        globalThis.fetch = () =>
+          Promise.resolve(Response.json({
+            data: [{ embedding: queryEmbedding }],
+          }));
+        const hybrid = await db.search(
+          "Plane limitations",
+          "https://embed.example.test/v1",
+          "secret",
+          "embed",
+        );
+        assert.equal(hybrid[0].id, exactId);
+        assert.equal(hybrid[0].matchType, "both");
+
+        globalThis.fetch = () => Promise.reject(new Error("offline"));
+        const fallback = await db.search(
+          "Plane limitations",
+          "https://embed.example.test/v1",
+          "secret",
+          "embed",
+        );
+        assert.deepEqual(
+          fallback.map((result) => [result.id, result.matchType]),
+          [[exactId, "keyword"]],
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);

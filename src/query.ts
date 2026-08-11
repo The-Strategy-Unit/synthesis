@@ -1,5 +1,7 @@
 import { config } from "./config.ts";
+import { parseJsonResponse, structuredChatCompletion } from "./llm.ts";
 import { validateWikiPage, type WikiPage } from "./wiki.ts";
+import { DEFAULT_WIKI_SCHEMA, promptWithWikiSchema } from "./wiki_schema.ts";
 
 export interface WikiQueryPage {
   id: number;
@@ -26,12 +28,12 @@ Rules:
 - If the pages do not support an answer, say so clearly.
 - Cite every material claim using the numeric page IDs supplied in the context.
 - citations must contain every page ID used and no page ID that was not supplied.
-- Produce a durable synthesis page whose body is exactly the answer.
-- The synthesis page links must be exactly the titles of the cited pages.
+- Suggest a concise durable synthesis page title and tags.
+- The server derives the synthesis body and links from the validated answer and citations.
 - Keep uncertainty, disagreement, and contradictory evidence explicit.
 
 Respond with ONLY JSON:
-{"answer":"...","citations":[1,2],"suggested_page":{"title":"...","type":"synthesis","body":"...","tags":["..."],"links":["..."]}}`;
+{"answer":"...","citations":[1,2],"suggested_page":{"title":"...","tags":["..."]}}`;
 
 function requiredText(
   value: unknown,
@@ -52,16 +54,6 @@ function asRecord(value: unknown, context: string): Record<string, unknown> {
     throw new Error(`${context} must be an object`);
   }
   return value as Record<string, unknown>;
-}
-
-function extractJson(text: string): string {
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) return fence[1].trim();
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  return first >= 0 && last >= first
-    ? text.slice(first, last + 1)
-    : text.trim();
 }
 
 function validateContext(pages: WikiQueryPage[]): WikiQueryPage[] {
@@ -124,30 +116,18 @@ export function validateWikiAnswer(
     }
   }
 
-  const suggestedPage = validateWikiPage(response.suggested_page);
-  if (suggestedPage.type !== "synthesis") {
-    throw new Error("Wiki answer suggested_page.type must be synthesis");
-  }
-  if (suggestedPage.body !== answer) {
-    throw new Error(
-      "Wiki answer suggested_page.body must exactly match answer",
-    );
-  }
   const citedTitles = citations.map((id) => allowedById.get(id)!.title);
-  const expectedLinks = new Set(
-    citedTitles.map((title) => title.toLocaleLowerCase("en-US")),
+  const suggestedPageInput = asRecord(
+    response.suggested_page,
+    "Wiki answer.suggested_page",
   );
-  const actualLinks = new Set(
-    suggestedPage.links.map((title) => title.toLocaleLowerCase("en-US")),
-  );
-  if (
-    expectedLinks.size !== actualLinks.size ||
-    [...expectedLinks].some((title) => !actualLinks.has(title))
-  ) {
-    throw new Error(
-      "Wiki answer suggested_page.links must match cited page titles",
-    );
-  }
+  const suggestedPage = validateWikiPage({
+    title: suggestedPageInput.title,
+    type: "synthesis",
+    body: answer,
+    tags: suggestedPageInput.tags,
+    links: citedTitles,
+  });
 
   return { answer, citations, suggestedPage };
 }
@@ -158,6 +138,7 @@ export async function answerWiki(
   apiBase: string,
   apiKey: string,
   model: string,
+  schema: string = DEFAULT_WIKI_SCHEMA,
 ): Promise<WikiAnswer> {
   const question = requiredText(
     questionValue,
@@ -165,51 +146,19 @@ export async function answerWiki(
     MAX_QUESTION_LENGTH,
   );
   const context = validateContext(pages);
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: QUERY_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify({ question, pages: context }),
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: Math.max(config.llm.maxTokens, 2_000),
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(config.security.modelTimeoutMs),
-    });
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "UnknownError";
-    if (name === "TimeoutError" || name === "AbortError") {
-      throw new Error("Wiki query timed out");
-    }
-    throw new Error("Unable to contact the LLM service for wiki query");
-  }
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new Error(`LLM service rejected the wiki query (${response.status})`);
-  }
-
-  const payload = asRecord(await response.json(), "LLM response");
-  if (!Array.isArray(payload.choices) || payload.choices.length === 0) {
-    throw new Error("LLM response.choices must be a non-empty array");
-  }
-  const choice = asRecord(payload.choices[0], "LLM response.choices[0]");
-  const message = asRecord(choice.message, "LLM response.choices[0].message");
-  const content = requiredText(
-    message.content,
-    "LLM response.choices[0].message.content",
-    100_000,
+  return await structuredChatCompletion(
+    "Wiki answer",
+    apiBase,
+    apiKey,
+    model,
+    promptWithWikiSchema(QUERY_PROMPT, schema),
+    JSON.stringify({ question, pages: context }),
+    {
+      temperature: 0.1,
+      maxTokens: Math.max(config.llm.maxTokens, 2_000),
+      jsonMode: true,
+    },
+    (content) =>
+      validateWikiAnswer(parseJsonResponse(content, "Wiki answer"), context),
   );
-  return validateWikiAnswer(JSON.parse(extractJson(content)), context);
 }
