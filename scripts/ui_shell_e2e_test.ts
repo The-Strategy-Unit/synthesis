@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { renderWikiPage } from "../src/wiki.ts";
+
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
-import { renderWikiPage } from "../src/wiki.ts";
+const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
 async function seedWiki(vault: string): Promise<void> {
   const sourceText = "Controlled evidence supports a stable operational fact.";

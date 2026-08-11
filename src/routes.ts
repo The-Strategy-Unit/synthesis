@@ -5,6 +5,7 @@ import { render as renderMarkdown } from "gfm";
 import { config } from "./config.ts";
 import { errMsg } from "./utils.ts";
 import { DB, type DiscoveryStatus } from "./db.ts";
+import { resolveWebAsset } from "./static_files.ts";
 import {
   confirmDiscovery,
   DiscoveryNotFoundError,
@@ -1652,10 +1653,8 @@ function responseHeaders(contentType: string): Headers {
 }
 
 async function serveStatic(path: string): Promise<Response> {
-  if (path === "/") path = "/index.html";
-  const webRoot = await Deno.realPath("web");
-  const candidate = await Deno.realPath(`web${path}`).catch(() => null);
-  if (!candidate || !candidate.startsWith(`${webRoot}/`)) {
+  const candidate = await resolveWebAsset(path);
+  if (!candidate) {
     return new Response("Not found", {
       status: 404,
       headers: responseHeaders("text/plain"),
@@ -1663,7 +1662,9 @@ async function serveStatic(path: string): Promise<Response> {
   }
   try {
     return new Response(await Deno.readFile(candidate), {
-      headers: responseHeaders(getContentType(path)),
+      headers: responseHeaders(
+        getContentType(path === "/" ? "/index.html" : path),
+      ),
     });
   } catch {
     return new Response("Not found", {

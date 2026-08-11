@@ -1,14 +1,16 @@
-#!/usr/bin/env deno run --allow-read --allow-write --allow-run --allow-env
+#!/usr/bin/env deno run --allow-read --allow-write --allow-run --allow-env --allow-net
 
 /**
  * Fetch yt-dlp binary for the current platform
  * Run: deno run --allow-all scripts/fetch_yt_dlp.ts
  */
 
+import { fileURLToPath } from "node:url";
+
 const OS = Deno.build.os;
 const ARCH = Deno.build.arch;
 
-const BUNDLE_DIR = new URL("../bundle", import.meta.url).pathname;
+const BUNDLE_DIR = fileURLToPath(new URL("../bundle", import.meta.url));
 
 async function download(url: string, outputPath: string): Promise<void> {
   console.log(`Downloading from ${url}...`);

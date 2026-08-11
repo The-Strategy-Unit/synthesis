@@ -6,10 +6,12 @@
  * Run: deno task build
  */
 
-const DIST_DIR = new URL("../dist", import.meta.url).pathname;
-const PROJECT_DIR = new URL("..", import.meta.url).pathname;
+import { fileURLToPath } from "node:url";
 
 import { config } from "../src/config.ts";
+
+const DIST_DIR = fileURLToPath(new URL("../dist", import.meta.url));
+const PROJECT_DIR = fileURLToPath(new URL("..", import.meta.url));
 
 interface PlatformConfig {
   name: string;
@@ -139,7 +141,8 @@ foreach ($model in $models) {
 }
 
 # Create vault directory
-$env:USERPROFILE | Join-Path "Synthesis" | Join-Path "notes" | { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ -Force } }
+$notes = Join-Path (Join-Path $env:USERPROFILE "Synthesis") "notes"
+if (-not (Test-Path $notes)) { New-Item -ItemType Directory -Path $notes -Force | Out-Null }
 
 Write-Host ""
 Write-Host "=== Setup complete! ===" -ForegroundColor Green
@@ -209,7 +212,7 @@ async function createSetupScript(
   const ext = platform.os === "windows" ? "ps1" : "sh";
   const scriptPath = `${outputDir}/setup.${ext}`;
   await Deno.writeTextFile(scriptPath, template);
-  await Deno.chmod(scriptPath, 0o755);
+  if (platform.os !== "windows") await Deno.chmod(scriptPath, 0o755);
 }
 
 async function buildPlatform(platform: PlatformConfig): Promise<void> {
