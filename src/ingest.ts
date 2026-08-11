@@ -2,10 +2,21 @@
 
 import { config } from "./config.ts";
 
+export type SourceType = "youtube" | "text" | "markdown" | "pdf";
+
+export interface OriginalSourceFile {
+  fileName: string;
+  mediaType: string;
+  bytes: Uint8Array;
+}
+
 export interface IngestResult {
   transcript: string;
   sourceUrl: string;
   title: string;
+  sourceType: SourceType;
+  originalFile?: OriginalSourceFile;
+  pageCount?: number;
 }
 
 const YOUTUBE_HOSTS = new Set([
@@ -15,6 +26,8 @@ const YOUTUBE_HOSTS = new Set([
   "music.youtube.com",
   "youtu.be",
 ]);
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_PLAYLIST_ID = /^[A-Za-z0-9_-]{2,100}$/;
 
 export function validateYouTubeUrl(value: string): string {
   let url: URL;
@@ -35,6 +48,37 @@ export function validateYouTubeUrl(value: string): string {
   }
 
   return url.href;
+}
+
+export function normalizeYouTubeVideoInput(value: string): string {
+  const input = value.trim();
+  if (YOUTUBE_VIDEO_ID.test(input)) {
+    return `https://www.youtube.com/watch?v=${input}`;
+  }
+
+  const url = new URL(validateYouTubeUrl(input));
+  const pathParts = url.pathname.split("/").filter(Boolean);
+  const videoId = url.hostname.toLowerCase() === "youtu.be"
+    ? pathParts[0]
+    : url.searchParams.get("v") ??
+      (["shorts", "embed", "live"].includes(pathParts[0])
+        ? pathParts[1]
+        : undefined);
+  if (!videoId || !YOUTUBE_VIDEO_ID.test(videoId)) {
+    throw new Error("YouTube video URL must contain a valid video ID");
+  }
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+export function normalizeYouTubePlaylistInput(value: string): string {
+  const input = value.trim();
+  const playlistId = YOUTUBE_PLAYLIST_ID.test(input)
+    ? input
+    : new URL(validateYouTubeUrl(input)).searchParams.get("list")?.trim();
+  if (!playlistId || !YOUTUBE_PLAYLIST_ID.test(playlistId)) {
+    throw new Error("YouTube playlist URL must contain a valid playlist ID");
+  }
+  return `https://www.youtube.com/playlist?list=${playlistId}`;
 }
 
 async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
@@ -64,7 +108,7 @@ async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
 }
 
 export async function ingestYouTube(url: string): Promise<IngestResult> {
-  const validatedUrl = validateYouTubeUrl(url);
+  const validatedUrl = normalizeYouTubeVideoInput(url);
   const tmpDir = await Deno.makeTempDir();
 
   try {
@@ -100,8 +144,10 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
     }
 
     const stat = await Deno.stat(files[0]);
-    if (stat.size > config.security.maxTranscriptChars) {
-      throw new Error("YouTube subtitles exceed the configured size limit");
+    if (stat.size > config.security.maxSubtitleBytes) {
+      throw new Error(
+        "YouTube subtitle file exceeds the configured size limit",
+      );
     }
 
     const vttContent = await Deno.readTextFile(files[0]);
@@ -110,7 +156,12 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
       throw new Error("YouTube transcript exceeds the configured size limit");
     }
 
-    return { transcript, sourceUrl: validatedUrl, title };
+    return {
+      transcript,
+      sourceUrl: validatedUrl,
+      title,
+      sourceType: "youtube",
+    };
   } finally {
     try {
       await Deno.remove(tmpDir, { recursive: true });
@@ -119,11 +170,11 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
 }
 
 export function ingestText(title: string, text: string): IngestResult {
-  return { transcript: text, sourceUrl: "", title };
+  return { transcript: text, sourceUrl: "", title, sourceType: "text" };
 }
 
 async function fetchVideoTitle(url: string): Promise<string> {
-  const validatedUrl = validateYouTubeUrl(url);
+  const validatedUrl = normalizeYouTubeVideoInput(url);
   const { success, code, stdout } = await runYtDlp([
     "--get-title",
     validatedUrl,
@@ -167,11 +218,13 @@ export function parseVtt(vtt: string): string {
 export async function getPlaylistVideos(
   playlistUrl: string,
 ): Promise<string[]> {
-  const validatedUrl = validateYouTubeUrl(playlistUrl);
+  const validatedUrl = normalizeYouTubePlaylistInput(playlistUrl);
   const { success, code, stdout } = await runYtDlp([
     "--flat-playlist",
+    "--playlist-end",
+    String(config.ingest.maxPlaylistItems + 1),
     "--print",
-    "url",
+    "webpage_url",
     validatedUrl,
   ]);
   if (!success) {
@@ -179,11 +232,18 @@ export async function getPlaylistVideos(
     throw new Error("Unable to fetch the YouTube playlist");
   }
 
-  const urls = new TextDecoder().decode(stdout).trim().split("\n").filter(
-    Boolean,
-  );
+  const urls = [
+    ...new Set(
+      new TextDecoder().decode(stdout).trim().split("\n").filter(Boolean).map(
+        normalizeYouTubeVideoInput,
+      ),
+    ),
+  ];
+  if (urls.length === 0) {
+    throw new Error("The YouTube playlist contains no accessible videos");
+  }
   if (urls.length > config.ingest.maxPlaylistItems) {
     throw new Error("YouTube playlist exceeds the configured item limit");
   }
-  return urls.map(validateYouTubeUrl);
+  return urls;
 }

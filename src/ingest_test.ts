@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 
-import { ingestText, parseVtt, validateYouTubeUrl } from "./ingest.ts";
+import {
+  ingestText,
+  normalizeYouTubePlaylistInput,
+  normalizeYouTubeVideoInput,
+  parseVtt,
+  validateYouTubeUrl,
+} from "./ingest.ts";
 
 Deno.test("validateYouTubeUrl accepts canonical HTTPS YouTube hosts", () => {
   const accepted = [
@@ -32,6 +38,61 @@ Deno.test("validateYouTubeUrl rejects unsafe or non-YouTube URLs", () => {
   }
 });
 
+Deno.test("YouTube video IDs and URLs normalize to canonical watch URLs", () => {
+  const videoId = "dQw4w9WgXcQ";
+  const canonical = `https://www.youtube.com/watch?v=${videoId}`;
+  const accepted = [
+    videoId,
+    `https://youtube.com/watch?v=${videoId}&list=PL1234567890`,
+    `https://youtu.be/${videoId}?feature=shared`,
+    `https://www.youtube.com/shorts/${videoId}`,
+    `https://www.youtube.com/embed/${videoId}`,
+    `https://www.youtube.com/live/${videoId}`,
+  ];
+
+  for (const value of accepted) {
+    assert.equal(normalizeYouTubeVideoInput(value), canonical);
+  }
+  for (
+    const value of [
+      "not-a-video-id",
+      "https://www.youtube.com/",
+      "https://www.youtube.com/playlist?list=PL1234567890",
+    ]
+  ) {
+    assert.throws(
+      () => normalizeYouTubeVideoInput(value),
+      /YouTube|video ID/,
+    );
+  }
+});
+
+Deno.test("YouTube playlist IDs and URLs normalize canonically", () => {
+  const playlistId = "PL1234567890";
+  const canonical = `https://www.youtube.com/playlist?list=${playlistId}`;
+  for (
+    const value of [
+      playlistId,
+      `https://www.youtube.com/playlist?list=${playlistId}`,
+      `https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=${playlistId}`,
+    ]
+  ) {
+    assert.equal(normalizeYouTubePlaylistInput(value), canonical);
+  }
+  for (
+    const value of [
+      "",
+      "playlist with spaces",
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    ]
+  ) {
+    assert.throws(
+      () => normalizeYouTubePlaylistInput(value),
+      /YouTube|playlist ID/,
+    );
+  }
+});
+
 Deno.test("parseVtt removes metadata, timestamps, tags, and adjacent duplicates", () => {
   const vtt = `WEBVTT
 Kind: captions
@@ -58,5 +119,6 @@ Deno.test("ingestText preserves its title and text", () => {
     transcript: "Some source material.",
     sourceUrl: "",
     title: "A source",
+    sourceType: "text",
   });
 });

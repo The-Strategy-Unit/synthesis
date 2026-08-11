@@ -46,12 +46,6 @@ export function isUrl(s: string): boolean {
 
 type IngestSource = Omit<IngestResult, "sourceType"> & {
   sourceType?: SourceType;
-  originalFile?: {
-    fileName: string;
-    mediaType: string;
-    bytes: Uint8Array;
-  };
-  pageCount?: number;
 };
 
 async function sha256Bytes(bytes: Uint8Array): Promise<string> {
