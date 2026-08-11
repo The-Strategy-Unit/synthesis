@@ -80,6 +80,27 @@ then choose **Test and save**. Endpoints must end in `/v1`. Synthesis tests both
 connections before saving; profile metadata goes to the app-data directory and
 keys go to the operating system credential store.
 
+### Windows executable
+
+From Linux, macOS, or Windows, compile an unsigned Windows x64 executable with
+the experimental QuickJS backend:
+
+```bash
+deno task compile:windows
+```
+
+The artifact is `dist/synthesis-windows-x86_64.exe`. It embeds the web UI, PDF
+support, SQLite, the Windows `sqlite-vec` extension, and Windows
+credential-store support. Copy it to the Windows computer, start Ollama, run the
+executable, and open `http://127.0.0.1:8000`. The default vault is
+`%USERPROFILE%\Synthesis`.
+
+YouTube ingestion additionally requires `yt-dlp.exe` either beside
+`synthesis-windows-x86_64.exe` or on `PATH`. The executable is not code-signed;
+sign it before distributing it beyond a controlled internal demo. QuickJS and
+cross-compilation are provided by
+[Deno compile](https://docs.deno.com/runtime/reference/cli/compile/).
+
 ## Demo workflow
 
 1. Configure a provider, if not using the default Ollama configuration, and use
@@ -219,9 +240,54 @@ reference.
 deno task dev
 deno task test:unit
 deno task test:integration
+deno task test:e2e
 deno task lint
 deno task build
 ```
+
+`test:e2e` is automated and provider-independent. It starts a temporary local
+server, exercises the task-based UI, and cleans up its temporary vault.
+
+### Manual local-provider acceptance
+
+The following is not the automated E2E suite. It checks the real provider and
+source-review workflow against a clean, isolated vault.
+
+On Linux or macOS, start an isolated Synthesis instance in one terminal:
+
+```bash
+SYNTHESIS_OPEN_BROWSER=false \
+SYNTHESIS_PORT=8787 \
+SYNTHESIS_VAULT="$PWD/output.rebuild" \
+SYNTHESIS_APP_DATA="$PWD/output.rebuild-app-data" \
+SYNTHESIS_PER_USER_DAILY_JOBS=1000 \
+SYNTHESIS_GLOBAL_DAILY_JOBS=1000 \
+deno task start
+```
+
+On Windows PowerShell:
+
+```powershell
+$root = (Get-Location).Path
+$env:SYNTHESIS_OPEN_BROWSER = "false"
+$env:SYNTHESIS_PORT = "8787"
+$env:SYNTHESIS_VAULT = Join-Path $root "output.rebuild"
+$env:SYNTHESIS_APP_DATA = Join-Path $root "output.rebuild-app-data"
+$env:SYNTHESIS_PER_USER_DAILY_JOBS = "1000"
+$env:SYNTHESIS_GLOBAL_DAILY_JOBS = "1000"
+deno task start
+```
+
+Verify Ollama through the isolated instance:
+
+```bash
+curl -sS http://127.0.0.1:8787/api/provider/readiness
+```
+
+The response must contain `"ready":true`. Open `http://127.0.0.1:8787`, add one
+representative source, inspect every proposed change and its evidence in Review,
+then apply the reviewed changes. This validates the real Ollama connection
+against newly ingested evidence.
 
 Key modules:
 

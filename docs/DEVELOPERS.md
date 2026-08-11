@@ -32,9 +32,16 @@ deno task dev      # auto-reload via --watch
 deno task lint     # deno lint --fix && deno fmt
 deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
+deno task test:e2e           # provider-independent server/UI workflow tests
 deno test --allow-all src/vault_export_test.ts src/vault_rebuild_test.ts src/ingest_undo_test.ts
                              # portable export/rebuild/undo acceptance tests
 ```
+
+Compile a self-extracting QuickJS executable for the current host with
+`deno task compile`, or cross-compile Windows x64 with
+`deno task compile:windows`. Run `deno task test:compiled <executable>` on the
+artifact's target operating system to verify native SQLite startup, offline
+vault APIs, and embedded UI assets from an unrelated working directory.
 
 ### Permissions
 
@@ -109,15 +116,15 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Ingest
 
-| Variable                         | Default    | Notes                   |
-| -------------------------------- | ---------- | ----------------------- |
-| `SYNTHESIS_MAX_CHARS`            | `12000`    | min 1000; chunk size    |
-| `SYNTHESIS_CHUNK_OVERLAP`        | `500`      | clamped 0–2000          |
-| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400` | clamped 1–100 MiB       |
-| `SYNTHESIS_MAX_PDF_PAGES`        | `500`      | clamped 1–5000          |
-| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`    | clamped 1 second–5 mins |
-| `SYNTHESIS_YT_DLP_PATH`          | `yt-dlp`   | downloader executable   |
-| `SYNTHESIS_SUBTITLES_LANG`       | `en`       | yt-dlp `--sub-lang`     |
+| Variable                         | Default                            | Notes                   |
+| -------------------------------- | ---------------------------------- | ----------------------- |
+| `SYNTHESIS_MAX_CHARS`            | `12000`                            | min 1000; chunk size    |
+| `SYNTHESIS_CHUNK_OVERLAP`        | `500`                              | clamped 0–2000          |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400`                         | clamped 1–100 MiB       |
+| `SYNTHESIS_MAX_PDF_PAGES`        | `500`                              | clamped 1–5000          |
+| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`                            | clamped 1 second–5 mins |
+| `SYNTHESIS_YT_DLP_PATH`          | `yt-dlp` (`yt-dlp.exe` on Windows) | downloader executable   |
+| `SYNTHESIS_SUBTITLES_LANG`       | `en`                               | yt-dlp `--sub-lang`     |
 
 ### Linking
 
