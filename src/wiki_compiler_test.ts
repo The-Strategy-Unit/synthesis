@@ -47,27 +47,6 @@ Deno.test({
       { length: config.embed.dimensions },
       (_, index) => index === 0 ? 1 : 0,
     );
-    const treatmentPage = (body: string, links: string[] = []) =>
-      `---
-title: "Treatment effect"
-type: concept
-tags: ["treatment", "evidence"]
-links: [${links.map((link) => JSON.stringify(link)).join(", ")}]
----
-
-# Treatment effect
-
-${body}
-${
-        links.length > 0
-          ? `
-## Related
-
-${links.map((link) => `- [[${link}]]`).join("\n")}
-`
-          : ""
-      }`;
-
     try {
       config.vaultDir = vault;
       await Deno.mkdir(`${vault}/notes`, { recursive: true });
@@ -156,10 +135,10 @@ ${links.map((link) => `- [[${link}]]`).join("\n")}
               ],
             }));
           case 6:
-            return Promise.resolve(chatResponse(treatmentPage(
-              "The initial and larger follow-up studies both report that treatment reduces symptoms.",
-              ["Confidence assessment"],
-            )));
+            return Promise.resolve(chatResponse({
+              body:
+                "The initial and larger follow-up studies both report that treatment reduces symptoms.",
+            }));
           case 9:
             return Promise.resolve(chatResponse({
               items: [{
@@ -193,10 +172,10 @@ ${links.map((link) => `- [[${link}]]`).join("\n")}
               }],
             }));
           case 12:
-            return Promise.resolve(chatResponse(treatmentPage(
-              "The initial and larger follow-up studies report symptom reduction. However, a separate controlled study reports no measurable reduction, so the evidence is conflicting.",
-              ["Confidence assessment"],
-            )));
+            return Promise.resolve(chatResponse({
+              body:
+                "The initial and larger follow-up studies report symptom reduction. However, a separate controlled study reports no measurable reduction, so the evidence is conflicting.",
+            }));
           default:
             throw new Error(`Unexpected model request ${index + 1}`);
         }

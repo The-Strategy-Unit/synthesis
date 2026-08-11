@@ -17,6 +17,7 @@ const tempDir = (() => {
 })();
 
 const allowedEnv = [
+  "DISABLE_SYSTEM_FONTS_LOAD",
   "HOME",
   "USERPROFILE",
   "TEMP",
@@ -78,13 +79,17 @@ const allowedEnv = [
 const cmd = new Deno.Command(Deno.execPath(), {
   args: [
     "test",
+    "--ignore-env=NAPI_RS_FORCE_WASI,NAPI_RS_NATIVE_LIBRARY_PATH",
     "--allow-ffi",
-    `--allow-read=web,${vaultDir},${tempDir}`,
+    `--allow-read=web,${vaultDir},${tempDir}${
+      Deno.build.os === "linux" ? ",/usr/bin/ldd" : ""
+    }`,
     `--allow-write=${tempDir}`,
     `--allow-env=${allowedEnv}`,
     "--allow-scripts",
     "src/",
   ],
+  env: { DISABLE_SYSTEM_FONTS_LOAD: "1" },
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",
