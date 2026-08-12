@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -12,46 +11,144 @@
       <div id="graph-tooltip" class="hidden"></div>
 
       <header id="topbar">
-        <span class="logo">Synthesis</span>
+        <div class="brand-area">
+          <button id="nav-toggle" type="button" aria-label="Open navigation"
+            aria-controls="primary-nav" aria-expanded="false">&#9776;</button>
+          <span class="logo">Synthesis</span>
+          <span id="provider-mode" data-mode="unknown">Checking mode...</span>
+        </div>
         <div class="search-box">
+          <label class="visually-hidden" for="search-input">Search wiki</label>
           <input type="text" id="search-input"
             placeholder="Search your knowledge base..." />
-          <select id="search-mode">
-            <option value="semantic">Semantic</option>
-            <option value="keyword">Keyword</option>
-          </select>
         </div>
-        <button id="ask-open-btn" type="button">Ask wiki</button>
-        <button id="lint-open-btn" type="button">Wiki health</button>
-        <button id="sources-open-btn" type="button">Sources</button>
-        <button id="provider-open-btn" type="button">Provider</button>
+        <div class="topbar-actions">
+          <button id="add-source-btn" class="primary-action" type="button"
+            aria-controls="source-panel" aria-expanded="false">
+            Add source
+          </button>
+          <div id="vault-tools" class="disclosure">
+            <button id="vault-menu-btn" class="secondary-action" type="button"
+              aria-controls="vault-menu" aria-expanded="false">
+              Vault tools
+            </button>
+            <div id="vault-menu" class="action-menu hidden"
+              aria-label="Vault tools">
+              <button id="provider-open-btn" type="button">AI provider</button>
+              <button id="schema-open-btn" type="button">Wiki schema</button>
+              <a id="export-vault-link" href="/api/export">Export vault</a>
+              <hr />
+              <button id="rebuild-catalog-btn" type="button"
+                title="Rebuild search and catalog state from vault files">
+                Rebuild catalog
+              </button>
+              <button id="undo-ingest-btn" type="button"
+                title="Undo the latest accepted ingest">Undo latest ingest</button>
+            </div>
+          </div>
+        </div>
       </header>
 
-      <main id="main">
-        <aside id="sidebar">
-          <h3>Notes</h3>
-          <ul id="note-list"></ul>
-        </aside>
-
-        <aside id="graph-panel">
-          <h3>Connections</h3>
-          <div class="threshold-control">
-            <label>Min similarity: <span id="threshold-value">0.75</span></label>
-            <input type="range" id="similarity-slider" min="0" max="1"
-              step="0.025" value="0.75" />
+      <div id="workspace">
+        <nav id="primary-nav" aria-label="Primary navigation">
+          <div class="nav-group">
+            <p class="nav-heading">Workspace</p>
+            <button id="wiki-nav-btn" class="nav-item active" type="button"
+              aria-current="page">
+              <span>Wiki</span>
+            </button>
+            <button id="review-open-btn" class="nav-item" type="button">
+              <span>Review</span>
+              <span id="review-count" class="nav-badge hidden"
+                aria-label="No pending reviews">0</span>
+            </button>
+            <button id="discoveries-open-btn" class="nav-item" type="button">
+              <span>Discoveries</span>
+              <span id="discoveries-count" class="nav-badge hidden"
+                aria-label="No open discoveries">0</span>
+            </button>
+            <button id="ask-open-btn" class="nav-item" type="button">
+              <span>Ask wiki</span>
+            </button>
           </div>
-          <svg id="graph"></svg>
-        </aside>
-      </main>
+          <div class="nav-group">
+            <p class="nav-heading">Manage</p>
+            <button id="sources-open-btn" class="nav-item" type="button">
+              <span>Sources</span>
+            </button>
+            <button id="lint-open-btn" class="nav-item" type="button">
+              <span>Wiki health</span>
+            </button>
+          </div>
+        </nav>
 
-      <footer id="ingest-bar">
-        <input type="text" id="ingest-title" maxlength="200"
-          placeholder="Source title (for pasted text)" />
-        <textarea id="ingest-input" rows="2"
-          placeholder="Paste source text or a YouTube URL..."></textarea>
-        <button id="ingest-btn">Ingest</button>
-        <span id="ingest-status"></span>
-      </footer>
+        <main id="main">
+          <aside id="sidebar">
+            <h3>Wiki pages</h3>
+            <ul id="note-list"></ul>
+          </aside>
+
+          <aside id="graph-panel">
+            <h3>Connections</h3>
+            <div class="threshold-control">
+              <label>Min semantic similarity:
+                <span id="threshold-value">0.75</span></label>
+              <input type="range" id="similarity-slider" min="0" max="1"
+                step="0.025" value="0.75" />
+            </div>
+            <div class="graph-legend" aria-label="Connection types">
+              <span><i class="legend-explicit"></i>Wiki link</span>
+              <span><i class="legend-semantic"></i>Semantic</span>
+            </div>
+            <svg id="graph"></svg>
+          </aside>
+        </main>
+      </div>
+
+      <aside id="source-panel" class="source-panel hidden"
+        aria-labelledby="source-panel-title">
+        <header class="source-panel-header">
+          <div>
+            <h2 id="source-panel-title">Add a source</h2>
+            <p>Paste a source or choose a short document to propose wiki changes.</p>
+          </div>
+          <button id="source-panel-close" type="button"
+            aria-label="Close add source panel">&times;</button>
+        </header>
+        <div id="ingest-bar">
+          <label for="ingest-input">Source text, YouTube link, or URL</label>
+          <textarea id="ingest-input" rows="7"
+            placeholder="Paste source text, a YouTube ID, or a URL..."></textarea>
+          <div class="source-file-row">
+            <span>or</span>
+            <label class="file-picker" for="ingest-file">
+              Choose PDF, Markdown, or text file
+              <input id="ingest-file" type="file"
+                accept=".pdf,.md,.markdown,.txt,application/pdf,text/markdown,text/plain" />
+            </label>
+            <span id="ingest-file-name"></span>
+          </div>
+          <details class="source-options">
+            <summary>More options</summary>
+            <div>
+              <label for="ingest-title">Source title</label>
+              <input type="text" id="ingest-title" maxlength="200"
+                placeholder="Optional" />
+              <label for="ingest-source-type">Source type</label>
+              <select id="ingest-source-type">
+                <option value="auto">Auto · safe detection</option>
+                <option value="text">Text</option>
+                <option value="video">YouTube video</option>
+                <option value="playlist">YouTube playlist</option>
+              </select>
+            </div>
+          </details>
+          <div class="source-actions">
+            <button id="ingest-btn" type="button">Prepare for review</button>
+            <span id="ingest-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+      </aside>
     </div>
 
     <div id="note-modal" class="modal hidden">
@@ -80,10 +177,85 @@
         </div>
         <p id="ask-status" role="status"></p>
         <div id="ask-result" class="hidden">
-          <h3>Answer</h3>
-          <div id="ask-answer"></div>
+          <label for="ask-answer">Reviewed synthesis</label>
+          <p class="field-help">
+            Edit the grounded answer if needed. Saving compiles this reviewed
+            text into a durable synthesis page linked to the cited wiki pages.
+          </p>
+          <textarea id="ask-answer" rows="10"></textarea>
           <h3>Cited wiki pages</h3>
           <ul id="ask-citations"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="review-modal" class="modal hidden">
+      <div class="modal-content review-content">
+        <button id="review-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Review proposed wiki changes</h2>
+        <p class="modal-intro">
+          Ingested sources remain separate from durable wiki knowledge until
+          you approve their proposed changes. Review provenance, uncertainty,
+          and connections before accepting them.
+        </p>
+        <p id="review-status" role="status"></p>
+        <div class="review-layout">
+          <ul id="proposal-list" aria-label="Pending proposals"></ul>
+          <section id="proposal-detail" class="hidden">
+            <h3 id="proposal-source-title"></h3>
+            <p id="proposal-source-meta"></p>
+            <p id="proposal-source-summary"></p>
+            <h4>Proposed changes</h4>
+            <ol id="proposal-changes"></ol>
+            <div class="review-actions">
+              <button id="proposal-reject" type="button">Reject</button>
+              <button id="proposal-approve"
+                type="button">Approve changes</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="discoveries-modal" class="modal hidden">
+      <div class="modal-content discoveries-content">
+        <button id="discoveries-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Discoveries</h2>
+        <p class="modal-intro">
+          Evidence-backed connections that may be useful but are still
+          hypotheses. Confidence is model metadata, not proof. Only a confirmed
+          discovery becomes an explicit wiki link.
+        </p>
+        <div class="discoveries-toolbar">
+          <button id="discoveries-scan"
+            type="button">Scan for connections</button>
+        </div>
+        <p id="discoveries-status" role="status"></p>
+        <div class="discoveries-layout">
+          <ul id="discoveries-list" aria-label="Open discoveries"></ul>
+          <section id="discovery-detail" class="hidden">
+            <div class="discovery-heading">
+              <span id="discovery-relationship"></span>
+              <span id="discovery-review-state"></span>
+            </div>
+            <h3>Potential connection</h3>
+            <p id="discovery-explanation"></p>
+            <h4>Why it may matter</h4>
+            <p id="discovery-significance"></p>
+            <p id="discovery-confidence"></p>
+            <h4>Supporting wiki pages</h4>
+            <ul id="discovery-pages"></ul>
+            <h4>Supporting sources</h4>
+            <ul id="discovery-sources"></ul>
+            <div class="discovery-actions">
+              <button id="discovery-investigate"
+                type="button">Investigate</button>
+              <button id="discovery-reject" type="button">Reject</button>
+              <button id="discovery-confirm" type="button">Confirm link</button>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -120,6 +292,12 @@
           Configure OpenAI-compatible chat and embedding endpoints. API keys are
           stored in your operating system credential store, never in the vault.
         </p>
+        <div class="provider-presets">
+          <button id="provider-ollama" type="button">Use local Ollama</button>
+          <button id="provider-diagnose" type="button">
+            Diagnose active provider
+          </button>
+        </div>
         <form id="provider-form">
           <label for="provider-name">Profile name</label>
           <input id="provider-name" name="displayName" required maxlength="80"
@@ -168,6 +346,30 @@
           </div>
         </form>
         <p id="provider-status" role="status"></p>
+        <div id="provider-diagnostics" class="hidden">
+          <p id="provider-diagnostics-summary"></p>
+          <ul id="provider-diagnostics-models"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="schema-modal" class="modal hidden">
+      <div class="modal-content schema-content">
+        <button id="schema-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2>Wiki schema</h2>
+        <p class="modal-intro">
+          Define how Synthesis organises pages, handles evidence and
+          uncertainty, and stays within its product boundaries. This Markdown
+          file is stored locally with the vault and applied to ingest, query,
+          and wiki health analysis.
+        </p>
+        <label for="schema-input">schema.md</label>
+        <textarea id="schema-input" rows="20" spellcheck="false"></textarea>
+        <div class="schema-actions">
+          <button id="schema-save" type="button">Save schema</button>
+        </div>
+        <p id="schema-status" role="status"></p>
       </div>
     </div>
 

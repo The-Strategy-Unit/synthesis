@@ -2,15 +2,20 @@
   "name": "synthesis",
   "version": "0.1.0",
   "tasks": {
+    "app": "deno task start",
     "setup": "deno run --allow-all scripts/setup.ts",
     "migrate": "deno run --allow-all scripts/migrate.ts",
     "dev": "SYNTHESIS_WATCH=true deno task start",
     "lint": "deno lint --fix && deno fmt",
+    "lint:web": "deno lint --no-config web/app.js web/ingest_source.js web/ui_shell.js web/ingest_source_test.js web/ui_shell_test.js",
+    "check": "deno check main.ts scripts/ui_shell_e2e_test.ts && deno check --no-config --import-map=deno.json web/app.js web/ui_shell.js",
     "start": "deno run --allow-all scripts/start.ts",
+    "compile": "deno bundle --platform browser --output web/app.bundle.js web/app.js && deno compile --engine quickjs --self-extracting --include web --allow-all --output dist/synthesis main.ts",
     "build": "deno run --allow-all scripts/build.ts",
     "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
-    "test:unit": "deno test",
-    "test:integration": "deno run --allow-all scripts/test.ts"
+    "test:unit": "deno test && deno test --no-config --allow-read=web web/",
+    "test:integration": "deno run --allow-all scripts/test.ts",
+    "test:e2e": "deno test --allow-run --allow-net=127.0.0.1 --allow-read=.,/tmp --allow-write=/tmp scripts/ui_shell_e2e_test.ts"
   },
   "test": {
     "include": [
