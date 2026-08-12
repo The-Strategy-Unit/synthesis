@@ -9,16 +9,19 @@
     "start": "deno run --allow-all scripts/start.ts",
     "build": "deno run --allow-all scripts/build.ts",
     "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
-    "test": "deno run --allow-all scripts/test.ts"
+    "test:unit": "deno test",
+    "test:integration": "deno run --allow-all scripts/test.ts"
   },
   "test": {
     "include": [
       "src/distil_test.ts",
       "src/ingest_test.ts",
-      "src/provider_profile_test.ts"
+      "src/provider_profile_test.ts",
+      "src/secret_store_test.ts"
     ]
   },
   "imports": {
+    "keyring": "npm:@napi-rs/keyring@1.3.0",
     "d3-force": "https://esm.sh/d3-force@3",
     "d3-selection": "https://esm.sh/d3-selection@3",
     "d3-drag": "https://esm.sh/d3-drag@3",

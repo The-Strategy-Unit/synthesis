@@ -30,7 +30,8 @@ deno task start
 ```bash
 deno task dev      # auto-reload via --watch
 deno task lint     # deno lint --fix && deno fmt
-deno task test     # run tests
+deno task test:unit          # fast, permissionless logic tests
+deno task test:integration   # database, route, and orchestration tests
 ```
 
 ### Permissions
