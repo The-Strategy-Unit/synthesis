@@ -11,6 +11,13 @@ integrates them into the existing wiki. New evidence can create a page, merge
 into one, or record a contradiction. The result is ordinary Markdown backed by
 explicit provenance, semantic search, and a query interface with citations.
 
+## Project provenance
+
+Synthesis is an independently maintained continuation and substantial rewrite of
+the original MIT-licensed project developed during an initial public-sector
+exploration. It is not an official product of, or maintained by, the originating
+organisation.
+
 ## MVP capabilities
 
 - Typed `concept`, `entity`, and `synthesis` pages with explicit
