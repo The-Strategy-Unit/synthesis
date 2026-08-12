@@ -8,7 +8,7 @@
 
 import { config } from "../src/config.ts";
 
-const OLLAMA_URL = "https://ollama.ai";
+const OLLAMA_URL = "https://ollama.com";
 
 interface OllamaStatus {
   running: boolean;
@@ -37,13 +37,13 @@ function getOllamaInstallerUrl(): { url: string; command: string } | null {
     case "darwin":
       return {
         url: `${OLLAMA_URL}/download`,
-        command: "curl -fsSL https://ollama.ai/install.sh | sh",
+        command: "curl -fsSL https://ollama.com/install.sh | sh",
       };
 
     case "linux":
       return {
         url: `${OLLAMA_URL}/download`,
-        command: "curl -fsSL https://ollama.ai/install.sh | sh",
+        command: "curl -fsSL https://ollama.com/install.sh | sh",
       };
 
     case "windows":

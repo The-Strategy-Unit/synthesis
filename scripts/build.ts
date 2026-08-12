@@ -36,8 +36,8 @@ if curl -s --max-time 3 http://localhost:11434/api/version > /dev/null 2>&1; the
     echo "✓ Ollama is running"
 else
     echo "✗ Ollama is not installed or not running"
-    echo "Install from: https://ollama.ai"
-    echo "Or run: curl -fsSL https://ollama.ai/install.sh | sh"
+    echo "Install from: https://ollama.com"
+    echo "Or run: curl -fsSL https://ollama.com/install.sh | sh"
     exit 1
 fi
 
@@ -77,8 +77,8 @@ if curl -s --max-time 3 http://localhost:11434/api/version > /dev/null 2>&1; the
     echo "✓ Ollama is running"
 else
     echo "✗ Ollama is not installed or not running"
-    echo "Install from: https://ollama.ai"
-    echo "Or run: curl -fsSL https://ollama.ai/install.sh | sh"
+    echo "Install from: https://ollama.com"
+    echo "Or run: curl -fsSL https://ollama.com/install.sh | sh"
     exit 1
 fi
 
@@ -119,7 +119,7 @@ try {
     Write-Host "✓ Ollama is running" -ForegroundColor Green
 } catch {
     Write-Host "✗ Ollama is not installed or not running" -ForegroundColor Red
-    Write-Host "Install from: https://ollama.ai"
+    Write-Host "Install from: https://ollama.com"
     Write-Host "Or run: winget install Ollama.Ollama"
     exit 1
 }
