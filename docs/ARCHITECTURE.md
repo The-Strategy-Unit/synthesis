@@ -8,9 +8,22 @@ Technical overview of Synthesis internals.
 main.ts                     # Composition root and loopback HTTP server
 ├── src/config.ts           # All config + env overrides, path helpers
 ├── src/db.ts               # SQLite + sqlite-vec + FTS5: CRUD, embeddings, links, search
+├── src/llm.ts              # Shared chat transport, validation, and bounded structured recovery
 ├── src/distil.ts           # Multi-stage LLM pipeline: extract → consolidate → integrate → rewrite
 ├── src/ingest.ts           # YouTube transcript fetching (yt-dlp), text wrapping, playlist expansion
-├── src/orchestrate.ts      # Source persistence and transactional note integration
+├── src/local_file.ts       # Bounded PDF/Markdown/text parsing and validation
+├── src/ingest_proposal.ts  # Persisted, validated review-proposal format
+├── src/ingest_history.ts   # Durable before-images and approval manifests
+├── src/ingest_undo.ts      # Hash-guarded last-ingest recovery
+├── src/orchestrate.ts      # Source staging, approval, rollback, and note integration
+├── src/vault_manifest.ts   # Stable vault identity and format version
+├── src/vault_export.ts     # Streaming portable tar export
+├── src/vault_rebuild.ts    # Provider-free catalog reconstruction
+├── src/wiki_schema.ts      # Editable vault policy supplied to model workflows
+├── src/wiki_graph.ts       # Explicit-link-first graph and related-page views
+├── src/discovery.ts        # Grounded connection candidates and review lifecycle
+├── src/query.ts            # Context-bounded answers and reviewed write-back
+├── src/wiki_lint.ts        # Provider-free checks and optional AI analysis
 ├── src/routes.ts           # Authenticated API, limits, queue, SSE, static files
 ├── src/migrate.ts          # Legacy Elixir DB → Deno migration (zettels → notes)
 ├── src/rebuild_links.ts    # Standalone link recomputation utility
@@ -25,15 +38,19 @@ Embedding, linking, and search logic all live in `src/db.ts` as methods on the
 ### Ingest pipeline
 
 ```
-User submits URL or text
+User submits URL/text or uploads one local PDF/Markdown/text file
   ↓
 main.ts: POST /api/ingest (SSE stream)
   ↓
 src/ingest.ts
   ├── YouTube: yt-dlp --write-auto-sub → VTT → parseVtt() → transcript text
-  └── Text: wrapped directly as transcript
+  ├── Text: wrapped directly as transcript
+  └── Local file: bounded multipart bytes → src/local_file.ts
+        ├── UTF-8 Markdown/text: strict decode
+        └── PDF: pinned PDF.js → `## PDF page N` text sections
   ↓
-SHA-256 identity check → return existing linked notes without AI on duplicates
+SHA-256 identity check (original bytes for uploads, transcript otherwise)
+  → return an existing proposal or applied notes on duplicates
   ↓
 src/distil.ts: distil()
   ├── splitTranscript() → chunks (maxChars=12000, overlap=500)
@@ -42,23 +59,40 @@ src/distil.ts: distil()
   └── consolidateCandidates() (consolidateModel, single call)
         → deduplicated notes + summary
   ↓
-Persist immutable raw source + metadata + summary under sources/<sha256>/
+Persist immutable extracted text + metadata + summary under sources/<sha256>/
+  and preserve uploaded bytes as original.pdf/.md/.txt
   ↓
 src/distil.ts: integrate()
   ├── FTS shortlists relevant existing notes
   ├── Compares against their titles and bounded contents
   └── Returns decision: new | merge | contradict (+ existing_id)
   ↓
-For each note:
-  ├── new: exclusive .md creation → transactional DB/index/vector/provenance
-  ├── merge: rewrite + embed → atomic file replace → transactional derived state
-  └── contradict: same as merge, preserving explicit source references
+Prepare and validate every proposed Markdown page without mutating the wiki
+  → PDF pages must retain in-range source_pages through both model stages
   ↓
-db.computeLinksFor(touchedIds, threshold)
-  → removes stale touched links and recomputes them transactionally
+Persist one pending ingest proposal with new/merge/contradict changes
   ↓
-SSE sends "done" with note list
+Human reviews the exact Markdown and approves or rejects it
+  ↓ approve
+Revalidate target-page hashes → embed every change before mutation
+  ↓
+Write a durable history manifest and before-images
+  ↓
+Apply files, catalogue, FTS, embeddings, provenance, index, and log
+  as one recoverable operation; restore files if the DB transaction fails
+  ↓
+Recompute semantic links for touched pages and derive explicit links from Markdown
+  ↓
+Run a bounded, source-grounded discovery scan; failure here does not roll back
+  approved knowledge
 ```
+
+Rejected proposals never mutate wiki pages. Immutable source archives remain
+available for audit and retry. Production routes use `stageSingleSource()`;
+`processSingleSource()` remains only for lower-level and golden tests. PDF
+parsing is in-process and performs no network requests. It is bounded by upload
+bytes, extracted characters, page count, and elapsed time. Encrypted and
+image-only PDFs are rejected rather than producing ungrounded knowledge.
 
 ### Search
 
@@ -78,16 +112,37 @@ Both return: [{ id, title, score, matchType }]
 ```
 
 `db.ts` also has a combined `db.search()` method that merges keyword + semantic
-results with matchType `"both"`, but `main.ts` currently uses single-mode search
-based on the `mode` query parameter.
+results with matchType `"both"`, but `routes.ts` uses the requested single mode.
+Keyword search, browsing, sources, the graph, deterministic lint, export,
+rebuild, and undo do not resolve a provider and remain available offline. Wiki
+queries seed context from FTS, optionally add semantic results, and expand one
+explicit-link hop.
+
+### Export and recovery
+
+`GET /api/export` streams `vault.json`, `schema.md`, `notes/`, `sources/`, and
+`history/` as POSIX tar. SQLite and provider credentials are excluded.
+
+`POST /api/rebuild` validates the manifest/schema, source metadata and hashes,
+compiler-managed pages, unique titles, exact wiki-link targets, and provenance
+before any database mutation. It regenerates `index.md`, then atomically
+replaces the SQLite source/note/provenance/FTS catalog. Embeddings and semantic
+links are empty after rebuild. Proposals and discoveries are cleared because
+their numeric-ID review state is not yet represented as durable vault files.
+
+`POST /api/ingest/undo` selects the newest not-yet-undone history manifest. All
+current affected pages must match their recorded approved hashes. The operation
+archives after-images, restores before-images, removes newly created pages from
+the live wiki, writes `undo.json`, and transactionally updates SQLite. On a
+pre-commit failure it restores the live files. Immutable source archives remain.
 
 ### Playlist ingest
 
 ```
 POST /api/ingest/playlist
   → getPlaylistVideos(url) via yt-dlp --flat-playlist
-  → iterates each video URL through processSingleSource()
-  → computes links once at the end
+  → iterates each video URL through the same staging path
+  → creates a separate review proposal per source
   → SSE streams per-video progress
 ```
 
@@ -111,11 +166,11 @@ CREATE TABLE notes (
 ```sql
 CREATE VIRTUAL TABLE embeddings USING vec0(
   note_id INTEGER PRIMARY KEY,
-  vector FLOAT[4096] distance_metric=cosine
+  vector FLOAT[768] distance_metric=cosine
 );
 ```
 
-Vector dimensions default to 4096 (`SYNTHESIS_EMBED_DIMENSIONS`).
+Vector dimensions default to 768 (`SYNTHESIS_EMBED_DIMENSIONS`).
 
 ### `links` table
 
@@ -130,8 +185,10 @@ CREATE TABLE links (
 );
 ```
 
-Links are stored bidirectionally - `computeLinks()` normalises to
+This table stores derived semantic links. `computeLinks()` normalises to
 `min(id), max(id)` ordering and deduplicates via the `UNIQUE` constraint.
+Explicit links are read from canonical page Markdown and are not cached here;
+when both types connect the same pages, the explicit relationship wins.
 
 ### `notes_fts` (FTS5 virtual table)
 
@@ -151,6 +208,26 @@ or contradicted a note. Both raw source files and Markdown source references
 survive downstream integration failures; SQLite search/vector/link state is
 rebuildable derived data.
 
+Approved ingest history is stored under `history/` with source/proposal
+identity, per-page before/after hashes, before-images, retained after-images
+when undone, and an undo receipt. This filesystem state is authoritative for
+last-ingest recovery; SQLite proposal and discovery queues remain derived MVP
+state.
+
+### `ingest_proposals`
+
+Stores the exact validated Markdown proposed for one immutable source, with a
+guarded `pending → approved|rejected` lifecycle. Changes to existing pages carry
+their base content hashes so approval refuses stale rewrites.
+
+### `discoveries`
+
+Stores deduplicated, source-grounded candidate connections with relationship
+type, explanation, significance, evidence page/source IDs, model metadata, and a
+guarded `pending|investigating → confirmed|rejected` lifecycle. Confirming a
+discovery promotes a missing relationship into canonical Markdown as an explicit
+wiki link.
+
 ## Key algorithms
 
 ### Embedding and storage
@@ -160,32 +237,68 @@ returns a `number[]`. `embedAndStore()` wraps this: embeds
 `title + "\n" + body`, then calls `upsertEmbedding()` which deletes any existing
 vector for that note_id and inserts the new one.
 
+### Planned multi-resolution retrieval
+
+Synthesis should not embed every sentence independently. Isolated sentences can
+lose meaning carried by headings, neighbouring sentences, pronouns, citations,
+lists, and tables. Sentence-level indexing would also multiply storage and
+local-model work: one 768-dimensional float32 vector occupies approximately 3
+KiB before index overhead.
+
+The preferred design preserves the existing page embedding and selectively adds
+passage embeddings for longer pages:
+
+- Pages of at most four sentences or approximately 800 characters retain only
+  their page embedding.
+- Longer pages are divided along semantic boundaries into passages of roughly
+  two to four sentences or 80–200 words, with one sentence of overlap.
+- Each passage is prefixed with its page title and section heading before
+  embedding so that it remains meaningful outside its original position.
+- Keyword, page-vector, and passage-vector results are combined and deduplicated
+  by page. The matched passage supplies the search snippet, while its
+  surrounding page supplies answer context.
+- Explicit wiki links remain authoritative. Embedding similarity produces
+  retrieval and connection candidates rather than durable knowledge.
+
+Passage vectors should live in a separate table keyed by passage ID, with the
+note ID, ordinal or source location, text, and content hash retained alongside
+them. Page embeddings must remain available for broad discovery, graph
+suggestions, and short atomic wiki entries. The 768-dimensional default was
+selected after retrieval and resource benchmarking. Changing dimensions still
+requires rebuilding the vector index, so benchmark alternatives in a new vault
+first.
+
 ### Link computation
 
-`db.computeLinks(threshold, k)`:
+`db.computeLinksFor(noteIds, threshold, k)`:
 
-1. Fetch all notes
-2. For each note, get its embedding via `getEmbedding()`
+1. Deduplicate the supplied touched note IDs
+2. For each touched note, get its embedding via `getEmbedding()`
 3. Find k nearest neighbors via `findNearest()` (sqlite-vec kNN query)
 4. Filter by similarity ≥ threshold
 5. Normalise direction: `source = min(id), target = max(id)`
 6. Deduplicate via a `seen` set + DB `UNIQUE` constraint
 7. Upsert into `links` table
 
-This is O(n × k) queries, recomputed after every ingest.
+Only touched pages are recomputed after approval. `buildWikiGraph()` then merges
+these semantic candidates with authoritative explicit links parsed from files.
 
 ### LLM pipeline stages
 
 | Stage       | Model role         | Default model | Temperature | Max tokens | JSON mode |
 | ----------- | ------------------ | ------------- | ----------- | ---------- | --------- |
-| Extract     | `extractModel`     | `qwen3.5:9b`  | 0.2         | 2000       | yes       |
-| Consolidate | `consolidateModel` | `qwen3.6:27b` | 0.1         | 4000       | yes       |
+| Extract     | `extractModel`     | `qwen3.5:9b`  | 0           | 2000       | yes       |
+| Consolidate | `consolidateModel` | `qwen3.5:9b`  | 0.1         | 4000       | yes       |
 | Integrate   | `integrateModel`   | `qwen3.5:9b`  | 0.1         | 2000       | yes       |
-| Rewrite     | `rewriteModel`     | `qwen3.6:27b` | -           | 2000       | no        |
+| Rewrite     | `rewriteModel`     | `qwen3.5:9b`  | -           | 2000       | no        |
 
-All LLM calls go through a shared `chat()` helper in `distil.ts` that constructs
-OpenAI-compatible `/chat/completions` requests. The `reasoning_effort` field is
-sent only when set to something other than `none`.
+All LLM calls go through `src/llm.ts`, which constructs OpenAI-compatible
+`/chat/completions` requests and validates provider envelopes. Local Ollama
+receives an explicit `reasoning_effort: "none"`; providers that may not support
+that value do not. Structured workflows retry one validation failure at
+temperature 0, but never retry transport, HTTP, timeout, or truncation failures.
+The current `schema.md` is bounded and included in every model-authored
+knowledge workflow.
 
 ## Migration from legacy Elixir DB
 

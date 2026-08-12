@@ -15,7 +15,7 @@ Setup, configuration, extending, and troubleshooting for Synthesis.
 git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
 deno task setup
-deno task start
+deno task app
 ```
 
 `setup.ts` will:
@@ -32,6 +32,8 @@ deno task dev      # auto-reload via --watch
 deno task lint     # deno lint --fix && deno fmt
 deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
+deno test --allow-all src/vault_export_test.ts src/vault_rebuild_test.ts src/ingest_undo_test.ts
+                             # portable export/rebuild/undo acceptance tests
 ```
 
 ### Permissions
@@ -74,13 +76,13 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Model roles
 
-| Variable                      | Default       | Used by                             |
-| ----------------------------- | ------------- | ----------------------------------- |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`  | Per-chunk extraction                |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b` | Source-level consolidation          |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b`  | new/merge/contradict decisions      |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.6:27b` | Rewriting existing notes            |
-| `SYNTHESIS_LLM_MODEL`         | `qwen3.6:27b` | Backward-compat / API response only |
+| Variable                      | Default      | Used by                             |
+| ----------------------------- | ------------ | ----------------------------------- |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b` | Per-chunk extraction                |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:9b` | Source-level consolidation          |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b` | new/merge/contradict decisions      |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:9b` | Rewriting existing notes            |
+| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:9b` | Backward-compat / API response only |
 
 ### LLM tuning
 
@@ -98,21 +100,24 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Embeddings
 
-| Variable                     | Default                       | Notes                           |
-| ---------------------------- | ----------------------------- | ------------------------------- |
-| `SYNTHESIS_EMBED_API_BASE`   | inherits `SYNTHESIS_API_BASE` | Separate endpoint if needed     |
-| `SYNTHESIS_EMBED_API_KEY`    | inherits `SYNTHESIS_API_KEY`  | -                               |
-| `SYNTHESIS_EMBED_MODEL`      | `qwen3-embedding:8b`          | -                               |
-| `SYNTHESIS_EMBED_DIMENSIONS` | `4096`                        | min 64; must match model output |
+| Variable                     | Default                          | Notes                           |
+| ---------------------------- | -------------------------------- | ------------------------------- |
+| `SYNTHESIS_EMBED_API_BASE`   | inherits `SYNTHESIS_API_BASE`    | Separate endpoint if needed     |
+| `SYNTHESIS_EMBED_API_KEY`    | inherits `SYNTHESIS_API_KEY`     | -                               |
+| `SYNTHESIS_EMBED_MODEL`      | `nomic-embed-text-v2-moe:latest` | -                               |
+| `SYNTHESIS_EMBED_DIMENSIONS` | `768`                            | min 64; must match model output |
 
 ### Ingest
 
-| Variable                   | Default  | Notes                 |
-| -------------------------- | -------- | --------------------- |
-| `SYNTHESIS_MAX_CHARS`      | `12000`  | min 1000; chunk size  |
-| `SYNTHESIS_CHUNK_OVERLAP`  | `500`    | clamped 0–2000        |
-| `SYNTHESIS_YT_DLP_PATH`    | `yt-dlp` | downloader executable |
-| `SYNTHESIS_SUBTITLES_LANG` | `en`     | yt-dlp `--sub-lang`   |
+| Variable                         | Default    | Notes                   |
+| -------------------------------- | ---------- | ----------------------- |
+| `SYNTHESIS_MAX_CHARS`            | `12000`    | min 1000; chunk size    |
+| `SYNTHESIS_CHUNK_OVERLAP`        | `500`      | clamped 0–2000          |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400` | clamped 1–100 MiB       |
+| `SYNTHESIS_MAX_PDF_PAGES`        | `500`      | clamped 1–5000          |
+| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`    | clamped 1 second–5 mins |
+| `SYNTHESIS_YT_DLP_PATH`          | `yt-dlp`   | downloader executable   |
+| `SYNTHESIS_SUBTITLES_LANG`       | `en`       | yt-dlp `--sub-lang`     |
 
 ### Linking
 
@@ -146,6 +151,7 @@ override with validation (clamping, enum checks, minimum bounds).
      transcript: string;
      sourceUrl: string;
      title: string;
+     sourceType: "youtube" | "text" | "markdown" | "pdf";
    }
    ```
 2. Wire it into the `POST /api/ingest` handler in `src/routes.ts`
@@ -162,8 +168,9 @@ Edit the prompt constants in `src/distil.ts`:
 ### Changing the embedding model
 
 Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` matches the
-model's output. Existing embeddings will have mismatched dimensions and must be
-regenerated (delete the `embeddings` table or rebuild from scratch).
+model's output. The vector width is part of the vault database schema; do not
+change it for an existing vault until a supported rebuild workflow is available.
+Use a new vault when evaluating a model with a different width.
 
 ## API reference
 
@@ -175,25 +182,57 @@ Request body: `{ "url": "..." }` or `{ "text": "...", "title": "..." }`
 
 Response is a `text/event-stream` with `data:` events:
 
-| Stage         | Data                         |
-| ------------- | ---------------------------- |
-| `ingesting`   | `{ title }`                  |
-| `ingested`    | `{ title }`                  |
-| `extracting`  | -                            |
-| `distilled`   | `{ noteCount }`              |
-| `embedding`   | -                            |
-| `integrating` | -                            |
-| `integrated`  | `{ new, merge, contradict }` |
-| `linking`     | -                            |
-| `done`        | `{ notes: [{ id, title }] }` |
-| `error`       | `{ error }`                  |
+| Stage        | Data                                        |
+| ------------ | ------------------------------------------- |
+| `ingesting`  | `{ title }`                                 |
+| `ingested`   | `{ title }`                                 |
+| `extracting` | -                                           |
+| `distilled`  | `{ noteCount }`                             |
+| `proposal`   | `{ proposal, new, merge, contradict }`      |
+| `done`       | `{ notes: [] }` for a newly staged proposal |
+| `error`      | `{ error, code, requestId }`                |
+
+Staging archives the source but does not mutate wiki pages. A reviewer inspects
+the proposal through `GET /api/proposals/:id` and applies it with
+`POST /api/proposals/:id/approve`. Approval streams `embedding`, `integrating`,
+`integrated`, `linking`, optional `discoveries` or `warning`, and `done` events.
+Reject a pending proposal with `POST /api/proposals/:id/reject`.
+
+### Export, rebuild, and undo
+
+`GET /api/export` streams the authoritative vault as tar. The exporter rejects
+symlinks and unsafe/overlong archive paths and excludes SQLite and app-data
+secrets. Its test extracts the archive into a fresh vault, creates a new SQLite
+database, rebuilds the catalog, and verifies keyword search.
+
+`POST /api/rebuild` requires `{ "confirm": "REBUILD" }`. Files are fully
+preflighted before `DB.replaceCatalog()` transactionally replaces derived rows.
+Rebuild clears embeddings, semantic links, proposals, and discoveries. Do not
+add a provider call to this path.
+
+`POST /api/ingest/undo` requires `{ "confirm": "UNDO" }`. Undo accepts only the
+newest not-yet-undone history record and refuses any affected page whose current
+hash differs from its recorded approved hash. Files are restored with rollback,
+then `DB.undoIngest()` updates the catalog transactionally. Immutable sources
+and archived after-images remain in the vault.
+
+### `POST /api/ingest/file` (SSE)
+
+Send `multipart/form-data` with exactly one `file` and an optional `title`.
+Accepted formats are PDF, UTF-8 Markdown (`.md` or `.markdown`), and UTF-8 text
+(`.txt`). The route applies a separate bounded upload limit and then uses the
+same proposal-review SSE flow as pasted text. PDF text is extracted page by page
+with the pinned Mozilla PDF.js package; no system `pdftotext` executable is
+required. Password-protected and image-only PDFs are rejected, so run OCR before
+uploading a scanned document.
 
 ### `POST /api/ingest/playlist` (SSE)
 
-Request body: `{ "url": "https://youtube.com/playlist?list=..." }`
+Request body: `{ "url": "<playlist ID or YouTube URL containing list=...>" }`
 
 Same SSE stages, but with `distilling` events per video
-(`{ title: "Video N/M" }`) and an `errors` array in the `done` event.
+(`{ title: "Video N/M" }`). Partial failures emit `warning`; total failure emits
+`error` with code `PLAYLIST_INGEST_FAILED`.
 
 ### `GET /api/search`
 

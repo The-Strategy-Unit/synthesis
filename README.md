@@ -16,14 +16,22 @@ explicit provenance, semantic search, and a query interface with citations.
 - Typed `concept`, `entity`, and `synthesis` pages with explicit
   `[[wiki links]]`
 - Immutable raw-source archive and many-to-many page provenance
-- Incremental new/merge/contradict integration across sources
+- Local PDF, Markdown, and text upload; PDF evidence retains page locations and
+  the original file
+- Editable `schema.md` defining the vault's purpose and compilation conventions
+- Staged new/merge/contradict proposals with human approval before wiki mutation
 - Deterministic wiki index and machine-readable change log
-- Keyword and semantic search with a relationship graph
+- Keyword and semantic search with an explicit-link-first relationship graph
+- Reviewed, source-grounded **Discoveries** for possible cross-page connections
 - Wiki-grounded answers with cited pages and reviewed synthesis write-back
 - Deterministic structural/provenance lint plus optional AI health analysis
 - Source review showing which pages each source created or changed
 - OpenAI-compatible local or remote providers with keys in the OS credential
   store
+- Provider-independent browsing, source review, graph navigation, keyword
+  search, and deterministic health checks
+- Streamed portable vault export, provider-free catalog rebuild, and
+  hash-guarded last-ingest undo with retained revisions
 
 Synthesis is intended for research and knowledge-management workflows. It is not
 validated clinical decision-support software. Do not use it for patient care or
@@ -43,7 +51,7 @@ Install and start [Ollama](https://ollama.com/), then run:
 git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
 deno task setup
-deno task start
+deno task app
 ```
 
 The setup task checks Ollama and reports any models that still need to be
@@ -57,7 +65,7 @@ Skip the Ollama-specific setup and start directly:
 ```bash
 git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
-deno task start
+deno task app
 ```
 
 Open **Provider**, enter the chat and embedding endpoints, models, and API keys,
@@ -67,21 +75,33 @@ keys go to the operating system credential store.
 
 ## Demo workflow
 
-1. Configure a provider, if not using the default Ollama configuration.
-2. Paste a representative source into the bottom bar and choose **Ingest**.
-3. Ingest a second source that supports, extends, or contradicts the first.
-4. Open **Sources** to inspect source summaries and derived-page provenance.
-5. Open **Ask wiki**, ask a cross-source question, review its cited pages, and
+1. Configure a provider, if not using the default Ollama configuration, and use
+   **Diagnose active provider** to verify that its required models are present.
+2. Choose a representative PDF, Markdown, or text file—or paste source text—then
+   choose **Ingest**. Image-only PDFs need OCR before ingestion.
+3. Open **Review**, inspect the proposed page changes and provenance, then
+   approve them to mutate the wiki.
+4. Ingest and approve a second source that supports, extends, or contradicts the
+   first.
+5. Open **Discoveries**, scan for grounded cross-page connections, and confirm
+   only a useful one. Confirmation promotes it to an explicit wiki link.
+6. Open **Sources** to inspect source summaries and derived-page provenance.
+7. Open **Ask wiki**, ask a cross-source question, review its cited pages, and
    optionally save the answer as a new synthesis page.
-6. Open **Wiki health** to inspect broken links, missing provenance,
+8. Open **Wiki health** to inspect broken links, missing provenance,
    contradictions, orphan pages, and optional AI findings.
+9. Choose **Export** to download the authoritative Markdown, sources, schema,
+   manifest, and revision history as a portable tar archive.
+10. Demonstrate recovery with **Undo ingest**, or use **Rebuild** to validate
+    the vault and reconstruct SQLite search/catalog state from its files.
 
 The notes list, relationship graph, keyword search, and semantic search update
 as the wiki changes.
 
 ## Compilation pipeline
 
-1. **Archive** — preserve the raw source, metadata, hash, and source summary.
+1. **Archive** — preserve the raw source or original uploaded file, extracted
+   page-aware text, metadata, hash, and source summary.
 2. **Extract** — identify durable concepts, entities, findings, procedures, and
    cautions from bounded chunks.
 3. **Consolidate** — deduplicate candidate pages within the source.
@@ -97,59 +117,94 @@ as the wiki changes.
 
 ```text
 ~/Synthesis/
+├── vault.json          # stable vault identity and format version
+├── schema.md           # editable vault purpose and compilation policy
 ├── notes/
 │   ├── index.md       # deterministic typed-page index
 │   ├── log.md         # append-only logical change history
 │   └── *.md           # compiled wiki pages
-├── sources/           # immutable raw inputs, metadata, and summaries
-└── synthesis.db       # catalogue, provenance, FTS, embeddings, and graph
+├── sources/           # immutable originals, extracted text, metadata, summaries
+├── history/           # accepted-ingest before/after revisions and undo receipts
+└── synthesis.db       # rebuildable catalogue, FTS, embeddings, and graph cache
 ```
 
 Override the vault root with `SYNTHESIS_VAULT`. Provider profile metadata is
 stored separately under the platform app-data directory; API keys are not stored
 in the vault or profile file.
 
+### Export and recovery
+
+**Export** streams a tar archive containing `vault.json`, `schema.md`, `notes/`,
+`sources/`, and `history/`. It deliberately excludes SQLite and provider
+credentials. **Rebuild** strictly validates source hashes, wiki pages, links,
+and provenance before replacing the derived SQLite catalog. Rebuild restores
+keyword search and explicit wiki links immediately; embeddings and semantic
+links remain empty until later model-backed work. It also clears pending
+proposals and discovery-review state because those queues are not yet durable
+vault artifacts.
+
+**Undo ingest** applies only to the newest accepted, not-yet-undone ingest. It
+refuses to overwrite a page changed since approval, retains immutable sources,
+archives the removed after-version in `history/`, restores prior page revisions,
+and clears affected semantic state. Export before material recovery operations.
+
 ## Configuration
 
 Configuration is defined in `src/config.ts` and can be overridden with
 environment variables. Common settings are:
 
-| Variable                      | Default                     | Purpose                  |
-| ----------------------------- | --------------------------- | ------------------------ |
-| `SYNTHESIS_VAULT`             | `~/Synthesis`               | Vault root               |
-| `SYNTHESIS_PORT`              | `8000`                      | HTTP port                |
-| `SYNTHESIS_API_BASE`          | `http://localhost:11434/v1` | Default chat API         |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`                | Chunk extraction         |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.6:27b`               | Source synthesis         |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b`                | Integration decisions    |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.6:27b`               | Page rewriting           |
-| `SYNTHESIS_EMBED_MODEL`       | `qwen3-embedding:8b`        | Embeddings               |
-| `SYNTHESIS_EMBED_DIMENSIONS`  | `4096`                      | Required embedding width |
-| `SYNTHESIS_LINK_THRESHOLD`    | `0.75`                      | Graph link threshold     |
+| Variable                         | Default                          | Purpose                  |
+| -------------------------------- | -------------------------------- | ------------------------ |
+| `SYNTHESIS_VAULT`                | `~/Synthesis`                    | Vault root               |
+| `SYNTHESIS_PORT`                 | `8000`                           | HTTP port                |
+| `SYNTHESIS_API_BASE`             | `http://localhost:11434/v1`      | Default chat API         |
+| `SYNTHESIS_EXTRACT_MODEL`        | `qwen3.5:9b`                     | Chunk extraction         |
+| `SYNTHESIS_CONSOLIDATE_MODEL`    | `qwen3.5:9b`                     | Source synthesis         |
+| `SYNTHESIS_INTEGRATE_MODEL`      | `qwen3.5:9b`                     | Integration decisions    |
+| `SYNTHESIS_REWRITE_MODEL`        | `qwen3.5:9b`                     | Page rewriting           |
+| `SYNTHESIS_EMBED_MODEL`          | `nomic-embed-text-v2-moe:latest` | Embeddings               |
+| `SYNTHESIS_EMBED_DIMENSIONS`     | `768`                            | Required embedding width |
+| `SYNTHESIS_LINK_THRESHOLD`       | `0.75`                           | Graph link threshold     |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400`                       | Multipart upload limit   |
+| `SYNTHESIS_MAX_PDF_PAGES`        | `500`                            | PDF page limit           |
+| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`                          | PDF extraction timeout   |
 
 See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the complete configuration
 reference.
 
 ## API
 
-| Endpoint               | Method | Description                               |
-| ---------------------- | ------ | ----------------------------------------- |
-| `/api/status`          | GET    | Minimal server health                     |
-| `/api/config`          | GET    | Non-secret UI configuration               |
-| `/api/provider`        | GET    | Redacted provider status                  |
-| `/api/provider`        | POST   | Test and save provider configuration      |
-| `/api/notes`           | GET    | List wiki pages                           |
-| `/api/notes/:id`       | GET    | Page content and related pages            |
-| `/api/sources`         | GET    | List source provenance                    |
-| `/api/sources/:id`     | GET    | Source summary and derived pages          |
-| `/api/search?q=&mode=` | GET    | Keyword or semantic search                |
-| `/api/graph`           | GET    | Wiki relationship graph                   |
-| `/api/query`           | POST   | Answer from compiled pages with citations |
-| `/api/query/save`      | POST   | Save a reviewed cited synthesis           |
-| `/api/lint`            | GET    | Deterministic wiki health report          |
-| `/api/lint/analyze`    | POST   | Optional provider-assisted health report  |
-| `/api/ingest`          | POST   | Ingest URL or text with SSE progress      |
-| `/api/ingest/playlist` | POST   | Ingest a YouTube playlist when enabled    |
+| Endpoint                       | Method  | Description                                  |
+| ------------------------------ | ------- | -------------------------------------------- |
+| `/api/status`                  | GET     | Minimal server health                        |
+| `/api/config`                  | GET     | Non-secret UI configuration                  |
+| `/api/provider`                | GET     | Redacted provider status                     |
+| `/api/provider`                | POST    | Test and save provider configuration         |
+| `/api/provider/diagnose`       | POST    | Check active endpoints and required models   |
+| `/api/schema`                  | GET/PUT | Read or update the vault schema              |
+| `/api/export`                  | GET     | Stream the portable authoritative vault      |
+| `/api/rebuild`                 | POST    | Rebuild derived catalog state from files     |
+| `/api/notes`                   | GET     | List wiki pages                              |
+| `/api/notes/:id`               | GET     | Page content and related pages               |
+| `/api/sources`                 | GET     | List source provenance                       |
+| `/api/sources/:id`             | GET     | Source summary and derived pages             |
+| `/api/search?q=&mode=`         | GET     | Keyword or semantic search                   |
+| `/api/graph`                   | GET     | Wiki relationship graph                      |
+| `/api/query`                   | POST    | Answer from compiled pages with citations    |
+| `/api/query/save`              | POST    | Save a reviewed cited synthesis              |
+| `/api/lint`                    | GET     | Deterministic wiki health report             |
+| `/api/lint/analyze`            | POST    | Optional provider-assisted health report     |
+| `/api/ingest`                  | POST    | Stage URL or text changes with SSE progress  |
+| `/api/ingest/file`             | POST    | Stage a bounded local file upload            |
+| `/api/ingest/undo`             | POST    | Undo the newest unchanged accepted ingest    |
+| `/api/ingest/playlist`         | POST    | Stage videos from a bounded YouTube playlist |
+| `/api/proposals`               | GET     | List staged ingestion proposals              |
+| `/api/proposals/:id`           | GET     | Inspect a proposed wiki change               |
+| `/api/proposals/:id/approve`   | POST    | Approve and apply a proposal                 |
+| `/api/proposals/:id/reject`    | POST    | Reject a proposal                            |
+| `/api/discoveries`             | GET     | List reviewed connection candidates          |
+| `/api/discoveries/generate`    | POST    | Scan for grounded connections                |
+| `/api/discoveries/:id/:action` | POST    | Investigate, confirm, or reject              |
 
 ## Development
 
@@ -169,6 +224,10 @@ src/orchestrate.ts             incremental source-to-wiki compilation
 src/wiki_store.ts              index, log, and cited synthesis persistence
 src/query.ts                   grounded cited wiki answers
 src/wiki_lint.ts               deterministic and AI-assisted wiki health
+src/vault_export.ts            portable authoritative tar streaming
+src/vault_rebuild.ts           strict provider-free catalog reconstruction
+src/ingest_history.ts          accepted-ingest revision history
+src/ingest_undo.ts             hash-guarded last-ingest recovery
 src/provider_*.ts              provider validation, runtime, and persistence
 src/db.ts                      SQLite, provenance, FTS, embeddings, and links
 src/routes.ts                  HTTP API and access controls
@@ -180,6 +239,11 @@ web/                           browser UI
 With Ollama, model processing remains local. With a remote provider, relevant
 source and wiki text is sent to that provider, so its data handling and
 retention terms apply. Synthesis does not send API keys to browser responses.
+Browsing pages and sources, following the graph, keyword search, deterministic
+health checks, export, rebuild, and undo continue to work when no inference
+provider is available. Ingestion, semantic search, AI-assisted analysis, query
+answers, and discovery generation require Ollama or a configured remote
+provider.
 
 For network deployment, authentication, quotas, backups, and recovery guidance,
 see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not expose the server directly
