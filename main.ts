@@ -13,6 +13,8 @@ import {
 import { resolveActiveProviders } from "./src/provider_runtime.ts";
 import { createHandler } from "./src/routes.ts";
 import { KeyringSecretStore } from "./src/secret_store.ts";
+import { ensureWikiSchema } from "./src/wiki_schema.ts";
+import { ensureVaultManifest } from "./src/vault_manifest.ts";
 
 const vault_dir = config.vaultDir;
 const db_path = dbPath();
@@ -20,6 +22,8 @@ const db_path = dbPath();
 await Deno.mkdir(vault_dir, { recursive: true });
 await Deno.mkdir(notesDir(), { recursive: true });
 await Deno.mkdir(sourcesDir(), { recursive: true });
+await ensureVaultManifest();
+await ensureWikiSchema();
 
 const db = new DB(db_path);
 const profileStore = new ProviderProfileStore(

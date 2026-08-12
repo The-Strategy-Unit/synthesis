@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "./config.ts";
 import { DB } from "./db.ts";
 import { createHandler } from "./routes.ts";
+import { parseWikiPage, renderWikiPage } from "./wiki.ts";
 
 function routeTest(name: string, fn: () => void | Promise<void>): void {
   Deno.test({
@@ -21,9 +22,12 @@ async function withTempHandler(
 ): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "synthesis-routes-test-" });
   const db = new DB(`${dir}/synthesis.db`);
+  const originalVaultDir = config.vaultDir;
   try {
+    config.vaultDir = dir;
     await test(createHandler(db), db, dir);
   } finally {
+    config.vaultDir = originalVaultDir;
     db.close();
     await Deno.remove(dir, { recursive: true });
   }
@@ -55,6 +59,172 @@ routeTest(
   },
 );
 
+routeTest(
+  "vault export is streamed without a configured provider",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db, dir) => {
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        await Deno.writeTextFile(
+          `${dir}/notes/offline.md`,
+          "# Offline knowledge\n",
+        );
+        globalThis.fetch = () => {
+          throw new Error("vault export must not call a provider");
+        };
+        const handle = createHandler(db, () => {
+          throw new Error("vault export must not resolve providers");
+        });
+
+        const response = await handle(
+          new Request("http://localhost/api/export"),
+        );
+        const archive = new Uint8Array(await response.arrayBuffer());
+
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("Content-Type"), "application/x-tar");
+        assert.match(
+          response.headers.get("Content-Disposition") ?? "",
+          /^attachment; filename="synthesis-vault-\d{4}-\d{2}-\d{2}\.tar"$/,
+        );
+        assert.equal(response.headers.get("X-Synthesis-File-Count"), "3");
+        assert.equal(response.headers.get("Cache-Control"), "no-store");
+        assert.equal(
+          new TextDecoder().decode(archive).includes("# Offline knowledge\n"),
+          true,
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest("vault rebuild is confirmed, offline, and preflighted", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    await withTempHandler(async (_defaultHandler, db, dir) => {
+      globalThis.fetch = () => {
+        throw new Error("vault rebuild must not call a provider");
+      };
+      const handle = createHandler(db, () => {
+        throw new Error("vault rebuild must not resolve providers");
+      });
+      const request = (body: Record<string, unknown>) =>
+        handle(
+          new Request("http://localhost/api/rebuild", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify(body),
+          }),
+        );
+
+      const unconfirmed = await request({});
+      assert.equal(unconfirmed.status, 400);
+      assert.equal((await unconfirmed.json()).code, "CONFIRMATION_REQUIRED");
+
+      const rebuilt = await request({ confirm: "REBUILD" });
+      assert.equal(rebuilt.status, 200);
+      assert.deepEqual((await rebuilt.json()).rebuild, {
+        sourceCount: 0,
+        noteCount: 0,
+        provenanceCount: 0,
+        reset: ["embeddings", "semantic_links", "proposals", "discoveries"],
+      });
+
+      await Deno.mkdir(`${dir}/sources/not-a-hash`, { recursive: true });
+      const invalid = await request({ confirm: "REBUILD" });
+      assert.equal(invalid.status, 422);
+      assert.equal((await invalid.json()).code, "VAULT_PREFLIGHT_FAILED");
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+routeTest(
+  "last-ingest undo is confirmed and provider-independent",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db) => {
+        globalThis.fetch = () => {
+          throw new Error("ingest undo must not call a provider");
+        };
+        const handle = createHandler(db, () => {
+          throw new Error("ingest undo must not resolve providers");
+        });
+        const request = (body: Record<string, unknown>) =>
+          handle(
+            new Request("http://localhost/api/ingest/undo", {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify(body),
+            }),
+          );
+
+        const unconfirmed = await request({});
+        assert.equal(unconfirmed.status, 400);
+        assert.equal((await unconfirmed.json()).code, "CONFIRMATION_REQUIRED");
+
+        const unavailable = await request({ confirm: "UNDO" });
+        assert.equal(unavailable.status, 404);
+        assert.equal((await unavailable.json()).code, "NOTHING_TO_UNDO");
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest("wiki schema is created, updated, and validated", async () => {
+  await withTempHandler(async (handle, _db, dir) => {
+    const initialResponse = await handle(
+      new Request("http://localhost/api/schema"),
+    );
+    assert.equal(initialResponse.status, 200);
+    const initial = await initialResponse.json();
+    assert.match(initial.schema, /^# Synthesis wiki schema/m);
+    assert.match(initial.schema, /does not make clinical/i);
+
+    const customSchema = `# Research vault schema
+
+## Purpose
+
+This vault supports evidence-aware research and organisational sensemaking. It
+records source-backed knowledge, uncertainty, and connections without making
+patient-specific recommendations or other consequential decisions.
+
+## Conventions
+
+Preserve provenance, distinguish evidence from inference, and represent
+uncertainty explicitly. Use wiki links for intentional relationships.
+`;
+    const updateResponse = await handle(
+      new Request("http://localhost/api/schema", {
+        method: "PUT",
+        headers: mutationHeaders(),
+        body: JSON.stringify({ schema: customSchema }),
+      }),
+    );
+    assert.equal(updateResponse.status, 200);
+    assert.deepEqual(await updateResponse.json(), { schema: customSchema });
+    assert.equal(await Deno.readTextFile(`${dir}/schema.md`), customSchema);
+
+    const invalidResponse = await handle(
+      new Request("http://localhost/api/schema", {
+        method: "PUT",
+        headers: mutationHeaders(),
+        body: JSON.stringify({ schema: "Missing a heading" }),
+      }),
+    );
+    assert.equal(invalidResponse.status, 400);
+    assert.equal((await invalidResponse.json()).code, "INVALID_SCHEMA");
+    assert.equal(await Deno.readTextFile(`${dir}/schema.md`), customSchema);
+  });
+});
+
 routeTest("wiki lint is read-only and provider-independent", async () => {
   const originalFetch = globalThis.fetch;
   try {
@@ -85,6 +255,10 @@ routeTest("wiki lint is read-only and provider-independent", async () => {
           messages: Array<{ content: string }>;
         };
         assert.equal(body.model, config.llm.consolidateModel);
+        assert.match(
+          body.messages[0].content,
+          /does not make clinical/i,
+        );
         assert.match(body.messages[1].content, /Unsupported claim/);
         return Promise.resolve(Response.json({
           choices: [{
@@ -118,6 +292,114 @@ routeTest("wiki lint is read-only and provider-independent", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+routeTest(
+  "the local knowledge base remains usable without a provider",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db, dir) => {
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        const sourceHash = "a".repeat(64);
+        const sourceId = db.addSource(
+          sourceHash,
+          "Local evidence",
+          "https://example.test/local-evidence",
+          "text",
+          `${dir}/sources/${sourceHash}/source.txt`,
+          "Evidence retained in the local vault.",
+        );
+        const firstPath = `${dir}/notes/local-mechanism.md`;
+        const secondPath = `${dir}/notes/local-observation.md`;
+        await Deno.writeTextFile(
+          firstPath,
+          renderWikiPage({
+            title: "Local mechanism",
+            type: "concept",
+            body: "A locally reviewed mechanism links to an observation.",
+            tags: ["offline"],
+            links: ["Local observation"],
+          }, [{ title: "Local evidence", contentHash: sourceHash }]),
+        );
+        await Deno.writeTextFile(
+          secondPath,
+          renderWikiPage({
+            title: "Local observation",
+            type: "concept",
+            body: "A locally reviewed observation.",
+            tags: ["offline"],
+            links: [],
+          }, [{ title: "Local evidence", contentHash: sourceHash }]),
+        );
+        const firstId = db.addNote(
+          "Local mechanism",
+          firstPath,
+          "https://example.test/local-evidence",
+          "text",
+        );
+        const secondId = db.addNote(
+          "Local observation",
+          secondPath,
+          "https://example.test/local-evidence",
+          "text",
+        );
+        db.attachNoteSource(firstId, sourceId, "new");
+        db.attachNoteSource(secondId, sourceId, "new");
+        db.indexNote(
+          firstId,
+          "Local mechanism",
+          "A locally reviewed mechanism links to an observation.",
+        );
+        db.indexNote(
+          secondId,
+          "Local observation",
+          "A locally reviewed observation.",
+        );
+
+        globalThis.fetch = () => {
+          throw new Error("offline knowledge routes must not use fetch");
+        };
+        const handle = createHandler(db, () => {
+          throw new Error(
+            "offline knowledge routes must not resolve providers",
+          );
+        });
+
+        const requests = [
+          "/api/notes",
+          `/api/notes/${firstId}`,
+          "/api/sources",
+          `/api/sources/${sourceId}`,
+          "/api/graph",
+          "/api/search?q=mechanism",
+          "/api/lint",
+        ];
+        const responses = await Promise.all(
+          requests.map((path) =>
+            handle(new Request(`http://localhost${path}`))
+          ),
+        );
+        assert.deepEqual(
+          responses.map((response) => response.status),
+          requests.map(() => 200),
+        );
+        const graph = await responses[4].json();
+        assert.deepEqual(graph.links, [{
+          source: firstId,
+          target: secondId,
+          kind: "explicit",
+        }]);
+        const search = await responses[5].json();
+        assert.equal(search.results[0].id, firstId);
+        assert.equal(search.results[0].matchType, "keyword");
+        const lint = await responses[6].json();
+        assert.equal(lint.pageCount, 2);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
 
 routeTest(
   "provider settings are tested, stored, and returned redacted",
@@ -174,14 +456,86 @@ routeTest(
           new Request("http://localhost/api/provider"),
         );
         assert.deepEqual(await before.json(), {
-          configured: false,
+          configured: true,
           profile: null,
           llmKeyStored: false,
           embeddingKeyStored: false,
-          source: "profile",
+          source: "environment",
+          mode: "local",
           embeddingDimensions: config.embed.dimensions,
         });
 
+        let diagnosticCalls = 0;
+        globalThis.fetch = (input) => {
+          diagnosticCalls++;
+          if (String(input).endsWith("/chat/completions")) {
+            return Promise.resolve(Response.json({
+              choices: [{
+                finish_reason: "stop",
+                message: { content: '{"ok":true}' },
+              }],
+            }));
+          }
+          return Promise.resolve(Response.json({
+            data: [{ id: config.llm.extractModel }],
+          }));
+        };
+        const diagnostics = await handle(
+          new Request("http://localhost/api/provider/diagnose", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: "{}",
+          }),
+        );
+        const diagnosticsBody = await diagnostics.json();
+        assert.equal(diagnosticsBody.diagnostics.mode, "local");
+        assert.equal(diagnosticsBody.diagnostics.ready, false);
+        assert.deepEqual(
+          diagnosticsBody.diagnostics.embedding.missingModels,
+          [config.embed.model],
+        );
+        assert.equal(diagnosticsBody.diagnostics.chat.probe.ok, true);
+        assert.equal(
+          diagnosticsBody.diagnostics.embedding.probe.attempted,
+          false,
+        );
+        assert.equal(diagnosticCalls, 2);
+        assert.doesNotMatch(JSON.stringify(diagnosticsBody), /secret/);
+
+        globalThis.fetch = () =>
+          Promise.reject(new Error("private local transport detail"));
+        const failedDiagnostics = await handle(
+          new Request("http://localhost/api/provider/diagnose", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: "{}",
+          }),
+        );
+        assert.equal(failedDiagnostics.status, 502);
+        const failedDiagnosticsBody = await failedDiagnostics.json();
+        assert.equal(
+          failedDiagnosticsBody.code,
+          "PROVIDER_UNAVAILABLE",
+        );
+        assert.match(failedDiagnosticsBody.error, /Start Ollama/);
+        assert.doesNotMatch(
+          JSON.stringify(failedDiagnosticsBody),
+          /private local transport detail/,
+        );
+
+        const profile = {
+          id: "default",
+          displayName: "Research provider",
+          llm: {
+            apiBase: "https://llm.example.test/v1",
+            model: "synthesis-model",
+          },
+          embedding: {
+            apiBase: "https://embed.example.test/v1",
+            model: "embedding-model",
+            dimensions: config.embed.dimensions,
+          },
+        };
         const connectionChecks: string[] = [];
         globalThis.fetch = (input) => {
           const url = String(input);
@@ -211,19 +565,6 @@ routeTest(
             }));
           }
           throw new Error(`Unexpected provider request: ${url}`);
-        };
-        const profile = {
-          id: "default",
-          displayName: "Research provider",
-          llm: {
-            apiBase: "https://llm.example.test/v1",
-            model: "synthesis-model",
-          },
-          embedding: {
-            apiBase: "https://embed.example.test/v1",
-            model: "embedding-model",
-            dimensions: config.embed.dimensions,
-          },
         };
         const configured = await handle(
           new Request("http://localhost/api/provider", {
@@ -261,6 +602,7 @@ routeTest(
         );
         const afterBody = await after.json();
         assert.equal(afterBody.configured, true);
+        assert.equal(afterBody.mode, "remote");
         assert.equal(afterBody.llmKeyStored, true);
         assert.equal(afterBody.embeddingKeyStored, true);
 
@@ -304,6 +646,7 @@ routeTest(
           unavailableBody.code,
           "PROVIDER_CONFIGURATION_FAILED",
         );
+        assert.equal(unavailableBody.error, "Unable to contact provider");
         assert.doesNotMatch(
           JSON.stringify(unavailableBody),
           /private transport detail|replacement-llm-secret/,
@@ -440,10 +783,7 @@ routeTest(
                     citations: [noteId],
                     suggested_page: {
                       title: "Treatment evidence synthesis",
-                      type: "synthesis",
-                      body: "The available evidence is mixed.",
                       tags: ["treatment", "evidence"],
-                      links: ["Treatment effect"],
                     },
                   }),
                 },
@@ -486,6 +826,13 @@ routeTest(
         }]);
         assert.equal(Object.hasOwn(answer.citations[0], "file_path"), false);
         assert.equal(answer.answer, "The available evidence is mixed.");
+        const queryMessages = requests[1].body.messages as Array<{
+          content: string;
+        }>;
+        assert.match(
+          queryMessages[0].content,
+          /does not make clinical/i,
+        );
 
         const saveBody = {
           question,
@@ -533,10 +880,137 @@ routeTest(
         assert.equal(duplicate.status, 409);
         assert.equal((await duplicate.json()).code, "PAGE_EXISTS");
         assert.equal(requests.length, 3);
+
+        let malformedCalls = 0;
+        globalThis.fetch = () => {
+          malformedCalls++;
+          return Promise.resolve(
+            malformedCalls === 1
+              ? Response.json({ data: [{ embedding }] })
+              : Response.json({ choices: [] }),
+          );
+        };
+        const providerFailure = await handle(
+          new Request("http://localhost/api/query", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({ question }),
+          }),
+        );
+        assert.equal(providerFailure.status, 502);
+        const providerError = await providerFailure.json();
+        assert.equal(providerError.code, "LLM_SERVICE_ERROR");
+        assert.doesNotMatch(
+          JSON.stringify(providerError),
+          /llm-secret|embedding-secret/,
+        );
       });
     } finally {
       globalThis.fetch = originalFetch;
       config.vaultDir = originalVaultDir;
+    }
+  },
+);
+
+routeTest(
+  "wiki query falls back to keywords and expands explicit links",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (handle, db, dir) => {
+        const seedPath = `${dir}/seed.md`;
+        const neighborPath = `${dir}/neighbor.md`;
+        const seedPage = renderWikiPage({
+          title: "Mechanism evidence",
+          type: "concept",
+          body: "A kinase mechanism is reported in the source.",
+          tags: ["mechanism"],
+          links: ["Related assay"],
+        }, []);
+        const neighborPage = renderWikiPage({
+          title: "Related assay",
+          type: "entity",
+          body: "The assay measures a downstream response.",
+          tags: ["assay"],
+          links: [],
+        }, []);
+        await Deno.writeTextFile(seedPath, seedPage);
+        await Deno.writeTextFile(neighborPath, neighborPage);
+        const seedId = db.addNote("Mechanism evidence", seedPath, null, "text");
+        const neighborId = db.addNote(
+          "Related assay",
+          neighborPath,
+          null,
+          "text",
+        );
+        db.indexNote(
+          seedId,
+          "Mechanism evidence",
+          "A kinase mechanism is reported.",
+        );
+        db.indexNote(
+          neighborId,
+          "Related assay",
+          "A downstream response assay.",
+        );
+
+        let fetchCalls = 0;
+        let suppliedPages: Array<{ id: number }> = [];
+        globalThis.fetch = (_input, init) => {
+          if (fetchCalls++ === 0) {
+            return Promise.resolve(
+              new Response("unavailable", { status: 503 }),
+            );
+          }
+          const body = JSON.parse(String(init?.body)) as {
+            messages: Array<{ content: string }>;
+          };
+          const request = JSON.parse(body.messages[1].content) as {
+            pages: Array<{ id: number }>;
+          };
+          suppliedPages = request.pages;
+          return Promise.resolve(Response.json({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  answer: "The mechanism is connected to its response assay.",
+                  citations: [seedId, neighborId],
+                  suggested_page: {
+                    title: "Mechanism and assay synthesis",
+                    tags: ["mechanism"],
+                  },
+                }),
+              },
+            }],
+          }));
+        };
+
+        const response = await handle(
+          new Request("http://localhost/api/query", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({
+              question: "What kinase mechanism is reported?",
+            }),
+          }),
+        );
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.deepEqual(
+          result.citations.map((item: { id: number }) => item.id),
+          [
+            seedId,
+            neighborId,
+          ],
+        );
+        assert.deepEqual(suppliedPages.map((page) => page.id), [
+          seedId,
+          neighborId,
+        ]);
+        assert.equal(fetchCalls, 2);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   },
 );
@@ -579,38 +1053,271 @@ routeTest(
   },
 );
 
-routeTest("playlist ingestion is hidden while disabled", async () => {
-  const original = config.ingest.playlistEnabled;
-  try {
-    config.ingest.playlistEnabled = false;
+routeTest(
+  "SSE ingestion exposes safe LLM errors without persisting partial state",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    const originalSecurity = {
+      trustProxyAuth: config.security.trustProxyAuth,
+      publicOrigin: config.security.publicOrigin,
+      allowedEmails: config.security.allowedEmails,
+      ingesterEmails: config.security.ingesterEmails,
+    };
+    try {
+      config.security.trustProxyAuth = true;
+      config.security.publicOrigin = "https://synthesis.example";
+      config.security.allowedEmails = ["llm-error@example.com"];
+      config.security.ingesterEmails = ["llm-error@example.com"];
+      await withTempHandler(async (handle, db) => {
+        globalThis.fetch = () => Promise.resolve(new Response(""));
+
+        const response = await handle(
+          new Request("https://synthesis.example/api/ingest", {
+            method: "POST",
+            headers: {
+              ...mutationHeaders("https://synthesis.example"),
+              "Cf-Access-Authenticated-User-Email": "llm-error@example.com",
+            },
+            body: JSON.stringify({
+              title: "Invalid provider response",
+              text: "A source that must not be persisted after failure.",
+            }),
+          }),
+        );
+
+        assert.equal(response.status, 200);
+        assert.match(
+          response.headers.get("Content-Type") ?? "",
+          /^text\/event-stream/,
+        );
+        const events = await response.text();
+        assert.match(events, /"stage":"error"/);
+        assert.match(events, /"code":"LLM_SERVICE_ERROR"/);
+        assert.match(
+          events,
+          /"error":"LLM service returned an invalid JSON response"/,
+        );
+        assert.deepEqual(db.getAllSources(), []);
+        assert.deepEqual(db.getIngestProposals(), []);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      config.security.trustProxyAuth = originalSecurity.trustProxyAuth;
+      config.security.publicOrigin = originalSecurity.publicOrigin;
+      config.security.allowedEmails = originalSecurity.allowedEmails;
+      config.security.ingesterEmails = originalSecurity.ingesterEmails;
+    }
+  },
+);
+
+routeTest(
+  "local file uploads are bounded and stage reviewed changes",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (handle, db) => {
+        let fetchCalls = 0;
+        globalThis.fetch = () => {
+          fetchCalls++;
+          return Promise.resolve(Response.json({
+            choices: [{
+              message: {
+                content: JSON.stringify(
+                  fetchCalls === 1
+                    ? {
+                      items: [{
+                        title: "Uploaded finding",
+                        type: "concept",
+                        body: "A finding from a local Markdown file.",
+                        tags: ["upload"],
+                        links: [],
+                      }],
+                    }
+                    : {
+                      summary: "A local Markdown source.",
+                      notes: [{
+                        title: "Uploaded finding",
+                        type: "concept",
+                        body: "A finding from a local Markdown file.",
+                        tags: ["upload"],
+                        links: [],
+                      }],
+                    },
+                ),
+              },
+            }],
+          }));
+        };
+
+        const form = new FormData();
+        form.set(
+          "file",
+          new File(
+            ["# Local report\n\nA source-backed finding."],
+            "local-report.md",
+            { type: "text/markdown" },
+          ),
+        );
+        form.set("title", "Reviewed local report");
+        const response = await handle(
+          new Request("http://localhost/api/ingest/file", {
+            method: "POST",
+            headers: { Origin: "http://localhost" },
+            body: form,
+          }),
+        );
+        assert.equal(response.status, 200);
+        assert.match(
+          response.headers.get("Content-Type") ?? "",
+          /^text\/event-stream/,
+        );
+        const events = await response.text();
+        assert.match(events, /"stage":"proposal"/);
+        assert.match(events, /"sourceType":"markdown"/);
+        assert.equal(fetchCalls, 2);
+        assert.deepEqual(db.getAllNotes(), []);
+        assert.equal(db.getAllSources()[0].source_type, "markdown");
+
+        const wrongType = await handle(
+          new Request("http://localhost/api/ingest/file", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: "{}",
+          }),
+        );
+        assert.equal(wrongType.status, 415);
+        assert.equal((await wrongType.json()).code, "INVALID_CONTENT_TYPE");
+
+        const oversized = await handle(
+          new Request("http://localhost/api/ingest/file", {
+            method: "POST",
+            headers: {
+              Origin: "http://localhost",
+              "Content-Type": "multipart/form-data; boundary=upload",
+              "Content-Length": String(config.security.maxUploadBytes + 1),
+            },
+            body: "x",
+          }),
+        );
+        assert.equal(oversized.status, 413);
+        assert.equal((await oversized.json()).code, "INPUT_TOO_LARGE");
+
+        const invalidForm = new FormData();
+        invalidForm.set(
+          "file",
+          new File(["Valid text"], "source.txt", { type: "text/plain" }),
+        );
+        invalidForm.set("unexpected", "field");
+        const invalid = await handle(
+          new Request("http://localhost/api/ingest/file", {
+            method: "POST",
+            headers: { Origin: "http://localhost" },
+            body: invalidForm,
+          }),
+        );
+        assert.equal(invalid.status, 200);
+        const invalidEvents = await invalid.text();
+        assert.match(invalidEvents, /"stage":"error"/);
+        assert.match(invalidEvents, /"code":"INVALID_INPUT"/);
+        assert.equal(fetchCalls, 2);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
+routeTest(
+  "YouTube inputs are validated and playlists can be disabled",
+  async () => {
     await withTempHandler(async (handle) => {
-      const response = await handle(
+      assert.equal(config.ingest.playlistEnabled, true);
+
+      const invalidVideo = await handle(
+        new Request("http://localhost/api/ingest", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify({ url: "not-a-video-id" }),
+        }),
+      );
+      assert.equal(invalidVideo.status, 400);
+      assert.equal((await invalidVideo.json()).code, "INVALID_YOUTUBE_INPUT");
+
+      const invalidPlaylist = await handle(
         new Request("http://localhost/api/ingest/playlist", {
           method: "POST",
           headers: mutationHeaders(),
+          body: JSON.stringify({
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          }),
         }),
       );
+      assert.equal(invalidPlaylist.status, 400);
+      assert.equal(
+        (await invalidPlaylist.json()).code,
+        "INVALID_YOUTUBE_INPUT",
+      );
 
-      assert.equal(response.status, 404);
-      assert.equal((await response.json()).code, "NOT_FOUND");
+      const originalPlaylistEnabled = config.ingest.playlistEnabled;
+      try {
+        config.ingest.playlistEnabled = false;
+        const disabled = await handle(
+          new Request("http://localhost/api/ingest/playlist", {
+            method: "POST",
+            headers: mutationHeaders(),
+          }),
+        );
+        assert.equal(disabled.status, 404);
+        assert.equal((await disabled.json()).code, "NOT_FOUND");
+      } finally {
+        config.ingest.playlistEnabled = originalPlaylistEnabled;
+      }
     });
-  } finally {
-    config.ingest.playlistEnabled = original;
-  }
-});
+  },
+);
 
 routeTest(
-  "note detail returns content without exposing its file path",
+  "note detail renders only a sanitized body without exposing file paths",
   async () => {
     await withTempHandler(async (handle, db, dir) => {
       const filePath = `${dir}/private-note.md`;
-      await Deno.writeTextFile(filePath, "# Private note\n\nBody text.\n");
+      const sourceHash = "f".repeat(64);
+      await Deno.writeTextFile(
+        filePath,
+        renderWikiPage({
+          title: "Private note",
+          type: "concept",
+          body: [
+            "Body with **strong evidence** and [a safe link](https://example.com).",
+            "",
+            "- First finding",
+            "- Second finding",
+            "",
+            "<script>alert('unsafe')</script>",
+          ].join("\n"),
+          tags: ["provenance"],
+          links: [],
+        }, [{
+          title: "Private source",
+          contentHash: sourceHash,
+          pages: [2, 4],
+        }]),
+      );
+      const sourceId = db.addSource(
+        sourceHash,
+        "Private source",
+        null,
+        "pdf",
+        `${dir}/private-source.txt`,
+        "Evidence summary.",
+      );
       const noteId = db.addNote(
         "Private note",
         filePath,
         "https://youtube.com/watch?v=source",
         "youtube",
       );
+      db.attachNoteSource(noteId, sourceId, "merge");
 
       const response = await handle(
         new Request(`http://localhost/api/notes/${noteId}`),
@@ -618,27 +1325,234 @@ routeTest(
       const payload = await response.json();
 
       assert.equal(response.status, 200);
-      assert.equal(payload.content, "# Private note\n\nBody text.\n");
+      assert.match(payload.content, /# Private note/);
+      assert.match(payload.bodyHtml, /<strong>strong evidence<\/strong>/);
+      assert.match(payload.bodyHtml, /href="https:\/\/example\.com"/);
+      assert.match(payload.bodyHtml, /<li>First finding<\/li>/);
+      assert.doesNotMatch(payload.bodyHtml, /<script|alert\('unsafe'\)/i);
+      assert.doesNotMatch(
+        payload.bodyHtml,
+        /Private source|SHA-256|synthesis-source/,
+      );
+      assert.deepEqual(payload.sources, [{
+        id: sourceId,
+        title: "Private source",
+        sourceUrl: null,
+        sourceType: "pdf",
+        summary: "Evidence summary.",
+        action: "merge",
+        sourcePages: [2, 4],
+      }]);
+      assert.deepEqual(payload.claims, [{
+        text:
+          "Body with **strong evidence** and [a safe link](https://example.com).",
+        sourceIds: [sourceId],
+      }, {
+        text: "- First finding\n- Second finding",
+        sourceIds: [sourceId],
+      }, {
+        text: "<script>alert('unsafe')</script>",
+        sourceIds: [sourceId],
+      }]);
       assert.equal(Object.hasOwn(payload, "file_path"), false);
+      assert.equal(Object.hasOwn(payload.sources[0], "filePath"), false);
+      assert.equal(Object.hasOwn(payload.sources[0], "contentHash"), false);
+      assert.doesNotMatch(
+        JSON.stringify({ sources: payload.sources, claims: payload.claims }),
+        /private-source\.txt|[a-f0-9]{64}/,
+      );
     });
   },
 );
+
+routeTest("graph and related pages prefer explicit wiki links", async () => {
+  await withTempHandler(async (handle, db, dir) => {
+    const addPage = async (title: string, links: string[]) => {
+      const path = `${dir}/${title.toLowerCase()}.md`;
+      await Deno.writeTextFile(
+        path,
+        renderWikiPage({
+          title,
+          type: "concept",
+          body: `Knowledge about ${title}.`,
+          tags: ["graph"],
+          links,
+        }, []),
+      );
+      return db.addNote(title, path, null, "text");
+    };
+    const first = await addPage("First", ["Second"]);
+    const second = await addPage("Second", []);
+    const third = await addPage("Third", []);
+    db.upsertLink(first, second, 0.99);
+    db.upsertLink(second, third, 0.8);
+
+    const graphResponse = await handle(
+      new Request("http://localhost/api/graph"),
+    );
+    const graph = await graphResponse.json();
+    assert.deepEqual(graph.links, [
+      { source: first, target: second, kind: "explicit" },
+      {
+        source: second,
+        target: third,
+        kind: "semantic",
+        similarity: 0.8,
+      },
+    ]);
+
+    const noteResponse = await handle(
+      new Request(`http://localhost/api/notes/${second}`),
+    );
+    const note = await noteResponse.json();
+    assert.deepEqual(note.related, [
+      { id: first, title: "First", kind: "explicit" },
+      { id: third, title: "Third", kind: "semantic", similarity: 0.8 },
+    ]);
+  });
+});
+
+routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
+  await withTempHandler(async (handle, db, dir) => {
+    const sourceHash = "d".repeat(64);
+    const sourceId = db.addSource(
+      sourceHash,
+      "Discovery evidence",
+      "https://example.test/discovery",
+      "text",
+      `${dir}/discovery-source.txt`,
+      "Evidence supporting review of a possible connection.",
+    );
+    const addPage = async (title: string) => {
+      const path = `${dir}/${title.toLowerCase()}.md`;
+      await Deno.writeTextFile(
+        path,
+        renderWikiPage({
+          title,
+          type: "concept",
+          body: `Evidence for ${title}.`,
+          tags: ["discovery"],
+          links: [],
+        }, [{ title: "Discovery evidence", contentHash: sourceHash }]),
+      );
+      const id = db.addNote(title, path, null, "text");
+      db.attachNoteSource(id, sourceId, "new");
+      return id;
+    };
+    const first = await addPage("Discovery alpha");
+    const second = await addPage("Discovery beta");
+    const discoveryId = db.addDiscovery({
+      fingerprint: `mechanistic|${first},${second}|${sourceId}`,
+      relationship_type: "mechanistic",
+      explanation: "The pages may describe connected mechanisms.",
+      significance: "The connection may focus further evidence review.",
+      page_ids_json: JSON.stringify([first, second]),
+      source_ids_json: JSON.stringify([sourceId]),
+      production_method: "llm_graph_review",
+      model: "review-model",
+      confidence: 0.7,
+    });
+    assert.ok(discoveryId);
+
+    const list = await handle(
+      new Request("http://localhost/api/discoveries"),
+    ).then((response) => response.json());
+    assert.equal(list.discoveries[0].id, discoveryId);
+    assert.equal(list.discoveries[0].pages.length, 2);
+    assert.equal(list.discoveries[0].sources[0].id, sourceId);
+
+    const detail = await handle(
+      new Request(`http://localhost/api/discoveries/${discoveryId}`),
+    ).then((response) => response.json());
+    assert.equal(detail.discovery.relationshipType, "mechanistic");
+
+    const investigate = await handle(
+      new Request(
+        `http://localhost/api/discoveries/${discoveryId}/investigate`,
+        { method: "POST", headers: mutationHeaders(), body: "{}" },
+      ),
+    );
+    assert.equal((await investigate.json()).discovery.status, "investigating");
+
+    const confirm = await handle(
+      new Request(
+        `http://localhost/api/discoveries/${discoveryId}/confirm`,
+        { method: "POST", headers: mutationHeaders(), body: "{}" },
+      ),
+    );
+    assert.equal((await confirm.json()).discovery.status, "confirmed");
+    const graph = await handle(
+      new Request("http://localhost/api/graph"),
+    ).then((response) => response.json());
+    assert.deepEqual(graph.links, [{
+      source: first,
+      target: second,
+      kind: "explicit",
+    }]);
+
+    const terminal = await handle(
+      new Request(
+        `http://localhost/api/discoveries/${discoveryId}/reject`,
+        { method: "POST", headers: mutationHeaders(), body: "{}" },
+      ),
+    );
+    assert.equal(terminal.status, 409);
+    assert.equal(
+      (await terminal.json()).code,
+      "DISCOVERY_NOT_REVIEWABLE",
+    );
+
+    const missing = await handle(
+      new Request("http://localhost/api/discoveries/99999"),
+    );
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, "DISCOVERY_NOT_FOUND");
+
+    const invalidScan = await handle(
+      new Request("http://localhost/api/discoveries/generate", {
+        method: "POST",
+        headers: mutationHeaders(),
+        body: JSON.stringify({ pageIds: [] }),
+      }),
+    );
+    assert.equal(invalidScan.status, 400);
+    assert.equal((await invalidScan.json()).code, "INVALID_INPUT");
+  });
+});
 
 routeTest(
   "source review exposes provenance without internal paths",
   async () => {
     await withTempHandler(async (handle, db, dir) => {
+      const sourceHash = "f".repeat(64);
       const sourceId = db.addSource(
-        "private-content-hash",
+        sourceHash,
         "Randomized clinical trial",
         "https://example.test/trial",
         "text",
         `${dir}/sources/private/source.txt`,
         "A controlled comparison of two interventions.",
       );
+      const notePath = `${dir}/notes/treatment-comparison.md`;
+      await Deno.mkdir(`${dir}/notes`, { recursive: true });
+      await Deno.writeTextFile(
+        notePath,
+        renderWikiPage({
+          title: "Treatment comparison",
+          type: "concept",
+          body: "A controlled comparison.",
+          tags: ["evidence"],
+          links: [],
+        }, [{
+          title: "Randomized clinical trial",
+          url: "https://example.test/trial",
+          contentHash: sourceHash,
+          pages: [9, 4],
+        }]),
+      );
       const noteId = db.addNote(
         "Treatment comparison",
-        `${dir}/notes/treatment-comparison.md`,
+        notePath,
         "https://example.test/trial",
         "text",
       );
@@ -661,10 +1575,11 @@ routeTest(
         id: noteId,
         title: "Treatment comparison",
         action: "new",
+        sourcePages: [4, 9],
       }]);
       assert.doesNotMatch(
         JSON.stringify({ list, detail }),
-        /private-content-hash|source\.txt|treatment-comparison\.md/,
+        new RegExp(`${sourceHash}|source\\.txt|treatment-comparison\\.md`),
       );
 
       const missing = await handle(
@@ -672,6 +1587,225 @@ routeTest(
       );
       assert.equal(missing.status, 404);
     });
+  },
+);
+
+routeTest(
+  "ingest proposals are listed, approved, rejected, and guarded",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (handle, db, dir) => {
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        const embedding = Array.from(
+          { length: config.embed.dimensions },
+          (_, index) => index === 0 ? 1 : 0,
+        );
+        let fetchCalls = 0;
+        globalThis.fetch = () => {
+          switch (fetchCalls++) {
+            case 0:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      items: [{
+                        title: "Approved proposal page",
+                        type: "concept",
+                        body: "Reviewed knowledge.",
+                        tags: ["review"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 1:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      summary: "Approved proposal summary.",
+                      notes: [{
+                        title: "Approved proposal page",
+                        type: "concept",
+                        body: "Reviewed knowledge.",
+                        tags: ["review"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 2:
+              return Promise.resolve(Response.json({
+                data: [{ embedding }],
+              }));
+            case 3:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      items: [{
+                        title: "Rejected proposal page",
+                        type: "concept",
+                        body: "Unaccepted knowledge.",
+                        tags: ["review"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 4:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      summary: "Rejected proposal summary.",
+                      notes: [{
+                        title: "Rejected proposal page",
+                        type: "concept",
+                        body: "Unaccepted knowledge.",
+                        tags: ["review"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 5:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      decisions: [{ action: "new" }],
+                    }),
+                  },
+                }],
+              }));
+            default:
+              throw new Error(`Unexpected provider request ${fetchCalls}`);
+          }
+        };
+
+        const ingest = async (title: string, text: string) => {
+          const response = await handle(
+            new Request("http://localhost/api/ingest", {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify({ title, text }),
+            }),
+          );
+          assert.equal(response.status, 200);
+          assert.match(await response.text(), /"stage":"proposal"/);
+        };
+
+        await ingest("Approved source", "Source text for approval.");
+        assert.deepEqual(db.getAllNotes(), []);
+        const pendingResponse = await handle(
+          new Request("http://localhost/api/proposals"),
+        );
+        const pending = await pendingResponse.json();
+        assert.equal(pending.proposals.length, 1);
+        const approvedId = pending.proposals[0].id;
+        assert.equal(pending.proposals[0].status, "pending");
+
+        const detailResponse = await handle(
+          new Request(`http://localhost/api/proposals/${approvedId}`),
+        );
+        const detail = await detailResponse.json();
+        assert.equal(detail.proposal.changes[0].action, "new");
+        assert.equal(
+          detail.proposal.changes[0].page.title,
+          "Approved proposal page",
+        );
+
+        const invalidApproval = await handle(
+          new Request(
+            `http://localhost/api/proposals/${approvedId}/approve`,
+            {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify({ changes: [{ index: 1 }] }),
+            },
+          ),
+        );
+        assert.equal(invalidApproval.status, 400);
+        assert.equal(
+          (await invalidApproval.json()).code,
+          "INVALID_PROPOSAL_APPROVAL",
+        );
+        assert.equal(fetchCalls, 2);
+        assert.equal(db.getIngestProposal(approvedId)?.status, "pending");
+
+        const approveResponse = await handle(
+          new Request(
+            `http://localhost/api/proposals/${approvedId}/approve`,
+            {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify({
+                changes: [{
+                  index: 0,
+                  body: "Reviewed knowledge with approved wording.",
+                }],
+              }),
+            },
+          ),
+        );
+        assert.equal(approveResponse.status, 200);
+        assert.match(await approveResponse.text(), /"stage":"done"/);
+        assert.equal(db.getAllNotes().length, 1);
+        assert.equal(
+          parseWikiPage(
+            await Deno.readTextFile(db.getAllNotes()[0].file_path),
+          ).body,
+          "Reviewed knowledge with approved wording.",
+        );
+        assert.equal(db.getIngestProposal(approvedId)?.status, "approved");
+
+        const terminalResponse = await handle(
+          new Request(
+            `http://localhost/api/proposals/${approvedId}/reject`,
+            { method: "POST", headers: mutationHeaders(), body: "{}" },
+          ),
+        );
+        assert.equal(terminalResponse.status, 409);
+        assert.equal(
+          (await terminalResponse.json()).code,
+          "PROPOSAL_NOT_PENDING",
+        );
+
+        await ingest("Rejected source", "Source text for rejection.");
+        const pendingAfterSecond = await handle(
+          new Request("http://localhost/api/proposals"),
+        ).then((response) => response.json());
+        assert.equal(pendingAfterSecond.proposals.length, 1);
+        const rejectedId = pendingAfterSecond.proposals[0].id;
+        const rejectResponse = await handle(
+          new Request(
+            `http://localhost/api/proposals/${rejectedId}/reject`,
+            { method: "POST", headers: mutationHeaders(), body: "{}" },
+          ),
+        );
+        assert.equal(rejectResponse.status, 200);
+        assert.equal((await rejectResponse.json()).proposal.status, "rejected");
+        assert.equal(db.getAllNotes().length, 1);
+
+        const missingResponse = await handle(
+          new Request("http://localhost/api/proposals/99999"),
+        );
+        assert.equal(missingResponse.status, 404);
+        assert.equal(
+          (await missingResponse.json()).code,
+          "PROPOSAL_NOT_FOUND",
+        );
+        assert.equal(fetchCalls, 6);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   },
 );
 
@@ -912,14 +2046,14 @@ routeTest(
           secondResponse = await secondPromise;
           assert.equal(secondResponse.status, 200);
           const secondEvents = await secondResponse.text();
-          assert.match(secondEvents, /"stage":"source_exists"/);
+          assert.match(secondEvents, /"stage":"proposal"/);
           assert.match(secondEvents, /"stage":"done"/);
           assert.equal(
             fetchCalls,
-            3,
+            2,
             "idempotent queued work must not call AI",
           );
-          assert.equal(db.getAllNotes().length, 1);
+          assert.equal(db.getAllNotes().length, 0);
 
           const quota = await handle(ingestRequest("first@example.com"));
           assert.equal(quota.status, 429);
@@ -933,10 +2067,6 @@ routeTest(
             {
               url: `${config.llm.apiBase}/chat/completions`,
               model: config.llm.consolidateModel,
-            },
-            {
-              url: `${config.embed.apiBase}/embeddings`,
-              model: config.embed.model,
             },
           ]);
         } finally {

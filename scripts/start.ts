@@ -36,9 +36,6 @@ async function bundleFrontend(): Promise<void> {
   }
 }
 
-await bundleFrontend();
-const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
-
 function envBool(key: string, fallback: boolean): boolean {
   const value = Deno.env.get(key)?.trim().toLowerCase();
   if (value === undefined || value === "") return fallback;
@@ -83,8 +80,92 @@ function hostPort(hostname: string, port: string | number): string {
   return `${host}:${port}`;
 }
 
+function assertPortAvailable(hostname: string, port: number): void {
+  try {
+    const listener = Deno.listen({ hostname, port });
+    listener.close();
+  } catch (error) {
+    if (error instanceof Deno.errors.AddrInUse) {
+      console.error(
+        `Synthesis could not start: ${
+          hostPort(hostname, port)
+        } is already in use.`,
+      );
+      console.error(
+        "Stop the existing process or set SYNTHESIS_PORT to another port.",
+      );
+      Deno.exit(1);
+    }
+    throw error;
+  }
+}
+
+assertPortAvailable(config.host, port);
+await bundleFrontend();
+const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
+
+async function waitForServer(url: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      const response = await fetch(`${url}/api/status`, {
+        signal: AbortSignal.timeout(250),
+      });
+      await response.body?.cancel();
+      return true;
+    } catch {
+      // The server normally needs a moment to initialize SQLite and routes.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+}
+
+interface BrowserCommand {
+  command: string;
+  args: string[];
+}
+
+function browserCommands(url: string): BrowserCommand[] {
+  if (Deno.build.os === "windows") {
+    return [{ command: "cmd", args: ["/c", "start", url] }];
+  }
+  if (Deno.build.os === "darwin") {
+    return [{ command: "open", args: [url] }];
+  }
+  return [
+    { command: "xdg-open", args: [url] },
+    { command: "gio", args: ["open", url] },
+  ];
+}
+
+async function tryBrowser(command: BrowserCommand): Promise<boolean> {
+  try {
+    const status = await new Deno.Command(command.command, {
+      args: command.args,
+      stdin: "null",
+      stdout: "null",
+      stderr: "null",
+    }).spawn().status;
+    return status.success;
+  } catch {
+    return false;
+  }
+}
+
+async function launchBrowser(url: string): Promise<boolean> {
+  for (const command of browserCommands(url)) {
+    if (await tryBrowser(command)) return true;
+  }
+  return false;
+}
+
 const allowedEnv = [
+  "CI",
+  "DISABLE_SYSTEM_FONTS_LOAD",
+  "FORCE_COLOR",
   "HOME",
+  "NO_COLOR",
+  "TERM",
   "USERPROFILE",
   "APPDATA",
   "TEMP",
@@ -119,15 +200,18 @@ const allowedEnv = [
   "SYNTHESIS_LLM_TEMPERATURE",
   "SYNTHESIS_MAX_BODY_BYTES",
   "SYNTHESIS_MAX_CHARS",
+  "SYNTHESIS_MAX_PDF_PAGES",
   "SYNTHESIS_MAX_PASTED_TEXT_CHARS",
   "SYNTHESIS_MAX_PLAYLIST_ITEMS",
   "SYNTHESIS_MAX_SEARCH_CHARS",
   "SYNTHESIS_MAX_TITLE_CHARS",
   "SYNTHESIS_MAX_TOKENS",
   "SYNTHESIS_MAX_TRANSCRIPT_CHARS",
+  "SYNTHESIS_MAX_UPLOAD_BYTES",
   "SYNTHESIS_MODEL_TIMEOUT_MS",
   "SYNTHESIS_OPEN_BROWSER",
   "SYNTHESIS_PER_USER_DAILY_JOBS",
+  "SYNTHESIS_PDF_PARSE_TIMEOUT_MS",
   "SYNTHESIS_PLAYLIST_ENABLED",
   "SYNTHESIS_PORT",
   "SYNTHESIS_PUBLIC_ORIGIN",
@@ -148,13 +232,16 @@ const allowedEnv = [
   "XDG_CONFIG_HOME",
 ].join(",");
 
-const args = ["run"];
+const args = ["run", "--no-prompt", "--unstable-no-legacy-abort"];
 if (isDev) args.push("--watch");
 args.push(
   "--frozen",
+  "--ignore-env=NAPI_RS_FORCE_WASI,NAPI_RS_NATIVE_LIBRARY_PATH",
   "--allow-net",
   "--allow-ffi",
-  `--allow-read=web,${vaultDir},${config.appDataDir},${tempDir}`,
+  `--allow-read=web,${vaultDir},${config.appDataDir},${tempDir}${
+    os === "linux" ? ",/usr/bin/ldd" : ""
+  }`,
   `--allow-write=${vaultDir},${config.appDataDir},${tempDir}`,
   `--allow-run=${ytDlpPath}`,
   `--allow-env=${allowedEnv}`,
@@ -163,7 +250,10 @@ args.push(
 
 const cmd = new Deno.Command(Deno.execPath(), {
   args,
-  env: { SYNTHESIS_YT_DLP_PATH: ytDlpPath },
+  env: {
+    DISABLE_SYSTEM_FONTS_LOAD: "1",
+    SYNTHESIS_YT_DLP_PATH: ytDlpPath,
+  },
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",
@@ -172,25 +262,17 @@ const cmd = new Deno.Command(Deno.execPath(), {
 const process = cmd.spawn();
 
 if (openBrowser) {
-  // Open browser (server typically starts within 1-2s).
   const browserHost = ["0.0.0.0", "::"].includes(config.host)
     ? "localhost"
     : config.host;
   const url = `http://${hostPort(browserHost, port)}`;
-  const opener = os === "windows"
-    ? ["cmd", "/c", "start", url]
-    : os === "darwin"
-    ? ["open", url]
-    : ["xdg-open", url];
 
-  try {
-    new Deno.Command(opener[0], {
-      args: opener.slice(1),
-      stdin: "null",
-    }).spawn();
-    console.log(`\nOpening browser: ${url}\n`);
-  } catch {
-    console.log(`\nOpen browser to: ${url}\n`);
+  if (!await waitForServer(url)) {
+    console.log(`\nServer did not become ready. Open browser to: ${url}\n`);
+  } else if (await launchBrowser(url)) {
+    console.log(`\nOpened browser: ${url}\n`);
+  } else {
+    console.log(`\nNo browser was found. Open browser to: ${url}\n`);
   }
 }
 
