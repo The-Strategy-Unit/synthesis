@@ -18,6 +18,17 @@ the original MIT-licensed project developed during an initial public-sector
 exploration. It is not an official product of, or maintained by, the originating
 organisation.
 
+The current `main` line is a single-user MVP for local use and controlled
+private beta evaluation. It is stateful software: one process owns one writable,
+file-backed vault, while SQLite search and vector state remain rebuildable.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — runtime, persistence, and compiler flow
+- [Developer guide](docs/DEVELOPERS.md) — setup, configuration, testing, and API
+- [Private beta deployment](docs/DEPLOYMENT.md) — protected stateful hosting,
+  backups, and rollout
+
 ## MVP capabilities
 
 - Typed `concept`, `entity`, and `synthesis` pages with explicit
@@ -48,7 +59,8 @@ security, and human review.
 ## Quick start
 
 Prerequisites: [Deno 2 or later](https://deno.com/), and optionally
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion.
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion. Building the
+experimental QuickJS executables requires Deno 2.9.5 or later.
 
 ### Local Ollama
 
@@ -208,6 +220,7 @@ reference.
 | `/api/config`                  | GET     | Non-secret UI configuration                  |
 | `/api/provider`                | GET     | Redacted provider status                     |
 | `/api/provider`                | POST    | Test and save provider configuration         |
+| `/api/provider/readiness`      | GET     | Active-provider readiness without secrets    |
 | `/api/provider/diagnose`       | POST    | Check active endpoints and required models   |
 | `/api/schema`                  | GET/PUT | Read or update the vault schema              |
 | `/api/export`                  | GET     | Stream the portable authoritative vault      |
@@ -232,21 +245,27 @@ reference.
 | `/api/proposals/:id/reject`    | POST    | Reject a proposal                            |
 | `/api/discoveries`             | GET     | List reviewed connection candidates          |
 | `/api/discoveries/generate`    | POST    | Scan for grounded connections                |
+| `/api/discoveries/:id`         | GET     | Inspect one connection candidate             |
 | `/api/discoveries/:id/:action` | POST    | Investigate, confirm, or reject              |
 
 ## Development
 
 ```bash
 deno task dev
+deno lint
+deno task check
 deno task test:unit
 deno task test:integration
 deno task test:e2e
-deno task lint
+deno task compile
+deno task compile:windows
 deno task build
 ```
 
 `test:e2e` is automated and provider-independent. It starts a temporary local
-server, exercises the task-based UI, and cleans up its temporary vault.
+server, exercises the task-based UI, and cleans up its temporary vault. The
+`build` task creates Deno source distributions with platform-specific `yt-dlp`;
+the `compile` tasks create standalone self-extracting QuickJS executables.
 
 ### Manual local-provider acceptance
 
@@ -320,7 +339,9 @@ provider.
 
 For network deployment, authentication, quotas, backups, and recovery guidance,
 see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not expose the server directly
-to the internet.
+to the internet. The current SQLite/FFI, subprocess, OS-keychain,
+writable-filesystem, and long-lived-SSE design is not directly deployable to a
+serverless runtime such as Deno Deploy.
 
 ## License
 

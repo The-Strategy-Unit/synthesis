@@ -4,7 +4,7 @@ Setup, configuration, extending, and troubleshooting for Synthesis.
 
 ## Prerequisites
 
-- [Deno](https://deno.land) ≥ 2.0
+- [Deno](https://deno.land) ≥ 2.0; Deno 2.9.5 or later for QuickJS compilation
 - [Ollama](https://ollama.com) running locally (or a remote OpenAI-compatible
   endpoint)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion
@@ -33,8 +33,6 @@ deno task lint     # deno lint --fix && deno fmt
 deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
 deno task test:e2e           # provider-independent server/UI workflow tests
-deno test --allow-all src/vault_export_test.ts src/vault_rebuild_test.ts src/ingest_undo_test.ts
-                             # portable export/rebuild/undo acceptance tests
 ```
 
 Compile a self-extracting QuickJS executable for the current host with
@@ -58,7 +56,7 @@ vault APIs, and embedded UI assets from an unrelated working directory.
 Application validation limits provider API bases to HTTPS endpoints ending in
 `/v1`, except that loopback HTTP is allowed for local providers.
 
-See [Private Alpha Deployment](DEPLOYMENT.md) for the authentication, quota,
+See [Private Beta Deployment](DEPLOYMENT.md) for the authentication, quota,
 backup, and reverse-proxy configuration.
 
 ## Configuration reference
@@ -68,10 +66,35 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Core
 
-| Variable          | Default       | Validation      |
-| ----------------- | ------------- | --------------- |
-| `SYNTHESIS_VAULT` | `~/Synthesis` | -               |
-| `SYNTHESIS_PORT`  | `8000`        | clamped 1–65535 |
+| Variable                 | Default       | Validation/notes                    |
+| ------------------------ | ------------- | ----------------------------------- |
+| `SYNTHESIS_VAULT`        | `~/Synthesis` | Authoritative vault root            |
+| `SYNTHESIS_APP_DATA`     | platform data | Provider profile and secret service |
+| `SYNTHESIS_HOST`         | `127.0.0.1`   | Listener address                    |
+| `SYNTHESIS_PORT`         | `8000`        | clamped 1–65535                     |
+| `SYNTHESIS_OPEN_BROWSER` | `true`        | Launcher behaviour                  |
+
+### Access, limits, and quotas
+
+| Variable                                 | Default | Validation/notes                       |
+| ---------------------------------------- | ------- | -------------------------------------- |
+| `SYNTHESIS_PUBLIC_ORIGIN`                | unset   | Required for protected network hosting |
+| `SYNTHESIS_TRUST_PROXY_AUTH`             | `false` | Trust Cloudflare identity header       |
+| `SYNTHESIS_ALLOWED_EMAILS`               | empty   | Comma-separated viewers                |
+| `SYNTHESIS_INGESTER_EMAILS`              | empty   | Comma-separated mutation identities    |
+| `SYNTHESIS_MAX_BODY_BYTES`               | 1 MiB   | clamped 1 KiB–10 MiB                   |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`             | 25 MiB  | clamped 1–100 MiB                      |
+| `SYNTHESIS_MAX_PASTED_TEXT_CHARS`        | 250000  | clamped 1000–1,000,000                 |
+| `SYNTHESIS_MAX_TITLE_CHARS`              | 200     | clamped 20–1000                        |
+| `SYNTHESIS_MAX_SEARCH_CHARS`             | 500     | clamped 20–5000                        |
+| `SYNTHESIS_MAX_TRANSCRIPT_CHARS`         | 500000  | clamped 1000–2,000,000                 |
+| `SYNTHESIS_MAX_SUBTITLE_BYTES`           | 10 MiB  | clamped 1–100 MiB                      |
+| `SYNTHESIS_YT_DLP_TIMEOUT_MS`            | 120000  | clamped 5 seconds–30 minutes           |
+| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 180000  | clamped 5 seconds–30 minutes           |
+| `SYNTHESIS_INGEST_QUEUE_SIZE`            | 4       | clamped 0–100                          |
+| `SYNTHESIS_PER_USER_DAILY_JOBS`          | 5       | clamped 1–10000                        |
+| `SYNTHESIS_GLOBAL_DAILY_JOBS`            | 20      | clamped 1–100000                       |
+| `SYNTHESIS_SEMANTIC_SEARCHES_PER_MINUTE` | 5       | clamped 1–1000                         |
 
 ### LLM API
 
@@ -96,7 +119,7 @@ override with validation (clamping, enum checks, minimum bounds).
 | Variable                            | Default | Validation  |
 | ----------------------------------- | ------- | ----------- |
 | `SYNTHESIS_LLM_TEMPERATURE`         | `0.1`   | clamped 0–2 |
-| `SYNTHESIS_EXTRACT_TEMPERATURE`     | `0.2`   | clamped 0–2 |
+| `SYNTHESIS_EXTRACT_TEMPERATURE`     | `0`     | clamped 0–2 |
 | `SYNTHESIS_CONSOLIDATE_TEMPERATURE` | `0.1`   | clamped 0–2 |
 | `SYNTHESIS_INTEGRATE_TEMPERATURE`   | `0.1`   | clamped 0–2 |
 | `SYNTHESIS_EXTRACT_MAX_TOKENS`      | `2000`  | min 256     |
@@ -125,6 +148,8 @@ override with validation (clamping, enum checks, minimum bounds).
 | `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`                            | clamped 1 second–5 mins |
 | `SYNTHESIS_YT_DLP_PATH`          | `yt-dlp` (`yt-dlp.exe` on Windows) | downloader executable   |
 | `SYNTHESIS_SUBTITLES_LANG`       | `en`                               | yt-dlp `--sub-lang`     |
+| `SYNTHESIS_PLAYLIST_ENABLED`     | `true`                             | enable playlist route   |
+| `SYNTHESIS_MAX_PLAYLIST_ITEMS`   | `10`                               | clamped 1–100           |
 
 ### Linking
 
@@ -159,6 +184,8 @@ override with validation (clamping, enum checks, minimum bounds).
      sourceUrl: string;
      title: string;
      sourceType: "youtube" | "text" | "markdown" | "pdf";
+     originalFile?: { fileName: string; mediaType: string; bytes: Uint8Array };
+     pageCount?: number;
    }
    ```
 2. Wire it into the `POST /api/ingest` handler in `src/routes.ts`

@@ -40,7 +40,7 @@ Embedding, linking, and search logic all live in `src/db.ts` as methods on the
 ```
 User submits URL/text or uploads one local PDF/Markdown/text file
   ↓
-main.ts: POST /api/ingest (SSE stream)
+src/routes.ts: POST /api/ingest (SSE stream)
   ↓
 src/ingest.ts
   ├── YouTube: yt-dlp --write-auto-sub → VTT → parseVtt() → transcript text
@@ -237,13 +237,15 @@ returns a `number[]`. `embedAndStore()` wraps this: embeds
 `title + "\n" + body`, then calls `upsertEmbedding()` which deletes any existing
 vector for that note_id and inserts the new one.
 
-### Planned multi-resolution retrieval
+### Future multi-resolution retrieval (not implemented)
 
-Synthesis should not embed every sentence independently. Isolated sentences can
-lose meaning carried by headings, neighbouring sentences, pronouns, citations,
-lists, and tables. Sentence-level indexing would also multiply storage and
-local-model work: one 768-dimensional float32 vector occupies approximately 3
-KiB before index overhead.
+The MVP stores one embedding per wiki page. A possible later retrieval design
+would add bounded passage embeddings without replacing page embeddings or
+authoritative wiki links. It should not embed every sentence independently:
+isolated sentences can lose meaning carried by headings, neighbouring sentences,
+pronouns, citations, lists, and tables. Sentence-level indexing would also
+multiply storage and local-model work: one 768-dimensional float32 vector
+occupies approximately 3 KiB before index overhead.
 
 The preferred design preserves the existing page embedding and selectively adds
 passage embeddings for longer pages:
@@ -312,13 +314,21 @@ knowledge workflow.
 5. Migrates `zettel_links` → `links` (deduplicating bidirectional pairs)
 6. Migrates `embeddings` (vec0 → vec0, preserving vectors)
 
-## Build system
+## Packaging
 
-`scripts/build.ts` creates platform-specific distribution bundles under `dist/`.
-Each bundle includes:
+`scripts/build.ts` creates platform-specific source distributions under `dist/`.
+They require Deno on the target machine and include:
 
+- The application source, locked dependencies, docs, and browser assets
 - A platform-appropriate `yt-dlp` binary
 - A setup script (`setup.sh` or `setup.ps1`) that checks Ollama and pulls models
 - Template substitution for model names from `config.build`
 
 Platforms: Linux x86_64, macOS ARM64, Windows x86_64.
+
+`scripts/compile.ts` separately creates self-extracting standalone executables
+with Deno's experimental QuickJS backend. `deno task compile` targets the
+current host; `deno task compile:windows` cross-compiles Windows x86_64. The web
+assets, PDF support, SQLite, `sqlite-vec`, and target OS credential-store addon
+are embedded. Run `deno task test:compiled <executable>` on the artifact's
+target OS.
