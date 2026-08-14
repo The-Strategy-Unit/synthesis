@@ -36,12 +36,13 @@
   },
   "imports": {
     "gfm": "jsr:@deno/gfm@0.12.0",
-    "pdfjs": "npm:pdfjs-dist@6.1.200/legacy/build/pdf.mjs",
+    "pdfjs": "npm:pdfjs-dist@6.2.108/legacy/build/pdf.mjs",
     "d3-force": "https://esm.sh/d3-force@3",
     "d3-selection": "https://esm.sh/d3-selection@3",
     "d3-drag": "https://esm.sh/d3-drag@3",
     "d3-zoom": "https://esm.sh/d3-zoom@3",
     "keyring": "npm:@napi-rs/keyring@1.3.0",
+    "nanoid": "npm:nanoid@3.3.18",
     "sqlite-vec": "npm:sqlite-vec@^0.1.9"
   },
   "exports": "./main.ts",

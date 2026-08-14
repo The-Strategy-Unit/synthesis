@@ -6,8 +6,6 @@ import { renderWikiPage } from "../src/wiki.ts";
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
-const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
-
 async function seedWiki(vault: string): Promise<void> {
   const sourceText = "Controlled evidence supports a stable operational fact.";
   const digest = await crypto.subtle.digest(

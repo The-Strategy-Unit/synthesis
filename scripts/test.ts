@@ -17,8 +17,11 @@ const tempDir = (() => {
 })();
 
 const allowedEnv = [
+  "CI",
   "DISABLE_SYSTEM_FONTS_LOAD",
+  "FORCE_COLOR",
   "HOME",
+  "TERM",
   "USERPROFILE",
   "TEMP",
   "TMP",
