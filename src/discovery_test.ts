@@ -20,7 +20,8 @@ function modelResponse(discoveries: unknown[]): Response {
 }
 
 Deno.test({
-  name: "discoveries are grounded, deduplicated, reviewed, and promoted",
+  name:
+    "cross-source synthesis proposes consolidation and relationships for review",
   permissions: "inherit",
   fn: async () => {
     const dir = await Deno.makeTempDir({ prefix: "synthesis-discovery-test-" });
@@ -31,6 +32,7 @@ Deno.test({
       config.llm.reasoningEffort = "none";
       const sourceOneHash = "a".repeat(64);
       const sourceTwoHash = "b".repeat(64);
+      const sourceThreeHash = "c".repeat(64);
       const sourceOne = db.addSource(
         sourceOneHash,
         "Mechanism study",
@@ -46,6 +48,14 @@ Deno.test({
         "text",
         `${dir}/source-two.txt`,
         "An assay study summary.",
+      );
+      const sourceThree = db.addSource(
+        sourceThreeHash,
+        "Constraint study",
+        "https://example.test/constraint",
+        "text",
+        `${dir}/source-three.txt`,
+        "A constraint study summary.",
       );
       const addPage = async (
         title: string,
@@ -86,30 +96,10 @@ Deno.test({
       const third = await addPage(
         "Third constraint",
         [],
-        sourceOne,
-        "Mechanism study",
-        sourceOneHash,
+        sourceThree,
+        "Constraint study",
+        sourceThreeHash,
       );
-
-      const suggestions = [
-        {
-          relationship_type: "mechanistic",
-          explanation: "The mechanism and constraint may describe one process.",
-          significance: "This could focus a follow-up evidence review.",
-          page_ids: [first.id, third.id],
-          source_ids: [sourceOne],
-          confidence: 0.74,
-        },
-        {
-          relationship_type: "shared_constraint",
-          explanation:
-            "The observation and constraint share a limiting factor.",
-          significance: "The shared factor may explain divergent results.",
-          page_ids: [second.id, third.id],
-          source_ids: [sourceOne, sourceTwo],
-          confidence: 0.61,
-        },
-      ];
       let calls = 0;
       globalThis.fetch = (_input, init) => {
         calls++;
@@ -119,26 +109,61 @@ Deno.test({
         };
         assert.match(body.messages[0].content, /hypothesis for human review/i);
         assert.equal(body.reasoning_effort, "none");
-        return Promise.resolve(modelResponse(suggestions));
+        const payload = JSON.parse(body.messages.at(-1)!.content) as {
+          candidates: Array<{
+            candidate_index: number;
+            left: { id: number; source_ids: number[] };
+            right: { id: number; source_ids: number[] };
+          }>;
+        };
+        for (const candidate of payload.candidates) {
+          assert.equal(
+            candidate.left.source_ids.some((id) =>
+              candidate.right.source_ids.includes(id)
+            ),
+            false,
+          );
+        }
+        if (calls > 1) return Promise.resolve(modelResponse([]));
+        return Promise.resolve(modelResponse(
+          payload.candidates.slice(0, 2).map(
+            (candidate, index) => ({
+              candidate_index: candidate.candidate_index,
+              relationship_type: index === 0
+                ? "consolidation_candidate"
+                : "shared_constraint",
+              explanation: index === 0
+                ? "The pages may describe the same durable concept."
+                : "The pages may share a limiting factor.",
+              significance: index === 0
+                ? "Review whether one canonical page could retain both sources."
+                : "The shared factor may explain differing results.",
+              confidence: index === 0 ? 0.74 : 0.61,
+            }),
+          ),
+        ));
       };
 
-      const discoveries = await generateDiscoveries(
+      const generated = await generateDiscoveries(
         db,
-        [first.id],
+        [first.id, second.id, third.id],
         "http://127.0.0.1:11434/v1",
         "secret",
         "discovery-model",
       );
+      const discoveries = generated.discoveries;
       assert.equal(discoveries.length, 2);
+      assert.equal(generated.coverage.complete, true);
+      assert.equal(generated.coverage.candidates, 2);
+      assert.equal(generated.coverage.proposed, 2);
       assert.equal(discoveries[0].status, "pending");
-      assert.deepEqual(discoveries[0].pages.map((page) => page.id), [
-        first.id,
-        third.id,
-      ]);
-      assert.deepEqual(discoveries[0].sources.map((source) => source.id), [
-        sourceOne,
-      ]);
-      assert.equal(discoveries[0].productionMethod, "llm_graph_review");
+      assert.equal(discoveries[0].pages.length, 2);
+      assert.equal(discoveries[0].sources.length, 2);
+      assert.equal(discoveries[0].proposalKind, "consolidation");
+      assert.equal(
+        discoveries[0].productionMethod,
+        "llm_cross_source_review",
+      );
       assert.equal(discoveries[0].model, "discovery-model");
 
       assert.equal(
@@ -147,17 +172,18 @@ Deno.test({
       );
       const confirmed = await confirmDiscovery(db, discoveries[0].id);
       assert.equal(confirmed.status, "confirmed");
-      const updated = await Deno.readTextFile(first.path);
-      assert.deepEqual(parseWikiPage(updated).links, [
-        "Second observation",
-        "Third constraint",
-      ]);
-      assert.match(updated, new RegExp(`synthesis-source:${sourceOneHash}`));
+      const confirmedSource = db.getNote(confirmed.pages[0].id);
+      assert.ok(confirmedSource);
+      const updated = await Deno.readTextFile(confirmedSource.file_path);
+      assert.ok(
+        parseWikiPage(updated).links.includes(confirmed.pages[1].title),
+      );
       const graph = await buildWikiGraph(db);
       assert.ok(
         graph.links.some((link) =>
-          link.kind === "explicit" && link.source === first.id &&
-          link.target === third.id
+          link.kind === "explicit" &&
+          link.source === confirmed.pages[0].id &&
+          link.target === confirmed.pages[1].id
         ),
       );
       await assert.rejects(
@@ -171,13 +197,14 @@ Deno.test({
       );
       const repeated = await generateDiscoveries(
         db,
-        [first.id],
+        [first.id, second.id, third.id],
         "http://127.0.0.1:11434/v1",
         "secret",
         "discovery-model",
       );
-      assert.deepEqual(repeated, []);
-      assert.equal(calls, 2);
+      assert.deepEqual(repeated.discoveries, []);
+      assert.equal(repeated.coverage.complete, true);
+      assert.equal(calls, 1, "reviewed candidate pairs are not proposed again");
     } finally {
       globalThis.fetch = originalFetch;
       config.llm.reasoningEffort = originalReasoningEffort;
@@ -188,24 +215,40 @@ Deno.test({
 });
 
 Deno.test({
-  name: "discovery generation rejects citations outside supplied provenance",
+  name:
+    "cross-source synthesis rejects invented candidate IDs and same-source pairs",
   permissions: "inherit",
   fn: async () => {
     const dir = await Deno.makeTempDir({ prefix: "synthesis-discovery-test-" });
     const db = new DB(`${dir}/synthesis.db`);
     const originalFetch = globalThis.fetch;
     try {
-      const sourceHash = "c".repeat(64);
+      const sourceHash = "d".repeat(64);
+      const otherSourceHash = "e".repeat(64);
       const sourceId = db.addSource(
         sourceHash,
-        "Supplied source",
+        "First supplied source",
         null,
         "text",
         `${dir}/source.txt`,
         "A supplied source summary.",
       );
+      const otherSourceId = db.addSource(
+        otherSourceHash,
+        "Second supplied source",
+        null,
+        "text",
+        `${dir}/other-source.txt`,
+        "Another supplied source summary.",
+      );
       const pageIds: number[] = [];
-      for (const title of ["Alpha", "Beta"]) {
+      for (
+        const [title, currentSource, currentHash] of [
+          ["Alpha", sourceId, sourceHash],
+          ["Beta", sourceId, sourceHash],
+          ["Gamma", otherSourceId, otherSourceHash],
+        ] as const
+      ) {
         const path = `${dir}/${title}.md`;
         await Deno.writeTextFile(
           path,
@@ -215,29 +258,38 @@ Deno.test({
             body: `Evidence for ${title}.`,
             tags: ["evidence"],
             links: [],
-          }, [{ title: "Supplied source", contentHash: sourceHash }]),
+          }, [{ title: "Supplied source", contentHash: currentHash }]),
         );
         const id = db.addNote(title, path, null, "text");
-        db.attachNoteSource(id, sourceId, "new");
+        db.attachNoteSource(id, currentSource, "new");
         pageIds.push(id);
       }
       let calls = 0;
-      globalThis.fetch = () => {
+      globalThis.fetch = (_input, init) => {
         calls++;
+        const request = JSON.parse(String(init?.body)) as {
+          messages: Array<{ content: string }>;
+        };
+        const payload = JSON.parse(request.messages.at(-1)!.content) as {
+          candidates: Array<{
+            left: { source_ids: number[] };
+            right: { source_ids: number[] };
+          }>;
+        };
+        assert.ok(payload.candidates.length > 0);
+        assert.ok(
+          payload.candidates.every((candidate) =>
+            !candidate.left.source_ids.some((id) =>
+              candidate.right.source_ids.includes(id)
+            )
+          ),
+        );
         return Promise.resolve(modelResponse([{
+          candidate_index: 99_999,
           relationship_type: "supports",
           explanation: "A grounded relationship.",
           significance: "A grounded significance.",
-          page_ids: pageIds,
-          source_ids: [sourceId],
           confidence: 0.7,
-        }, {
-          relationship_type: "supports",
-          explanation: "A purported relationship.",
-          significance: "A purported significance.",
-          page_ids: pageIds,
-          source_ids: [99_999],
-          confidence: 0.8,
         }]));
       };
 
@@ -249,10 +301,321 @@ Deno.test({
           "secret",
           "discovery-model",
         ),
-        /source_ids contains an ID that was not supplied/,
+        /candidate_index is invalid/,
       );
       assert.equal(calls, 2, "invalid discovery output retries exactly once");
       assert.deepEqual(db.getDiscoveries(), []);
+    } finally {
+      globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
+  name: "whole-vault synthesis considers pages without caller-supplied seeds",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({
+      prefix: "synthesis-vault-scan-test-",
+    });
+    const db = new DB(`${dir}/synthesis.db`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const pageIds: number[] = [];
+      for (
+        const [index, title] of ["Capacity pressure", "Demand pressure"]
+          .entries()
+      ) {
+        const hash = String(index + 6).repeat(64);
+        const sourceId = db.addSource(
+          hash,
+          `Conference talk ${index + 1}`,
+          null,
+          "youtube",
+          `${dir}/source-${index + 1}.txt`,
+          `Summary for conference talk ${index + 1}.`,
+        );
+        const path = `${dir}/page-${index + 1}.md`;
+        await Deno.writeTextFile(
+          path,
+          renderWikiPage({
+            title,
+            type: "concept",
+            body: `${title} affects service planning.`,
+            tags: ["planning"],
+            links: [],
+          }, [{ title: `Conference talk ${index + 1}`, contentHash: hash }]),
+        );
+        const pageId = db.addNote(title, path, null, "youtube");
+        db.attachNoteSource(pageId, sourceId, "new");
+        pageIds.push(pageId);
+      }
+
+      globalThis.fetch = (_input, init) => {
+        const request = JSON.parse(String(init?.body)) as {
+          messages: Array<{ content: string }>;
+        };
+        const payload = JSON.parse(request.messages.at(-1)!.content) as {
+          candidates: Array<{ candidate_index: number }>;
+        };
+        assert.equal(payload.candidates.length, 1);
+        return Promise.resolve(modelResponse([{
+          candidate_index: payload.candidates[0].candidate_index,
+          relationship_type: "analogous",
+          explanation:
+            "Both pages describe planning pressure, in distinct source contexts.",
+          significance:
+            "The comparison may expose a reusable planning pattern.",
+          confidence: 0.68,
+        }]));
+      };
+      const progress: Array<{ current: number; total: number }> = [];
+      const generated = await generateDiscoveries(
+        db,
+        [],
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+        undefined,
+        {
+          scope: "vault",
+          onProgress: ({ current, total }) => progress.push({ current, total }),
+        },
+      );
+      const discoveries = generated.discoveries;
+      assert.equal(discoveries.length, 1);
+      assert.deepEqual(discoveries[0].pages.map((page) => page.id), pageIds);
+      assert.deepEqual(progress, [{ current: 1, total: 1 }]);
+      assert.deepEqual({
+        candidates: generated.coverage.candidates,
+        proposed: generated.coverage.proposed,
+        remaining: generated.coverage.remaining,
+        complete: generated.coverage.complete,
+      }, {
+        candidates: 1,
+        proposed: 1,
+        remaining: 0,
+        complete: true,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
+  name: "whole-vault synthesis considers a broad semantic neighbourhood",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({
+      prefix: "synthesis-discovery-neighbourhood-test-",
+    });
+    const db = new DB(`${dir}/synthesis.db`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const titles = [
+        "Alpha",
+        "Bravo",
+        "Charlie",
+        "Delta",
+        "Echo",
+        "Foxtrot",
+        "Golf",
+        "Hotel",
+        "India",
+        "Juliet",
+      ];
+      const embedding = new Array(config.embed.dimensions).fill(0);
+      embedding[0] = 1;
+      for (const [index, title] of titles.entries()) {
+        const hash = String(index).repeat(64);
+        const sourceId = db.addSource(
+          hash,
+          `Independent talk ${title}`,
+          null,
+          "youtube",
+          `${dir}/source-${index}.txt`,
+          `Summary ${title}.`,
+        );
+        const path = `${dir}/page-${index}.md`;
+        await Deno.writeTextFile(
+          path,
+          renderWikiPage({
+            title,
+            type: "concept",
+            body: `Distinctive${title} evidence.`,
+            tags: [],
+            links: [],
+          }, [{ title: `Independent talk ${title}`, contentHash: hash }]),
+        );
+        const pageId = db.addNote(title, path, null, "youtube");
+        db.attachNoteSource(pageId, sourceId, "new");
+        db.upsertEmbedding(pageId, embedding);
+      }
+
+      let calls = 0;
+      globalThis.fetch = () => {
+        calls++;
+        return Promise.resolve(modelResponse([]));
+      };
+      const generated = await generateDiscoveries(
+        db,
+        [],
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+        undefined,
+        { scope: "vault" },
+      );
+
+      assert.ok(
+        generated.coverage.candidates >= 40,
+        `expected a broad semantic frontier, got ${generated.coverage.candidates}`,
+      );
+      assert.equal(generated.coverage.evaluated, 20);
+      assert.equal(generated.coverage.proposed, 0);
+      assert.equal(calls, 4);
+    } finally {
+      globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
+  name: "candidate review resumes and remembers model omissions",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({
+      prefix: "synthesis-discovery-resume-test-",
+    });
+    const db = new DB(`${dir}/synthesis.db`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const pageIds: number[] = [];
+      const pagePaths: string[] = [];
+      for (let index = 0; index < 4; index++) {
+        const hash = String(index + 1).repeat(64);
+        const sourceId = db.addSource(
+          hash,
+          `Independent source ${index + 1}`,
+          null,
+          "text",
+          `${dir}/source-${index + 1}.txt`,
+          `Summary ${index + 1}.`,
+        );
+        const path = `${dir}/page-${index + 1}.md`;
+        await Deno.writeTextFile(
+          path,
+          renderWikiPage({
+            title: `Planning concept ${index + 1}`,
+            type: "concept",
+            body: `Independent evidence about planning concept ${index + 1}.`,
+            tags: ["planning"],
+            links: [],
+          }, [{ title: `Independent source ${index + 1}`, contentHash: hash }]),
+        );
+        const pageId = db.addNote(
+          `Planning concept ${index + 1}`,
+          path,
+          null,
+          "text",
+        );
+        db.attachNoteSource(pageId, sourceId, "new");
+        pageIds.push(pageId);
+        pagePaths.push(path);
+      }
+
+      let calls = 0;
+      globalThis.fetch = () => {
+        calls++;
+        return Promise.resolve(modelResponse([]));
+      };
+      const first = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(first.coverage.candidates, 6);
+      assert.equal(first.coverage.evaluated, 5);
+      assert.equal(first.coverage.remaining, 1);
+      assert.equal(first.coverage.complete, false);
+      assert.ok(first.coverage.generation);
+
+      const resumed = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+        undefined,
+        { generation: first.coverage.generation ?? undefined },
+      );
+      assert.equal(resumed.coverage.evaluated, 6);
+      assert.equal(resumed.coverage.remaining, 0);
+      assert.equal(resumed.coverage.complete, true);
+      assert.equal(calls, 2);
+
+      const refreshed = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(refreshed.coverage.candidates, 6);
+      assert.equal(refreshed.coverage.evaluated, 6);
+      assert.equal(refreshed.coverage.complete, true);
+      assert.equal(calls, 2, "unchanged reviewed pairs are not sent again");
+
+      await Deno.writeTextFile(
+        pagePaths[0],
+        renderWikiPage({
+          title: "Planning concept 1",
+          type: "concept",
+          body: "Materially revised independent evidence about planning.",
+          tags: ["planning"],
+          links: [],
+        }, [{ title: "Independent source 1", contentHash: "1".repeat(64) }]),
+      );
+      const changed = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(changed.coverage.candidates, 6);
+      assert.equal(changed.coverage.evaluated, 6);
+      assert.equal(changed.coverage.complete, true);
+      assert.equal(
+        calls,
+        3,
+        "pairs touching changed evidence are reconsidered",
+      );
+
+      const otherModel = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "another-model",
+      );
+      assert.equal(otherModel.coverage.candidates, 6);
+      assert.equal(otherModel.coverage.evaluated, 5);
+      assert.equal(otherModel.coverage.remaining, 1);
+      assert.equal(
+        calls,
+        4,
+        "a different model receives a fresh review ledger",
+      );
     } finally {
       globalThis.fetch = originalFetch;
       db.close();

@@ -130,7 +130,13 @@ routeTest("vault rebuild is confirmed, offline, and preflighted", async () => {
         sourceCount: 0,
         noteCount: 0,
         provenanceCount: 0,
-        reset: ["embeddings", "semantic_links", "proposals", "discoveries"],
+        reset: [
+          "embeddings",
+          "semantic_links",
+          "proposals",
+          "discovery_candidates",
+          "discoveries",
+        ],
       });
 
       await Deno.mkdir(`${dir}/sources/not-a-hash`, { recursive: true });
@@ -1538,6 +1544,7 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
       new Request(`http://localhost/api/discoveries/${discoveryId}`),
     ).then((response) => response.json());
     assert.equal(detail.discovery.relationshipType, "mechanistic");
+    assert.equal(detail.discovery.proposalKind, "relationship");
 
     const investigate = await handle(
       new Request(
@@ -1590,6 +1597,92 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
     );
     assert.equal(invalidScan.status, 400);
     assert.equal((await invalidScan.json()).code, "INVALID_INPUT");
+    const invalidGeneration = await handle(
+      new Request("http://localhost/api/discoveries/generate", {
+        method: "POST",
+        headers: mutationHeaders(),
+        body: JSON.stringify({ generation: "not-a-generation" }),
+      }),
+    );
+    assert.equal(invalidGeneration.status, 400);
+    assert.equal((await invalidGeneration.json()).code, "INVALID_INPUT");
+
+    const otherHash = "e".repeat(64);
+    const otherSourceId = db.addSource(
+      otherHash,
+      "Independent conference talk",
+      "https://example.test/other-talk",
+      "youtube",
+      `${dir}/other-source.txt`,
+      "A separate talk with potentially related evidence.",
+    );
+    const otherPath = `${dir}/discovery-gamma.md`;
+    await Deno.writeTextFile(
+      otherPath,
+      renderWikiPage({
+        title: "Discovery gamma",
+        type: "concept",
+        body: "Evidence for a related mechanism from another talk.",
+        tags: ["discovery"],
+        links: [],
+      }, [{ title: "Independent conference talk", contentHash: otherHash }]),
+    );
+    const otherPageId = db.addNote(
+      "Discovery gamma",
+      otherPath,
+      null,
+      "youtube",
+    );
+    db.attachNoteSource(otherPageId, otherSourceId, "new");
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (_input, init) => {
+        const request = JSON.parse(String(init?.body)) as {
+          messages: Array<{ content: string }>;
+        };
+        const payload = JSON.parse(request.messages.at(-1)!.content) as {
+          candidates: Array<{ candidate_index: number }>;
+        };
+        assert.ok(payload.candidates.length > 0);
+        return Promise.resolve(Response.json({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                discoveries: [{
+                  candidate_index: payload.candidates[0].candidate_index,
+                  relationship_type: "analogous",
+                  explanation:
+                    "The separate talks describe comparable mechanisms.",
+                  significance:
+                    "The comparison may reveal a reusable conference theme.",
+                  confidence: 0.66,
+                }],
+              }),
+            },
+          }],
+        }));
+      };
+      const scan = await handle(
+        new Request("http://localhost/api/discoveries/generate", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: "{}",
+        }),
+      );
+      assert.equal(scan.status, 200);
+      const generated = await scan.json();
+      assert.equal(generated.discoveries.length, 1);
+      assert.equal(generated.discoveries[0].proposalKind, "relationship");
+      assert.equal(generated.discoveries[0].sources.length, 2);
+      assert.equal(generated.coverage.candidates, 2);
+      assert.equal(generated.coverage.evaluated, 2);
+      assert.equal(generated.coverage.proposed, 1);
+      assert.equal(generated.coverage.remaining, 0);
+      assert.equal(generated.coverage.complete, true);
+      assert.match(generated.coverage.generation, /^[0-9a-f-]{36}$/i);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

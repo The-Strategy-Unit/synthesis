@@ -20,7 +20,12 @@ export interface IngestUndoResult {
   restoredCount: number;
   removedCount: number;
   indexUpdated: boolean;
-  reset: ["affected_embeddings", "affected_semantic_links", "discoveries"];
+  reset: [
+    "affected_embeddings",
+    "affected_semantic_links",
+    "discovery_candidates",
+    "discoveries",
+  ];
 }
 
 interface HistoryEntry {
@@ -326,6 +331,11 @@ export async function undoLastIngest(db: DB): Promise<IngestUndoResult> {
     restoredCount: changes.filter((change) => change.action !== "new").length,
     removedCount: changes.filter((change) => change.action === "new").length,
     indexUpdated,
-    reset: ["affected_embeddings", "affected_semantic_links", "discoveries"],
+    reset: [
+      "affected_embeddings",
+      "affected_semantic_links",
+      "discovery_candidates",
+      "discoveries",
+    ],
   };
 }
