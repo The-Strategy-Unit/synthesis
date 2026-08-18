@@ -20,6 +20,7 @@ import {
   formatPageRanges,
   ingestProgress,
   REVIEW_DECISIONS,
+  reviewDecisionsForEveryChange,
   reviewDecisionSummary,
 } from "./review_workflow.js";
 import {
@@ -631,6 +632,7 @@ const proposalList = document.getElementById("proposal-list");
 const proposalDetail = document.getElementById("proposal-detail");
 const proposalChanges = document.getElementById("proposal-changes");
 const proposalApprove = document.getElementById("proposal-approve");
+const proposalIncludeAll = document.getElementById("proposal-include-all");
 const proposalReject = document.getElementById("proposal-reject");
 const proposalDecisionSummary = document.getElementById(
   "proposal-decision-summary",
@@ -659,7 +661,8 @@ function selectedProposalChanges() {
 }
 
 function updateProposalApprovalControls() {
-  const summary = reviewDecisionSummary(proposalDecisions());
+  const decisions = proposalDecisions();
+  const summary = reviewDecisionSummary(decisions);
   const modelActions = providerCapabilities(providerState.phase).modelActions;
   proposalDecisionSummary.textContent = summary.pending > 0
     ? `${summary.pending} decision${
@@ -680,6 +683,13 @@ function updateProposalApprovalControls() {
   proposalApprove.title = modelActions
     ? ""
     : "Applying proposed changes requires an available AI provider.";
+  const allIncluded = decisions.length > 0 &&
+    summary.include === decisions.length;
+  proposalIncludeAll.textContent = allIncluded
+    ? "All changes included"
+    : "Include all changes";
+  proposalIncludeAll.disabled = proposalBusy || decisions.length === 0 ||
+    allIncluded;
 }
 
 function setProposalBusy(busy) {
@@ -689,6 +699,30 @@ function setProposalBusy(busy) {
     control.disabled = busy;
   });
   updateProposalApprovalControls();
+}
+
+function setProposalItemDecision(item, value) {
+  const decision = item.querySelector(".proposal-change-decision");
+  const body = item.querySelector(".proposal-body-edit");
+  if (!decision || !body) return;
+  decision.value = value;
+  item.dataset.decision = value;
+  body.readOnly = value !== REVIEW_DECISIONS.include;
+}
+
+function includeAllProposalChanges() {
+  const items = [...proposalChanges.querySelectorAll(".proposal-change")];
+  const decisions = reviewDecisionsForEveryChange(
+    items.length,
+    REVIEW_DECISIONS.include,
+  );
+  items.forEach((item, index) => {
+    setProposalItemDecision(item, decisions[index]);
+  });
+  updateProposalApprovalControls();
+  reviewStatus.textContent = `Included all ${items.length} proposed change${
+    items.length === 1 ? "" : "s"
+  }. Review any edits, then apply the proposal.`;
 }
 
 function setProposalLocation(proposalId) {
@@ -797,8 +831,7 @@ function proposalChangeItem(change, index, source) {
   );
   proposedBody.readOnly = true;
   decision.addEventListener("change", () => {
-    item.dataset.decision = decision.value;
-    proposedBody.readOnly = decision.value !== REVIEW_DECISIONS.include;
+    setProposalItemDecision(item, decision.value);
     updateProposalApprovalControls();
   });
   proposedPanel.append(proposedHeading, proposedBody);
@@ -1007,6 +1040,7 @@ reviewNavigationButton.addEventListener("click", () => {
   if (primaryWorkspace !== "review") openReviewWorkspace();
 });
 proposalApprove.addEventListener("click", approveSelectedProposal);
+proposalIncludeAll.addEventListener("click", includeAllProposalChanges);
 proposalReject.addEventListener("click", rejectSelectedProposal);
 proposalSourceInspect.addEventListener("click", () => {
   if (selectedProposalSourceId) openSourcesModal(selectedProposalSourceId);

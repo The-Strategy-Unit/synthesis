@@ -19,6 +19,19 @@ export function reviewDecisionSummary(decisions) {
   };
 }
 
+export function reviewDecisionsForEveryChange(changeCount, decision) {
+  if (!Number.isSafeInteger(changeCount) || changeCount < 0) {
+    throw new RangeError("Review change count must be a non-negative integer");
+  }
+  if (
+    decision !== REVIEW_DECISIONS.include &&
+    decision !== REVIEW_DECISIONS.exclude
+  ) {
+    throw new TypeError("Bulk review requires an Include or Exclude decision");
+  }
+  return Array.from({ length: changeCount }, () => decision);
+}
+
 export function formatPageRanges(pages) {
   const values = [
     ...new Set((Array.isArray(pages) ? pages : []).filter(

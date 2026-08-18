@@ -16,7 +16,8 @@
             aria-controls="primary-nav" aria-expanded="false">&#9776;</button>
           <span class="logo">Synthesis</span>
           <button id="provider-mode" type="button" data-mode="checking"
-            aria-live="polite" aria-atomic="true">AI provider · checking</button>
+            aria-live="polite"
+            aria-atomic="true">AI provider · checking</button>
         </div>
         <div class="search-box">
           <label class="visually-hidden" for="search-input">Search wiki</label>
@@ -203,12 +204,20 @@
                     Inspect source
                   </button>
                 </header>
-                <div class="review-guidance">
-                  <strong>Nothing is selected automatically.</strong>
-                  Compare each proposal with its source, then choose Include or
-                  Exclude. You can edit included text before applying it.
+                <div id="proposal-review-guidance" class="review-guidance">
+                  <strong>Review the proposal before applying it.</strong>
+                  Choose Include or Exclude for each change, or use Include all
+                  changes for a trusted source. You can edit any included body
+                  before the final Apply step.
                 </div>
-                <h3>Proposed changes</h3>
+                <div class="proposal-change-toolbar">
+                  <h3>Proposed changes</h3>
+                  <button id="proposal-include-all"
+                    class="workspace-secondary" type="button"
+                    aria-describedby="proposal-review-guidance">
+                    Include all changes
+                  </button>
+                </div>
                 <ol id="proposal-changes"></ol>
                 <div class="review-actions">
                   <p id="proposal-decision-summary" role="status"
