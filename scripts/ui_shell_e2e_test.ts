@@ -136,6 +136,9 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="graph-search-summary" role="status"/);
     assert.match(index, /id="graph-search-clear" type="button"/);
     assert.match(index, /id="review-workspace" class="hidden"/);
+    assert.match(index, /id="graph-focus-summary" role="status"/);
+    assert.match(index, /id="graph-focus-open" type="button"/);
+    assert.match(index, /id="graph-focus-clear" type="button"/);
     assert.match(index, /id="proposal-decision-summary" role="status"/);
     assert.match(index, /id="proposal-include-all"/);
     assert.match(index, /id="ingest-stages"/);
@@ -155,6 +158,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /review_workflow/);
     assert.match(bundle, /searchContextGraph/);
     assert.equal(status.status, "ok");
+    assert.match(bundle, /graphFocusNodeIds/);
 
     const notes = await fetch(`${origin}/api/notes`).then((response) =>
       response.json()

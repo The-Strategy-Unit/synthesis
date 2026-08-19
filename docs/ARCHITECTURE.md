@@ -360,7 +360,9 @@ An active wiki search filters only the browser presentation. Search result IDs
 become seed pages; the graph retains their direct reviewed and currently visible
 semantic neighbours, then includes existing edges among that bounded node set.
 It does not expand to second-hop pages or alter the stored graph. Clearing the
-search restores the complete graph.
+search restores the complete graph. A pinned node focus is also presentation
+state: it keeps positions fixed, fades unrelated nodes and edges, and offers an
+explicit transition to the page reader. Clearing the search clears the pin.
 
 ### LLM pipeline stages
 

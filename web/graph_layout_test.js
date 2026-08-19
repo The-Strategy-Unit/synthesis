@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   graphLinkDistance,
   graphLinkStrength,
+  graphFocusNodeIds,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighborLinks,
@@ -52,6 +53,18 @@ Deno.test("search context keeps matches, one-hop neighbours, and their induced e
     links: [],
     matchedIds: new Set(),
   });
+});
+
+Deno.test("graph focus contains only the selected node and its visible neighbours", () => {
+  const nodes = [1, 2, 3, 4].map((id) => ({ id }));
+  const links = [
+    { source: 1, target: 2 },
+    { source: { id: 3 }, target: { id: 1 } },
+    { source: 3, target: 4 },
+  ];
+
+  assert.deepEqual(graphFocusNodeIds(nodes, links, 1), new Set([1, 2, 3]));
+  assert.deepEqual(graphFocusNodeIds(nodes, links, 99), new Set());
 });
 
 Deno.test("stronger semantic links pull closer and more strongly", () => {

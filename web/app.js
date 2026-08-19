@@ -9,6 +9,7 @@ import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
 import {
+  graphFocusNodeIds,
   graphLinkDistance,
   graphLinkStrength,
   searchContextGraph,
@@ -339,6 +340,8 @@ let currentNotes = [];
 let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
 let graphSearch = null;
+let graphFocusId = null;
+let refreshGraphFocusHighlight = () => {};
 let simulation = null;
 let graphUnavailable = false;
 
@@ -2336,9 +2339,29 @@ const graphSearchContext = document.getElementById("graph-search-context");
 const graphSearchSummary = document.getElementById("graph-search-summary");
 const graphSearchClearButton = document.getElementById("graph-search-clear");
 const graphSearchLegend = document.getElementById("legend-search-match");
+const graphFocusContext = document.getElementById("graph-focus-context");
+const graphFocusSummary = document.getElementById("graph-focus-summary");
+const graphFocusOpenButton = document.getElementById("graph-focus-open");
+const graphFocusClearButton = document.getElementById("graph-focus-clear");
+
+function clearGraphFocus() {
+  graphFocusId = null;
+  renderGraphFocusContext();
+  refreshGraphFocusHighlight();
+}
+
+function setGraphFocus(noteId) {
+  if (graphFocusNodeIds(graphData.nodes, graphData.links, noteId).size === 0) {
+    return;
+  }
+  graphFocusId = noteId;
+  renderGraphFocusContext();
+  refreshGraphFocusHighlight();
+}
 
 function clearGraphSearch() {
   graphSearch = null;
+  graphFocusId = null;
   applySemanticNeighborhoodBreadth();
 }
 
@@ -2365,6 +2388,18 @@ searchInput.addEventListener("input", () => {
 });
 graphSearchClearButton.addEventListener("click", () => {
   void clearSearch().then(() => searchInput.focus());
+});
+graphFocusOpenButton.addEventListener("click", () => {
+  if (graphFocusId !== null) void loadNote(graphFocusId);
+});
+graphFocusClearButton.addEventListener("click", clearGraphFocus);
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key === "Escape" && event.target !== searchInput &&
+    graphFocusId !== null
+  ) {
+    clearGraphFocus();
+  }
 });
 
 async function doSearch(q) {
@@ -2734,6 +2769,7 @@ const tooltip = select("#graph-tooltip");
 
 function renderGraph() {
   const svg = select("#graph");
+  refreshGraphFocusHighlight = () => {};
   const panel = document.getElementById("graph-panel");
   if (panel.classList.contains("hidden")) return;
   simulation?.stop();
@@ -2741,6 +2777,9 @@ function renderGraph() {
   const height = panel.clientHeight || panel.parentElement.clientHeight;
   svg.attr("viewBox", `0 0 ${width} ${height}`);
   svg.selectAll("*").remove();
+  svg.on("click.graph-focus", (event) => {
+    if (event.target === svg.node()) clearGraphFocus();
+  });
 
   if (graphUnavailable) {
     svg.append("text")
@@ -2844,13 +2883,22 @@ function renderGraph() {
     .attr("r", nodeRadius)
     .attr("role", "button")
     .attr("tabindex", 0)
-    .attr("aria-label", (d) => `Open ${d.title}`)
+    .attr(
+      "aria-label",
+      (d) =>
+        `Focus ${d.title}${
+          graphSearch?.matchedIds.has(d.id) ? " (direct search result)" : ""
+        }`,
+    )
     .style("cursor", "pointer")
-    .on("click", (_event, d) => loadNote(d.id))
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      setGraphFocus(d.id);
+    })
     .on("keydown", (event, d) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      loadNote(d.id);
+      setGraphFocus(d.id);
     })
     .on("mouseover", (_event, d) => {
       highlightNeighborhood(d.id);
@@ -2875,7 +2923,7 @@ function renderGraph() {
         .style("top", `${event.clientY - 10}px`);
     })
     .on("mouseout", () => {
-      clearNeighborhoodHighlight();
+      refreshGraphFocusHighlight();
       tooltip.classed("hidden", true);
     });
 
@@ -2898,13 +2946,11 @@ function renderGraph() {
   }
 
   function highlightNeighborhood(hoveredId) {
-    const connectedIds = new Set([hoveredId]);
-    link.each((edge) => {
-      const sourceId = endpointId(edge.source);
-      const targetId = endpointId(edge.target);
-      if (sourceId === hoveredId) connectedIds.add(targetId);
-      if (targetId === hoveredId) connectedIds.add(sourceId);
-    });
+    const connectedIds = graphFocusNodeIds(
+      graphData.nodes,
+      graphData.links,
+      hoveredId,
+    );
 
     link
       .classed(
@@ -2933,6 +2979,12 @@ function renderGraph() {
     node.classed("is-focused is-connected is-muted", false);
     label.classed("is-highlighted is-muted", false);
   }
+
+  refreshGraphFocusHighlight = () => {
+    if (graphFocusId === null) clearNeighborhoodHighlight();
+    else highlightNeighborhood(graphFocusId);
+  };
+  refreshGraphFocusHighlight();
 
   node.call(
     drag()
@@ -3019,7 +3071,14 @@ function applySemanticNeighborhoodBreadth() {
     nodes: visibleGraph.nodes.map((node) => ({ ...node })),
     links: visibleGraph.links.map((link) => ({ ...link })),
   };
+  if (
+    graphFocusId !== null &&
+    !graphData.nodes.some((node) => node.id === graphFocusId)
+  ) {
+    graphFocusId = null;
+  }
   renderGraphSearchContext();
+  renderGraphFocusContext();
   if (readerState.view === "connections") renderGraph();
 }
 
@@ -3038,6 +3097,25 @@ function renderGraphSearchContext() {
   }`;
   graphSearchSummary.textContent =
     `“${graphSearch.query}” · ${matchLabel} · ${relatedLabel}`;
+}
+
+function renderGraphFocusContext() {
+  const focused = graphFocusId === null
+    ? undefined
+    : graphData.nodes.find((node) => node.id === graphFocusId);
+  graphFocusContext.classList.toggle("hidden", focused === undefined);
+  if (!focused) {
+    graphFocusSummary.textContent = "";
+    return;
+  }
+  const connectionCount = Math.max(
+    0,
+    graphFocusNodeIds(graphData.nodes, graphData.links, focused.id).size - 1,
+  );
+  graphFocusSummary.textContent =
+    `Focused on “${focused.title}” · ${connectionCount} visible connection${
+      connectionCount === 1 ? "" : "s"
+    }`;
 }
 
 // --- Init ---

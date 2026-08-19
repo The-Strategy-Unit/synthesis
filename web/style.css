@@ -784,7 +784,8 @@ body {
   line-height: 1.4;
 }
 
-.graph-search-context {
+.graph-search-context,
+.graph-focus-context {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -799,7 +800,8 @@ body {
   font-size: 0.76rem;
 }
 
-.graph-search-context button {
+.graph-search-context button,
+.graph-focus-context button {
   flex: 0 0 auto;
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--border);
@@ -810,6 +812,16 @@ body {
   font: inherit;
 }
 
+.graph-focus-context {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+}
+
+.graph-focus-context > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
 
 #graph {
   flex: 1;
@@ -844,7 +856,6 @@ body {
 #graph circle:hover {
   fill: var(--accent-soft);
 }
-
 
 #graph circle.is-search-match {
   fill: var(--text);
@@ -888,7 +899,6 @@ body {
   fill: var(--text);
   opacity: 1;
 }
-
 
 #graph text.is-search-match {
   fill: var(--text);

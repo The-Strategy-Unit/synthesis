@@ -177,11 +177,25 @@
                     Clear search
                   </button>
                 </div>
+                <div id="graph-focus-context"
+                  class="graph-focus-context hidden">
+                  <span id="graph-focus-summary" role="status"
+                    aria-live="polite"></span>
+                  <div>
+                    <button id="graph-focus-open" type="button">
+                      Open page
+                    </button>
+                    <button id="graph-focus-clear" type="button">
+                      Clear focus
+                    </button>
+                  </div>
+                </div>
                 <p class="graph-method-note">
-                  Semantic similarity draws related pages together. Clusters,
-                  bridges, and hubs can reveal patterns worth investigating.
-                  Distances between disconnected groups, axes, and rotation
-                  have no meaning.
+                  Select a node to pin its visible connections. Semantic
+                  similarity draws related pages together. Clusters, bridges,
+                  and hubs can reveal patterns worth investigating. Distances
+                  between disconnected groups, axes, and rotation have no
+                  meaning.
                 </p>
                 <svg id="graph" aria-label="Knowledge connection map"></svg>
               </section>

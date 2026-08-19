@@ -157,7 +157,10 @@ are visible; it is not a similarity or confidence score. While a search is
 active, matching pages seed a one-hop contextual subgraph: their visible
 neighbours and the connections among those pages remain, while the unrelated
 remainder is hidden until the search is cleared. Direct matches are shown as
-white nodes. Clearing the search restores the complete graph.
+white nodes. Selecting a graph node pins its visible neighbourhood without
+moving or removing the surrounding graph; the user can then open its page or
+clear the focus. Clearing the search also clears this focus and restores the
+complete graph.
 
 ### Automatic trusted-video batches
 

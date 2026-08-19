@@ -79,6 +79,19 @@ export function searchContextGraph(nodes, links, resultIds) {
   };
 }
 
+export function graphFocusNodeIds(nodes, links, focusId) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  if (!nodeIds.has(focusId)) return new Set();
+  const focused = new Set([focusId]);
+  for (const link of links) {
+    const source = endpointId(link.source);
+    const target = endpointId(link.target);
+    if (source === focusId && nodeIds.has(target)) focused.add(target);
+    if (target === focusId && nodeIds.has(source)) focused.add(source);
+  }
+  return focused;
+}
+
 export function semanticSimilarityRange(links) {
   const similarities = links
     .filter((link) => link.kind === "semantic")
