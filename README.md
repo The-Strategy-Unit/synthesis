@@ -160,7 +160,9 @@ remainder is hidden until the search is cleared. Direct matches are shown as
 white nodes. Selecting a graph node pins its visible neighbourhood without
 moving or removing the surrounding graph; the user can then open its page or
 clear the focus. Clearing the search also clears this focus and restores the
-complete graph.
+complete graph. **Maximise graph** expands the same live graph to the browser
+viewport without discarding its search, semantic breadth, zoom, or pinned focus;
+**Restore graph** or Escape returns to the workspace.
 
 ### Automatic trusted-video batches
 

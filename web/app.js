@@ -7,8 +7,9 @@ import {
 } from "d3-force";
 import { select } from "d3-selection";
 import { drag } from "d3-drag";
-import { zoom } from "d3-zoom";
+import { zoom, zoomIdentity } from "d3-zoom";
 import {
+  graphFitTransform,
   graphFocusNodeIds,
   graphLinkDistance,
   graphLinkStrength,
@@ -341,6 +342,9 @@ let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
 let graphSearch = null;
 let graphFocusId = null;
+let graphMaximized = false;
+let graphAutoFitPending = false;
+let fitGraphToViewport = () => {};
 let refreshGraphFocusHighlight = () => {};
 let simulation = null;
 let graphUnavailable = false;
@@ -409,6 +413,9 @@ const evidenceContent = document.getElementById("evidence-content");
 const evidenceToggle = document.getElementById("evidence-toggle");
 const evidenceClose = document.getElementById("evidence-close");
 const graphPanel = document.getElementById("graph-panel");
+const graphElement = document.getElementById("graph");
+const graphMaximizeButton = document.getElementById("graph-maximize");
+const graphFitButton = document.getElementById("graph-fit");
 const knowledgeLayout = document.getElementById("knowledge-layout");
 const workspaceTitle = document.getElementById("workspace-title");
 const wikiWorkspace = document.getElementById("wiki-workspace");
@@ -418,6 +425,48 @@ const reviewNavigationButton = document.getElementById("review-open-btn");
 let readerState = initialReaderState();
 let primaryWorkspace = "wiki";
 
+const graphMaximizeInertTargets = [
+  document.getElementById("topbar"),
+  primaryNavigation,
+  document.querySelector(".knowledge-toolbar"),
+  document.getElementById("sidebar"),
+  sourcePanel,
+].filter(Boolean);
+
+function resizeGraphViewport() {
+  if (graphPanel.classList.contains("hidden")) return;
+  const width = Math.max(graphElement.clientWidth, 320);
+  const height = Math.max(graphElement.clientHeight, 240);
+  select(graphElement).attr("viewBox", `0 0 ${width} ${height}`);
+  if (simulation) {
+    simulation
+      .force("center", forceCenter(width / 2, height / 2))
+      .alpha(0.12)
+      .restart();
+  }
+}
+
+function setGraphMaximized(maximized, resize = true) {
+  graphMaximized = Boolean(maximized);
+  if (!graphMaximized) graphAutoFitPending = false;
+  graphPanel.classList.toggle("is-maximized", graphMaximized);
+  graphMaximizeButton.setAttribute("aria-pressed", String(graphMaximized));
+  graphMaximizeButton.textContent = graphMaximized
+    ? "Restore graph"
+    : "Maximise graph";
+  for (const target of graphMaximizeInertTargets) {
+    target.inert = graphMaximized;
+  }
+  if (graphMaximized) {
+    graphPanel.setAttribute("role", "dialog");
+    graphPanel.setAttribute("aria-modal", "true");
+  } else {
+    graphPanel.removeAttribute("role");
+    graphPanel.removeAttribute("aria-modal");
+  }
+  if (resize) requestAnimationFrame(resizeGraphViewport);
+}
+
 function renderPrimaryWorkspace() {
   const reviewing = primaryWorkspace === "review";
   wikiWorkspace.classList.toggle("hidden", reviewing);
@@ -425,6 +474,7 @@ function renderPrimaryWorkspace() {
   wikiNavigationButton.classList.toggle("active", !reviewing);
   reviewNavigationButton.classList.toggle("active", reviewing);
   if (reviewing) {
+    if (graphMaximized) setGraphMaximized(false);
     wikiNavigationButton.removeAttribute("aria-current");
     reviewNavigationButton.setAttribute("aria-current", "page");
     simulation?.stop();
@@ -457,6 +507,8 @@ function renderReaderWorkspace() {
   const hasSelection = readerState.selectedNoteId !== null;
   const evidenceVisible = pageVisible && hasSelection &&
     readerState.evidenceOpen;
+
+  if (pageVisible && graphMaximized) setGraphMaximized(false);
 
   readerPanel.classList.toggle("hidden", !pageVisible);
   graphPanel.classList.toggle("hidden", pageVisible);
@@ -501,7 +553,21 @@ pageViewButton.addEventListener("click", () => {
   updateReader({ type: "show-page" });
 });
 connectionsViewButton.addEventListener("click", () => {
+  graphAutoFitPending = true;
+  // The graph is rendered after the maximised class takes effect, so a resize
+  // restart here would prematurely cool its initial settling animation.
+  setGraphMaximized(true, false);
   updateReader({ type: "show-connections" });
+  requestAnimationFrame(() =>
+    graphMaximizeButton.focus({ preventScroll: true })
+  );
+});
+graphMaximizeButton.addEventListener("click", () => {
+  setGraphMaximized(!graphMaximized);
+});
+graphFitButton.addEventListener("click", () => {
+  graphAutoFitPending = false;
+  fitGraphToViewport();
 });
 evidenceToggle.addEventListener("click", () => {
   updateReader({ type: "toggle-evidence" });
@@ -2378,7 +2444,7 @@ searchInput.addEventListener("keydown", (e) => {
     doSearch(q);
   }
   if (e.key === "Escape") {
-    void clearSearch();
+    if (!graphMaximized) void clearSearch();
   }
 });
 searchInput.addEventListener("input", () => {
@@ -2394,6 +2460,12 @@ graphFocusOpenButton.addEventListener("click", () => {
 });
 graphFocusClearButton.addEventListener("click", clearGraphFocus);
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && graphMaximized) {
+    event.preventDefault();
+    setGraphMaximized(false);
+    graphMaximizeButton.focus();
+    return;
+  }
   if (
     event.key === "Escape" && event.target !== searchInput &&
     graphFocusId !== null
@@ -2768,13 +2840,14 @@ async function loadGraph() {
 const tooltip = select("#graph-tooltip");
 
 function renderGraph() {
-  const svg = select("#graph");
+  const svg = select(graphElement);
   refreshGraphFocusHighlight = () => {};
+  fitGraphToViewport = () => {};
   const panel = document.getElementById("graph-panel");
   if (panel.classList.contains("hidden")) return;
   simulation?.stop();
-  const width = Math.max(panel.clientWidth - 10, 320);
-  const height = panel.clientHeight || panel.parentElement.clientHeight;
+  const width = Math.max(graphElement.clientWidth, 320);
+  const height = Math.max(graphElement.clientHeight, 240);
   svg.attr("viewBox", `0 0 ${width} ${height}`);
   svg.selectAll("*").remove();
   svg.on("click.graph-focus", (event) => {
@@ -2814,18 +2887,20 @@ function renderGraph() {
   const maxSim = sims.length ? Math.max(...sims) : 0.6;
   const similarityRange = semanticSimilarityRange(graphData.links);
 
-  svg.call(
-    zoom()
-      .extent([[0, 0], [width, height]])
-      .scaleExtent([0.1, 4])
-      .on("zoom", (event) => {
-        currentZoom = event.transform.k;
-        g.attr("transform", event.transform);
-        const showLabels = currentZoom > uiConfig.labelZoomThreshold;
-        label.style("display", showLabels ? null : "none");
-        if (showLabels) tooltip.classed("hidden", true);
-      }),
-  );
+  const zoomBehavior = zoom()
+    .scaleExtent([0.01, 4])
+    .on("start", (event) => {
+      if (event.sourceEvent) graphAutoFitPending = false;
+    })
+    .on("zoom", (event) => {
+      currentZoom = event.transform.k;
+      g.attr("transform", event.transform);
+      const showLabels = currentZoom > uiConfig.labelZoomThreshold;
+      label.style("display", showLabels ? null : "none");
+      if (showLabels) tooltip.classed("hidden", true);
+    });
+  svg.property("__zoom", zoomIdentity);
+  svg.call(zoomBehavior);
 
   const link = g.append("g")
     .attr("class", "links")
@@ -2893,11 +2968,13 @@ function renderGraph() {
     .style("cursor", "pointer")
     .on("click", (event, d) => {
       event.stopPropagation();
+      graphAutoFitPending = false;
       setGraphFocus(d.id);
     })
     .on("keydown", (event, d) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
+      graphAutoFitPending = false;
       setGraphFocus(d.id);
     })
     .on("mouseover", (_event, d) => {
@@ -2989,6 +3066,7 @@ function renderGraph() {
   node.call(
     drag()
       .on("start", (event, d) => {
+        graphAutoFitPending = false;
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
@@ -3003,6 +3081,35 @@ function renderGraph() {
         d.fy = null;
       }),
   );
+
+  function updateGraphPositions() {
+    link
+      .attr("x1", (d) => d.source.x)
+      .attr("y1", (d) => d.source.y)
+      .attr("x2", (d) => d.target.x)
+      .attr("y2", (d) => d.target.y);
+    node
+      .attr("cx", (d) => d.x)
+      .attr("cy", (d) => d.y);
+    label
+      .attr("x", (d) => d.x)
+      .attr("y", (d) => d.y);
+  }
+
+  fitGraphToViewport = () => {
+    if (graphData.nodes.length === 0) return;
+    const transform = graphFitTransform(graphData.nodes, width, height);
+    svg.call(
+      zoomBehavior.transform,
+      zoomIdentity.translate(transform.x, transform.y).scale(transform.k),
+    );
+  };
+
+  function fitSettledGraph() {
+    if (!graphAutoFitPending || !graphMaximized) return;
+    graphAutoFitPending = false;
+    fitGraphToViewport();
+  }
 
   simulation = forceSimulation(graphData.nodes)
     .randomSource(seededGraphRandom())
@@ -3019,19 +3126,25 @@ function renderGraph() {
       forceCollide().radius((datum) => nodeRadius(datum) + 4).iterations(2),
     )
     .force("center", forceCenter(width / 2, height / 2))
-    .on("tick", () => {
-      link
-        .attr("x1", (d) => d.source.x)
-        .attr("y1", (d) => d.source.y)
-        .attr("x2", (d) => d.target.x)
-        .attr("y2", (d) => d.target.y);
-      node
-        .attr("cx", (d) => d.x)
-        .attr("cy", (d) => d.y);
-      label
-        .attr("x", (d) => d.x)
-        .attr("y", (d) => d.y);
-    });
+    .on("tick", updateGraphPositions)
+    .on("end", fitSettledGraph);
+
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    simulation.stop();
+    let remainingTicks = 180;
+    const settleBatch = () => {
+      const batchSize = Math.min(24, remainingTicks);
+      for (let tick = 0; tick < batchSize; tick += 1) simulation.tick();
+      remainingTicks -= batchSize;
+      updateGraphPositions();
+      if (remainingTicks > 0 && simulation.alpha() > simulation.alphaMin()) {
+        requestAnimationFrame(settleBatch);
+      } else {
+        fitSettledGraph();
+      }
+    };
+    requestAnimationFrame(settleBatch);
+  }
 }
 
 // --- Semantic neighbourhood breadth ---
@@ -3176,5 +3289,7 @@ globalThis.addEventListener("popstate", () => {
   });
 });
 globalThis.addEventListener("resize", () => {
-  if (simulation && readerState.view === "connections") renderGraph();
+  if (simulation && readerState.view === "connections") {
+    resizeGraphViewport();
+  }
 });

@@ -153,13 +153,23 @@
                     <p class="workspace-eyebrow">Explore</p>
                     <h2 id="connections-title">Knowledge connections</h2>
                   </div>
-                  <div class="graph-breadth-control">
-                    <label for="semantic-neighbors-slider">
-                      Semantic suggestions per page
-                      <span id="semantic-neighbors-value">3</span>
-                    </label>
-                    <input type="range" id="semantic-neighbors-slider"
-                      min="0" max="8" step="1" value="3" />
+                  <div class="graph-heading-actions">
+                    <div class="graph-breadth-control">
+                      <label for="semantic-neighbors-slider">
+                        Semantic suggestions per page
+                        <span id="semantic-neighbors-value">3</span>
+                      </label>
+                      <input type="range" id="semantic-neighbors-slider"
+                        min="0" max="8" step="1" value="3" />
+                    </div>
+                    <button id="graph-maximize" type="button"
+                      aria-controls="graph-panel" aria-pressed="false">
+                      Maximise graph
+                    </button>
+                    <button id="graph-fit" type="button"
+                      aria-controls="graph" title="Fit every visible node">
+                      Fit graph
+                    </button>
                   </div>
                 </div>
                 <div class="graph-legend" aria-label="Connection types">

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  graphFitTransform,
   graphLinkDistance,
   graphLinkStrength,
   graphFocusNodeIds,
@@ -9,6 +10,31 @@ import {
   semanticNeighborLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
+
+Deno.test("graph fit transform centres every positioned node with padding", () => {
+  const transform = graphFitTransform(
+    [{ x: -100, y: -50 }, { x: 100, y: 50 }],
+    1000,
+    600,
+  );
+
+  assert.deepEqual(transform, { x: 500, y: 300, k: 1 });
+
+  const wide = graphFitTransform(
+    [{ x: -1000, y: 0 }, { x: 1000, y: 0 }],
+    1000,
+    600,
+  );
+  assert.ok(wide.k < 0.5);
+  assert.equal(wide.x, 500);
+  assert.equal(wide.y, 300);
+});
+
+Deno.test("graph fit transform handles missing positions and invalid viewports", () => {
+  assert.deepEqual(graphFitTransform([{}], 800, 600), { x: 0, y: 0, k: 1 });
+  assert.throws(() => graphFitTransform([], 0, 600), /width must be positive/);
+  assert.throws(() => graphFitTransform([], 800, -1), /height must be positive/);
+});
 
 Deno.test("semantic neighbour breadth is local, deterministic, and keeps explicit links", () => {
   const nodes = [1, 2, 3, 4].map((id) => ({ id }));

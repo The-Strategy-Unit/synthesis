@@ -707,12 +707,47 @@ body {
   padding: 1rem;
 }
 
+#graph-panel.is-maximized {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  grid-column: auto;
+  border: 0;
+  background: var(--panel);
+  box-shadow: 0 0 2rem var(--shadow);
+}
+
 .graph-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+.graph-heading-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.85rem;
+}
+
+#graph-maximize,
+#graph-fit {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+#graph-maximize:hover,
+#graph-maximize:focus-visible,
+#graph-fit:hover,
+#graph-fit:focus-visible {
+  border-color: var(--accent);
 }
 
 #connections-title {
@@ -2830,6 +2865,11 @@ body {
   .graph-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .graph-heading-actions {
+    align-items: stretch;
+    justify-content: space-between;
   }
 }
 

@@ -133,12 +133,14 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="reader-panel"/);
     assert.match(index, /id="evidence-panel" class="hidden"/);
     assert.match(index, /id="graph-panel" class="hidden"/);
+    assert.match(index, /id="graph-maximize" type="button"/);
+    assert.match(index, /id="graph-fit" type="button"/);
     assert.match(index, /id="graph-search-summary" role="status"/);
     assert.match(index, /id="graph-search-clear" type="button"/);
-    assert.match(index, /id="review-workspace" class="hidden"/);
     assert.match(index, /id="graph-focus-summary" role="status"/);
     assert.match(index, /id="graph-focus-open" type="button"/);
     assert.match(index, /id="graph-focus-clear" type="button"/);
+    assert.match(index, /id="review-workspace" class="hidden"/);
     assert.match(index, /id="proposal-decision-summary" role="status"/);
     assert.match(index, /id="proposal-include-all"/);
     assert.match(index, /id="ingest-stages"/);
@@ -151,14 +153,17 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(style, /#primary-nav/);
     assert.match(style, /\.source-panel/);
     assert.match(style, /#knowledge-layout/);
+    assert.match(style, /#graph-panel\.is-maximized/);
     assert.match(style, /\.proposal-change-decision/);
     assert.match(style, /\.modal::backdrop/);
     assert.match(bundle, /add-source-btn/);
     assert.match(bundle, /reader_workspace/);
     assert.match(bundle, /review_workflow/);
     assert.match(bundle, /searchContextGraph/);
-    assert.equal(status.status, "ok");
     assert.match(bundle, /graphFocusNodeIds/);
+    assert.match(bundle, /setGraphMaximized/);
+    assert.match(bundle, /\/api\/ingest\/batch/);
+    assert.equal(status.status, "ok");
 
     const notes = await fetch(`${origin}/api/notes`).then((response) =>
       response.json()
