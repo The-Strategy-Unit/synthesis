@@ -241,8 +241,48 @@ database, rebuilds the catalog, and verifies keyword search.
 
 `POST /api/rebuild` requires `{ "confirm": "REBUILD" }`. Files are fully
 preflighted before `DB.replaceCatalog()` transactionally replaces derived rows.
-Rebuild clears embeddings, semantic links, proposals, and discoveries. Do not
-add a provider call to this path.
+Rebuild clears embeddings, semantic links, proposals, discovery candidate
+coverage, and discoveries. Do not add a provider call to this path.
+
+### `POST /api/discoveries/generate`
+
+An empty JSON object stages the current cross-source candidate frontier and
+evaluates the next bounded chunk. The response contains `discoveries` plus
+`coverage` with `generation`, eligible-page and candidate counts, evaluated and
+proposed counts, remaining work, and completion state. Send the returned
+`generation` in the next request to continue without rebuilding or repeating the
+frontier:
+
+```json
+{ "generation": "<returned UUID>" }
+```
+
+Model omissions are checkpointed as reviewed candidate pairs for the exact page
+content, model, and prompt version. Provider or validation failure leaves the
+current chunk queued. A new empty request refreshes the frontier and reuses
+unchanged decisions. No candidate or model response becomes a wiki link until a
+person confirms its discovery proposal.
+
+### `POST /api/discoveries/batch`
+
+Review an exact selection of 1-500 open synthesis proposals without a provider:
+
+```json
+{
+  "action": "confirm",
+  "ids": [17, 21, 24],
+  "confirm": "CONFIRM 3 LINKS"
+}
+```
+
+Use `"action": "reject"` with `"REJECT 3 PROPOSALS"` to reject the same
+selection. IDs must be unique positive integers and every item must still be
+pending or investigating. Confirmation also requires every proposal to retain an
+unlinked page pair. The server preflights all selected pages, prepares the final
+Markdown for every affected file, and pairs recoverable file replacement with
+one SQLite status transaction. Any invalid or stale item aborts the entire
+batch. The browser never preselects proposals; filtering and selection only
+define the exact user-confirmed batch.
 
 `POST /api/ingest/undo` requires `{ "confirm": "UNDO" }`. Undo accepts only the
 newest not-yet-undone history record and refuses any affected page whose current

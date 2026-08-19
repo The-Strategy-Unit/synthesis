@@ -1680,6 +1680,67 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
       assert.equal(generated.coverage.remaining, 0);
       assert.equal(generated.coverage.complete, true);
       assert.match(generated.coverage.generation, /^[0-9a-f-]{36}$/i);
+
+      const generatedId = generated.discoveries[0].id;
+      const unconfirmedBatch = await handle(
+        new Request("http://localhost/api/discoveries/batch", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify({
+            action: "confirm",
+            ids: [generatedId],
+            confirm: "CONFIRM ALL",
+          }),
+        }),
+      );
+      assert.equal(unconfirmedBatch.status, 400);
+      assert.equal(
+        (await unconfirmedBatch.json()).code,
+        "CONFIRMATION_REQUIRED",
+      );
+
+      const confirmedBatch = await handle(
+        new Request("http://localhost/api/discoveries/batch", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify({
+            action: "confirm",
+            ids: [generatedId],
+            confirm: "CONFIRM 1 LINKS",
+          }),
+        }),
+      );
+      assert.equal(confirmedBatch.status, 200);
+      const confirmedBatchBody = await confirmedBatch.json();
+      assert.equal(confirmedBatchBody.linksAdded, 1);
+      assert.equal(confirmedBatchBody.reviewed[0].status, "confirmed");
+
+      const rejectId = db.addDiscovery({
+        fingerprint:
+          `research-gap|${first},${otherPageId}|${sourceId},${otherSourceId}`,
+        relationship_type: "research_gap",
+        explanation: "The supplied pages leave an open research question.",
+        significance: "The gap may guide further evidence collection.",
+        page_ids_json: JSON.stringify([first, otherPageId]),
+        source_ids_json: JSON.stringify([sourceId, otherSourceId]),
+        production_method: "test",
+        model: "test-model",
+        confidence: 0.6,
+      });
+      assert.ok(rejectId);
+      const rejectedBatch = await handle(
+        new Request("http://localhost/api/discoveries/batch", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify({
+            action: "reject",
+            ids: [rejectId],
+            confirm: "REJECT 1 PROPOSALS",
+          }),
+        }),
+      );
+      assert.equal(rejectedBatch.status, 200);
+      assert.equal((await rejectedBatch.json()).reviewed[0].status, "rejected");
     } finally {
       globalThis.fetch = originalFetch;
     }

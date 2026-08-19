@@ -8,12 +8,15 @@ import { DB, type DiscoveryStatus } from "./db.ts";
 import { resolveWebAsset } from "./static_files.ts";
 import {
   confirmDiscovery,
+  DiscoveryBatchInputError,
   DiscoveryNotFoundError,
   DiscoveryStateError,
   generateDiscoveries,
   getDiscoveryView,
   listDiscoveryViews,
   reviewDiscovery,
+  reviewDiscoveryBatch,
+  validateDiscoveryBatchRequest,
 } from "./discovery.ts";
 import { LlmServiceError } from "./llm.ts";
 import {
@@ -115,6 +118,9 @@ function asProposalApiError(error: unknown): ApiError | undefined {
 }
 
 function asDiscoveryApiError(error: unknown): ApiError | undefined {
+  if (error instanceof DiscoveryBatchInputError) {
+    return new ApiError(400, error.code, error.message);
+  }
   if (error instanceof DiscoveryNotFoundError) {
     return new ApiError(404, "DISCOVERY_NOT_FOUND", error.message);
   }
@@ -510,6 +516,11 @@ export function createHandler(
               },
             ),
           );
+        }
+        if (path === "/api/discoveries/batch" && method === "POST") {
+          requireIngester(identity);
+          const batch = validateDiscoveryBatchRequest(await readJson(req));
+          return json(await reviewDiscoveryBatch(db, batch));
         }
         const discoveryMatch = path.match(
           /^\/api\/discoveries\/(\d+)(?:\/(investigate|confirm|reject))?$/,

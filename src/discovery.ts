@@ -160,6 +160,87 @@ interface CandidatePair {
 
 export class DiscoveryNotFoundError extends Error {}
 export class DiscoveryStateError extends Error {}
+export class DiscoveryBatchInputError extends Error {
+  constructor(
+    message: string,
+    readonly code:
+      | "INVALID_DISCOVERY_BATCH"
+      | "CONFIRMATION_REQUIRED" = "INVALID_DISCOVERY_BATCH",
+  ) {
+    super(message);
+  }
+}
+
+export type DiscoveryBatchAction = "confirm" | "reject";
+
+export interface ValidatedDiscoveryBatch {
+  action: DiscoveryBatchAction;
+  ids: number[];
+}
+
+export interface DiscoveryBatchResult {
+  action: DiscoveryBatchAction;
+  reviewed: DiscoveryView[];
+  linksAdded: number;
+}
+
+export function discoveryBatchConfirmation(
+  action: DiscoveryBatchAction,
+  count: number,
+): string {
+  if (!Number.isSafeInteger(count) || count < 1) {
+    throw new RangeError("Discovery batch count must be positive");
+  }
+  return action === "confirm"
+    ? `CONFIRM ${count} LINKS`
+    : `REJECT ${count} PROPOSALS`;
+}
+
+export function validateDiscoveryBatchRequest(
+  value: unknown,
+  maxItems = MAX_DISCOVERY_BATCH_ITEMS,
+): ValidatedDiscoveryBatch {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new DiscoveryBatchInputError(
+      "Discovery batch request must be an object",
+    );
+  }
+  if (!Number.isSafeInteger(maxItems) || maxItems < 1) {
+    throw new RangeError("Discovery batch limit must be positive");
+  }
+  const request = value as Record<string, unknown>;
+  if (request.action !== "confirm" && request.action !== "reject") {
+    throw new DiscoveryBatchInputError(
+      "Discovery batch action must be 'confirm' or 'reject'",
+    );
+  }
+  if (
+    !Array.isArray(request.ids) || request.ids.length < 1 ||
+    request.ids.length > maxItems
+  ) {
+    throw new DiscoveryBatchInputError(
+      `Discovery batch must contain 1-${maxItems} IDs`,
+    );
+  }
+  const ids = request.ids.map((id) => Number(id));
+  if (
+    ids.some((id) => !Number.isSafeInteger(id) || id < 1) ||
+    new Set(ids).size !== ids.length
+  ) {
+    throw new DiscoveryBatchInputError(
+      "Discovery batch IDs must be unique positive integers",
+    );
+  }
+  const action = request.action;
+  const expected = discoveryBatchConfirmation(action, ids.length);
+  if (request.confirm !== expected) {
+    throw new DiscoveryBatchInputError(
+      `Set 'confirm' to '${expected}' to review this exact batch`,
+      "CONFIRMATION_REQUIRED",
+    );
+  }
+  return { action, ids };
+}
 
 function asRecord(value: unknown, context: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -919,10 +1000,38 @@ function renderWithExistingSources(markdown: string, links: string[]): string {
   return result;
 }
 
-export async function confirmDiscovery(
+function selectDiscoveryPair(
   db: DB,
-  id: number,
-): Promise<DiscoveryView> {
+  view: DiscoveryView,
+  explicitPairs: Set<string>,
+): [number, number] | undefined {
+  for (const requireDifferentSources of [true, false]) {
+    for (let leftIndex = 0; leftIndex < view.pages.length; leftIndex++) {
+      for (
+        let rightIndex = leftIndex + 1;
+        rightIndex < view.pages.length;
+        rightIndex++
+      ) {
+        const left = view.pages[leftIndex].id;
+        const right = view.pages[rightIndex].id;
+        if (explicitPairs.has(pairKey(left, right))) continue;
+        if (requireDifferentSources) {
+          const leftSources = db.getSourceProvenanceForNote(left).map((
+            source,
+          ) => source.id);
+          const rightSources = db.getSourceProvenanceForNote(right).map(
+            (source) => source.id,
+          );
+          if (sourceSetsOverlap(leftSources, rightSources)) continue;
+        }
+        return [left, right];
+      }
+    }
+  }
+  return undefined;
+}
+
+function reviewableDiscovery(db: DB, id: number): DiscoveryView {
   const record = db.getDiscovery(id);
   if (!record) throw new DiscoveryNotFoundError(`Discovery ${id} not found`);
   if (!["pending", "investigating"].includes(record.status)) {
@@ -930,26 +1039,33 @@ export async function confirmDiscovery(
       `Discovery ${id} is already ${record.status}`,
     );
   }
-  const view = discoveryView(db, record);
-  const graph = await buildWikiGraph(db);
-  const explicitPairs = explicitPairKeys(graph.links);
-  let pair: [number, number] | undefined;
-  for (let leftIndex = 0; leftIndex < view.pages.length && !pair; leftIndex++) {
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < view.pages.length;
-      rightIndex++
-    ) {
-      const left = view.pages[leftIndex].id;
-      const right = view.pages[rightIndex].id;
-      if (
-        !explicitPairs.has(`${Math.min(left, right)}:${Math.max(left, right)}`)
-      ) {
-        pair = [left, right];
-        break;
-      }
+  return discoveryView(db, record);
+}
+
+async function restoreDiscoveryFiles(
+  originals: Map<string, string>,
+  paths: string[],
+): Promise<void> {
+  let rollbackError: unknown;
+  for (const path of [...paths].reverse()) {
+    try {
+      await replaceFile(path, originals.get(path)!);
+    } catch (error) {
+      rollbackError ??= error;
+      console.error(`Discovery batch rollback failed: ${errMsg(error)}`);
     }
   }
+  if (rollbackError) throw new Error("Discovery batch rollback failed");
+}
+
+export async function confirmDiscovery(
+  db: DB,
+  id: number,
+): Promise<DiscoveryView> {
+  const view = reviewableDiscovery(db, id);
+  const graph = await buildWikiGraph(db);
+  const explicitPairs = explicitPairKeys(graph.links);
+  const pair = selectDiscoveryPair(db, view, explicitPairs);
 
   let original: string | undefined;
   let sourcePath: string | undefined;
@@ -975,6 +1091,113 @@ export async function confirmDiscovery(
     throw error;
   }
   return getDiscoveryView(db, id);
+}
+
+export async function reviewDiscoveryBatch(
+  db: DB,
+  batch: ValidatedDiscoveryBatch,
+): Promise<DiscoveryBatchResult> {
+  const views = batch.ids.map((id) => reviewableDiscovery(db, id));
+  if (batch.action === "reject") {
+    db.withTransaction(() => {
+      for (const id of batch.ids) {
+        if (!db.reviewDiscovery(id, "rejected")) {
+          throw new DiscoveryStateError(
+            `Discovery ${id} is no longer reviewable`,
+          );
+        }
+      }
+    });
+    return {
+      action: batch.action,
+      reviewed: batch.ids.map((id) => getDiscoveryView(db, id)),
+      linksAdded: 0,
+    };
+  }
+
+  const graph = await buildWikiGraph(db);
+  const explicitPairs = explicitPairKeys(graph.links);
+  const originals = new Map<string, string>();
+  const finalContents = new Map<string, string>();
+  for (const view of views) {
+    const pair = selectDiscoveryPair(db, view, explicitPairs);
+    if (!pair) {
+      throw new DiscoveryStateError(
+        `Discovery ${view.id} no longer has an unlinked page pair`,
+      );
+    }
+    explicitPairs.add(pairKey(pair[0], pair[1]));
+    const source = db.getNote(pair[0]);
+    const target = db.getNote(pair[1]);
+    if (!source || !target) {
+      throw new DiscoveryStateError(
+        `Discovery ${view.id} page is no longer available`,
+      );
+    }
+    let original = originals.get(source.file_path);
+    if (original === undefined) {
+      original = await Deno.readTextFile(source.file_path);
+      originals.set(source.file_path, original);
+    }
+    const current = finalContents.get(source.file_path) ?? original;
+    const page = parseWikiPage(current);
+    finalContents.set(
+      source.file_path,
+      renderWithExistingSources(current, [...page.links, target.title]),
+    );
+  }
+
+  for (const [path, original] of originals) {
+    if (await Deno.readTextFile(path) !== original) {
+      throw new DiscoveryStateError(
+        "A wiki page changed while the discovery batch was being prepared",
+      );
+    }
+  }
+
+  const writtenPaths: string[] = [];
+  try {
+    for (
+      const [path, content] of [...finalContents].sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    ) {
+      await replaceFile(path, content);
+      writtenPaths.push(path);
+    }
+  } catch (error) {
+    try {
+      await restoreDiscoveryFiles(originals, writtenPaths);
+    } catch {
+      throw new Error("Discovery batch failed and could not be rolled back");
+    }
+    throw error;
+  }
+
+  try {
+    db.withTransaction(() => {
+      for (const id of batch.ids) {
+        if (!db.reviewDiscovery(id, "confirmed")) {
+          throw new DiscoveryStateError(
+            `Discovery ${id} is no longer reviewable`,
+          );
+        }
+      }
+    });
+  } catch (error) {
+    try {
+      await restoreDiscoveryFiles(originals, writtenPaths);
+    } catch {
+      throw new Error("Discovery batch failed and could not be rolled back");
+    }
+    throw error;
+  }
+
+  return {
+    action: batch.action,
+    reviewed: batch.ids.map((id) => getDiscoveryView(db, id)),
+    linksAdded: views.length,
+  };
 }
 
 export function reviewDiscovery(

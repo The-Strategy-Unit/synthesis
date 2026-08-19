@@ -123,8 +123,9 @@ cross-compilation are provided by
    approve them to mutate the wiki.
 4. Ingest and approve a second source that supports, extends, or contradicts the
    first.
-5. Open **Discoveries**, scan for grounded cross-page connections, and confirm
-   only a useful one. Confirmation promotes it to an explicit wiki link.
+5. Open **Synthesis review**, run or resume the cross-source sweep, and confirm
+   only grounded, useful proposals. Confirmation promotes a proposal to an
+   explicit wiki link.
 6. Open **Sources** to inspect source summaries and derived-page provenance.
 7. Open **Ask wiki**, ask a cross-source question, review its cited pages, and
    optionally save the answer as a new synthesis page.
@@ -246,9 +247,10 @@ reference.
 | `/api/proposals/:id`           | GET     | Inspect a proposed wiki change               |
 | `/api/proposals/:id/approve`   | POST    | Approve and apply a proposal                 |
 | `/api/proposals/:id/reject`    | POST    | Reject a proposal                            |
-| `/api/discoveries`             | GET     | List reviewed connection candidates          |
-| `/api/discoveries/generate`    | POST    | Scan for grounded connections                |
-| `/api/discoveries/:id`         | GET     | Inspect one connection candidate             |
+| `/api/discoveries`             | GET     | List cross-source synthesis proposals        |
+| `/api/discoveries/batch`       | POST    | Confirm or reject an exact selected batch    |
+| `/api/discoveries/generate`    | POST    | Run or resume a bounded synthesis sweep      |
+| `/api/discoveries/:id`         | GET     | Inspect one synthesis proposal               |
 | `/api/discoveries/:id/:action` | POST    | Investigate, confirm, or reject              |
 
 ## Development
