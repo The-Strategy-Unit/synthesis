@@ -37,11 +37,14 @@ file-backed vault, while SQLite search and vector state remain rebuildable.
 - Local PDF, Markdown, and text upload; PDF evidence retains page locations and
   the original file
 - Editable `schema.md` defining the vault's purpose and compilation conventions
-- Staged new/merge/contradict proposals with human approval before wiki mutation
+- Staged new/merge/contradict proposals with human approval by default
+- Explicitly confirmed trusted-video batches that sequentially apply every
+  validated change with portable automatic-review audit records
 - Deterministic wiki index and machine-readable change log
 - Keyword and semantic search with a cross-source semantic map and reviewed wiki
   links overlaid
-- Resumable cross-source synthesis proposals for relationships and consolidation
+- Resumable cross-source candidate coverage with reviewed proposals for
+  relationships and possible page consolidation
 - Wiki-grounded answers with cited pages and reviewed synthesis write-back
 - Deterministic structural/provenance lint plus optional AI health analysis
 - Source review showing which pages each source created or changed
@@ -56,6 +59,11 @@ Synthesis is intended for research and knowledge-management workflows. It is not
 validated clinical decision-support software. Do not use it for patient care or
 regulated/identifiable data without the appropriate validation, governance,
 security, and human review.
+
+Automatic trusted-source mode deliberately removes proposal-by-proposal review.
+Use it only for an exact, curated list whose model-generated output you accept
+responsibility for checking later; source trust does not establish output
+accuracy.
 
 ## Quick start
 
@@ -147,6 +155,28 @@ knowledge. Reviewed links from page Markdown are overlaid separately. The
 breadth control chooses how many of each page's strongest semantic suggestions
 are visible; it is not a similarity or confidence score.
 
+### Automatic trusted-video batches
+
+Under **Add source → More options**, choose **Trusted videos · automatic
+apply**, paste one exact YouTube video ID or URL per line, read the warning, and
+type the displayed count-specific confirmation. Synthesis processes the list
+sequentially so each source is compared with the wiki produced by earlier
+sources. Every validated `new`, `merge`, and `contradict` change is applied
+without opening Review. After the final source, a resumable whole-vault sweep
+builds a lexical and embedding candidate frontier across sources, evaluates it
+in bounded model batches, and records both proposals and reviewed omissions so
+an interrupted run continues instead of repeating work. Supported relationships
+or consolidation candidates appear in **Synthesis review** and are never
+confirmed automatically.
+
+The batch stops on the first download, provider, validation, stale-proposal, or
+apply failure. Keep the page open while it runs. Re-submit the same exact list
+to resume: sources already applied to the current vault are detected by content
+identity and skipped. Each applied source retains its proposal and writes a
+history manifest with `reviewMode: automatic` and the shared batch ID. This is
+an efficiency option, not a quality check; curate the source list and audit the
+resulting wiki.
+
 ## Compilation pipeline
 
 1. **Archive** — preserve the raw source or original uploaded file, extracted
@@ -164,6 +194,21 @@ are visible; it is not a similarity or confidence score.
    consolidations for review.
 8. **Query** — answer from compiled pages, cite them, and optionally compile a
    reviewed answer back into the wiki.
+
+Manual ingest runs the cross-source pass around newly accepted pages. Trusted
+batches defer it until the complete batch has been applied, avoiding a partial
+scan after every video. A confirmed relationship becomes an explicit wiki link.
+Confirming a consolidation candidate records its reviewed overlap as a link; it
+does not yet merge or delete either page.
+
+Open synthesis proposals can also be filtered and selected for an exact batch
+decision. Nothing is selected automatically. Confirming a batch requires typing
+`CONFIRM N LINKS`; rejecting one requires `REJECT N PROPOSALS`. The server
+revalidates every selected proposal before changing anything, limits one batch
+to 500 proposals, and applies confirmation as one recoverable operation. A
+stale, missing, already reviewed, or already linked item stops the whole batch
+instead of partially accepting it. Model confidence remains informational, not
+evidence.
 
 ## Storage
 
@@ -205,21 +250,23 @@ and clears affected semantic state. Export before material recovery operations.
 Configuration is defined in `src/config.ts` and can be overridden with
 environment variables. Common settings are:
 
-| Variable                         | Default                          | Purpose                  |
-| -------------------------------- | -------------------------------- | ------------------------ |
-| `SYNTHESIS_VAULT`                | `~/Synthesis`                    | Vault root               |
-| `SYNTHESIS_PORT`                 | `8000`                           | HTTP port                |
-| `SYNTHESIS_API_BASE`             | `http://localhost:11434/v1`      | Default chat API         |
-| `SYNTHESIS_EXTRACT_MODEL`        | `qwen3.5:9b`                     | Chunk extraction         |
-| `SYNTHESIS_CONSOLIDATE_MODEL`    | `qwen3.5:9b`                     | Source synthesis         |
-| `SYNTHESIS_INTEGRATE_MODEL`      | `qwen3.5:9b`                     | Integration decisions    |
-| `SYNTHESIS_REWRITE_MODEL`        | `qwen3.5:9b`                     | Page rewriting           |
-| `SYNTHESIS_EMBED_MODEL`          | `nomic-embed-text-v2-moe:latest` | Embeddings               |
-| `SYNTHESIS_EMBED_DIMENSIONS`     | `768`                            | Required embedding width |
-| `SYNTHESIS_LINK_THRESHOLD`       | `0.75`                           | Graph link threshold     |
-| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400`                       | Multipart upload limit   |
-| `SYNTHESIS_MAX_PDF_PAGES`        | `500`                            | PDF page limit           |
-| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`                          | PDF extraction timeout   |
+| Variable                            | Default                          | Purpose                      |
+| ----------------------------------- | -------------------------------- | ---------------------------- |
+| `SYNTHESIS_VAULT`                   | `~/Synthesis`                    | Vault root                   |
+| `SYNTHESIS_PORT`                    | `8000`                           | HTTP port                    |
+| `SYNTHESIS_API_BASE`                | `http://localhost:11434/v1`      | Default chat API             |
+| `SYNTHESIS_EXTRACT_MODEL`           | `qwen3.5:9b`                     | Chunk extraction             |
+| `SYNTHESIS_CONSOLIDATE_MODEL`       | `qwen3.5:9b`                     | Source synthesis             |
+| `SYNTHESIS_INTEGRATE_MODEL`         | `qwen3.5:9b`                     | Integration decisions        |
+| `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:9b`                     | Page rewriting               |
+| `SYNTHESIS_EMBED_MODEL`             | `nomic-embed-text-v2-moe:latest` | Embeddings                   |
+| `SYNTHESIS_EMBED_DIMENSIONS`        | `768`                            | Required embedding width     |
+| `SYNTHESIS_LINK_K`                  | `8`                              | Stored semantic neighbours   |
+| `SYNTHESIS_GRAPH_NEIGHBORS`         | `3`                              | Initially visible neighbours |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                       | Multipart upload limit       |
+| `SYNTHESIS_MAX_PDF_PAGES`           | `500`                            | PDF page limit               |
+| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                          | PDF extraction timeout       |
+| `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS` | `100`                            | Automatic video limit        |
 
 See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the complete configuration
 reference.
@@ -248,6 +295,7 @@ reference.
 | `/api/lint`                    | GET     | Deterministic wiki health report             |
 | `/api/lint/analyze`            | POST    | Optional provider-assisted health report     |
 | `/api/ingest`                  | POST    | Stage URL or text changes with SSE progress  |
+| `/api/ingest/batch`            | POST    | Confirm and auto-apply trusted video sources |
 | `/api/ingest/file`             | POST    | Stage a bounded local file upload            |
 | `/api/ingest/undo`             | POST    | Undo the newest unchanged accepted ingest    |
 | `/api/ingest/playlist`         | POST    | Stage videos from a bounded YouTube playlist |

@@ -144,6 +144,21 @@ Deno.test("ingestion progress exposes the source-to-review handoff", () => {
     read: "complete",
     review: "current",
   });
+  assert.deepEqual(ingestProgress("batch_source"), {
+    draft: "pending",
+    read: "current",
+    review: "pending",
+  });
+  assert.deepEqual(ingestProgress("automatic_proposal"), {
+    draft: "complete",
+    read: "complete",
+    review: "current",
+  });
+  assert.deepEqual(ingestProgress("synthesis_progress"), {
+    draft: "complete",
+    read: "complete",
+    review: "current",
+  });
   assert.deepEqual(ingestProgress("done"), {
     draft: "complete",
     read: "complete",

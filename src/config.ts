@@ -297,6 +297,12 @@ export const config = {
       100,
       10,
     ),
+    maxTrustedBatchItems: envIntClamped(
+      "SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS",
+      1,
+      100,
+      100,
+    ),
     maxPdfPages: envIntClamped(
       "SYNTHESIS_MAX_PDF_PAGES",
       1,

@@ -251,16 +251,17 @@
         <header class="source-panel-header">
           <div>
             <h2 id="source-panel-title">Add a source</h2>
-            <p>Paste a source or choose a short document to propose wiki changes.</p>
+            <p>Prepare one source for review, or explicitly confirm an automatic batch of trusted videos.</p>
           </div>
           <button id="source-panel-close" type="button"
             aria-label="Close add source panel">&times;</button>
         </header>
         <div id="ingest-bar">
-          <label for="ingest-input">Source text, YouTube link, or URL</label>
+          <label id="ingest-input-label"
+            for="ingest-input">Source text, YouTube link, or URL</label>
           <textarea id="ingest-input" rows="7"
             placeholder="Paste source text, a YouTube ID, or a URL..."></textarea>
-          <div class="source-file-row">
+          <div id="source-file-row" class="source-file-row">
             <span>or</span>
             <label class="file-picker" for="ingest-file">
               Choose PDF, Markdown, or text file
@@ -272,7 +273,8 @@
           <details class="source-options">
             <summary>More options</summary>
             <div>
-              <label for="ingest-title">Source title</label>
+              <label id="ingest-title-label"
+                for="ingest-title">Source title</label>
               <input type="text" id="ingest-title" maxlength="200"
                 placeholder="Optional" />
               <label for="ingest-source-type">Source type</label>
@@ -281,9 +283,33 @@
                 <option value="text">Text</option>
                 <option value="video">YouTube video</option>
                 <option value="playlist">YouTube playlist</option>
+                <option
+                  value="trusted-batch">Trusted videos · automatic apply</option>
               </select>
             </div>
           </details>
+          <section id="trusted-batch-controls"
+            class="trusted-batch-controls hidden"
+            aria-labelledby="trusted-batch-title">
+            <h3
+              id="trusted-batch-title">Automatic apply skips proposal review</h3>
+            <p>
+              Every validated <strong>new</strong>, <strong>merge</strong>, and
+              <strong>contradict</strong> change from this exact list will enter
+              the wiki. Trusted sources do not guarantee accurate model output.
+            </p>
+            <p>
+              The batch stops on its first failure. Keep this page open. To
+              resume, submit the same list again; already applied sources are
+              skipped.
+            </p>
+            <label for="trusted-batch-confirmation">
+              Type <code id="trusted-batch-confirmation-phrase">the confirmation shown after adding videos</code>
+            </label>
+            <input id="trusted-batch-confirmation" type="text"
+              autocomplete="off" spellcheck="false"
+              aria-describedby="trusted-batch-title" />
+          </section>
           <div class="ingest-progress" aria-labelledby="ingest-progress-title">
             <p id="ingest-progress-title">Preparation progress</p>
             <ol id="ingest-stages">
@@ -297,10 +323,11 @@
               </li>
               <li data-ingest-step="review" data-state="pending">
                 <span>3</span>
-                <div><strong>Ready for review</strong><small>Nothing changes automatically</small></div>
+                <div><strong id="ingest-final-step-title">Ready for review</strong><small id="ingest-final-step-detail">Nothing changes automatically</small></div>
               </li>
             </ol>
-            <p>Completed proposals remain available in Review.</p>
+            <p
+              id="ingest-progress-note">Completed proposals remain available in Review.</p>
           </div>
           <div class="source-actions">
             <button id="ingest-btn" type="button"

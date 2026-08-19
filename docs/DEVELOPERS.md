@@ -139,17 +139,18 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Ingest
 
-| Variable                         | Default                            | Notes                   |
-| -------------------------------- | ---------------------------------- | ----------------------- |
-| `SYNTHESIS_MAX_CHARS`            | `12000`                            | min 1000; chunk size    |
-| `SYNTHESIS_CHUNK_OVERLAP`        | `500`                              | clamped 0–2000          |
-| `SYNTHESIS_MAX_UPLOAD_BYTES`     | `26214400`                         | clamped 1–100 MiB       |
-| `SYNTHESIS_MAX_PDF_PAGES`        | `500`                              | clamped 1–5000          |
-| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS` | `30000`                            | clamped 1 second–5 mins |
-| `SYNTHESIS_YT_DLP_PATH`          | `yt-dlp` (`yt-dlp.exe` on Windows) | downloader executable   |
-| `SYNTHESIS_SUBTITLES_LANG`       | `en`                               | yt-dlp `--sub-lang`     |
-| `SYNTHESIS_PLAYLIST_ENABLED`     | `true`                             | enable playlist route   |
-| `SYNTHESIS_MAX_PLAYLIST_ITEMS`   | `10`                               | clamped 1–100           |
+| Variable                            | Default                            | Notes                   |
+| ----------------------------------- | ---------------------------------- | ----------------------- |
+| `SYNTHESIS_MAX_CHARS`               | `12000`                            | min 1000; chunk size    |
+| `SYNTHESIS_CHUNK_OVERLAP`           | `500`                              | clamped 0–2000          |
+| `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                         | clamped 1–100 MiB       |
+| `SYNTHESIS_MAX_PDF_PAGES`           | `500`                              | clamped 1–5000          |
+| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                            | clamped 1 second–5 mins |
+| `SYNTHESIS_YT_DLP_PATH`             | `yt-dlp` (`yt-dlp.exe` on Windows) | downloader executable   |
+| `SYNTHESIS_SUBTITLES_LANG`          | `en`                               | yt-dlp `--sub-lang`     |
+| `SYNTHESIS_PLAYLIST_ENABLED`        | `true`                             | enable playlist route   |
+| `SYNTHESIS_MAX_PLAYLIST_ITEMS`      | `10`                               | clamped 1–100           |
+| `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS` | `100`                              | clamped 1–100           |
 
 ### Linking
 
@@ -226,8 +227,40 @@ Response is a `text/event-stream` with `data:` events:
 Staging archives the source but does not mutate wiki pages. A reviewer inspects
 the proposal through `GET /api/proposals/:id` and applies it with
 `POST /api/proposals/:id/approve`. Approval streams `embedding`, `integrating`,
-`integrated`, `linking`, optional `discoveries` or `warning`, and `done` events.
-Reject a pending proposal with `POST /api/proposals/:id/reject`.
+`integrated`, `linking`, optional cross-source `discoveries` or `warning`, and
+`done` events. The synthesis pass treats accepted pages as seeds but compares
+them with candidates from other sources across the vault. Reject a pending
+proposal with `POST /api/proposals/:id/reject`.
+
+### `POST /api/ingest/batch` (SSE)
+
+Request body:
+
+```json
+{
+  "urls": ["<YouTube video ID or URL>", "<another video URL>"],
+  "reviewMode": "automatic",
+  "confirm": "AUTO APPLY 2 TRUSTED SOURCES"
+}
+```
+
+The server normalizes and rejects duplicate videos, enforces
+`SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS`, and requires the exact count-specific
+confirmation. It resolves one provider configuration, then processes sources
+sequentially through the ordinary stage, validation, stale-hash, embedding,
+history, and recoverable-apply path. Every proposed change is selected. The
+stream adds `batch_started`, `batch_source`, `automatic_proposal`,
+`automatic_applied`, optional `batch_skipped`, `synthesizing`, optional
+`synthesis_progress`, `discoveries`, and `batch_complete` events. Cross-source
+synthesis runs a resumable candidate generation over the completed vault rather
+than once after every trusted video. It continues bounded model chunks until the
+current frontier is complete; its proposals remain pending for human review.
+
+The batch stops at the first source or apply failure. Cross-source synthesis
+failures after committed sources remain warnings. Re-submit the same list to
+resume; applied source identities are skipped, while a pending proposal is
+staged again and automatically applied. Automatic history records contain
+`reviewMode` and the shared `batchId`. Clients must keep the SSE request open.
 
 ### Export, rebuild, and undo
 

@@ -3,6 +3,12 @@ import { relative, resolve } from "node:path";
 import { config } from "./config.ts";
 
 export type IngestHistoryAction = "new" | "merge" | "contradict";
+export type IngestReviewMode = "manual" | "automatic";
+
+export interface IngestReviewAudit {
+  reviewMode: IngestReviewMode;
+  batchId?: string;
+}
 
 export interface IngestHistoryChange {
   action: IngestHistoryAction;
@@ -21,6 +27,8 @@ export interface IngestHistoryManifest {
   sourceHash: string;
   sourceTitle: string;
   appliedAt: string;
+  reviewMode: IngestReviewMode;
+  batchId?: string;
   changes: IngestHistoryChange[];
 }
 
@@ -109,6 +117,21 @@ export function validateIngestHistoryManifest(
   ) {
     throw new Error("Ingest history appliedAt must be an ISO UTC timestamp");
   }
+  const reviewMode = manifest.reviewMode === undefined
+    ? "manual"
+    : requiredString(manifest.reviewMode, "reviewMode", 20);
+  if (reviewMode !== "manual" && reviewMode !== "automatic") {
+    throw new Error("Ingest history reviewMode is invalid");
+  }
+  let batchId: string | undefined;
+  if (reviewMode === "automatic") {
+    batchId = requiredString(manifest.batchId, "batchId", 36);
+    if (!UUID_PATTERN.test(batchId)) {
+      throw new Error("Ingest history batchId must be a UUID");
+    }
+  } else if (manifest.batchId !== undefined) {
+    throw new Error("Manual ingest history must not have a batchId");
+  }
   if (!Array.isArray(manifest.changes) || manifest.changes.length === 0) {
     throw new Error("Ingest history changes must be a non-empty array");
   }
@@ -184,6 +207,8 @@ export function validateIngestHistoryManifest(
     sourceHash: manifest.sourceHash,
     sourceTitle: requiredString(manifest.sourceTitle, "sourceTitle", 500),
     appliedAt,
+    reviewMode,
+    ...(batchId ? { batchId } : {}),
     changes,
   };
 }
@@ -192,6 +217,7 @@ export async function writeIngestHistory(input: {
   proposalId: number;
   sourceHash: string;
   sourceTitle: string;
+  review?: IngestReviewAudit;
   changes: IngestHistoryInputChange[];
 }): Promise<WrittenIngestHistory> {
   const historyId = crypto.randomUUID();
@@ -240,6 +266,8 @@ export async function writeIngestHistory(input: {
       sourceHash: input.sourceHash,
       sourceTitle: input.sourceTitle,
       appliedAt,
+      reviewMode: input.review?.reviewMode ?? "manual",
+      ...(input.review?.batchId ? { batchId: input.review.batchId } : {}),
       changes,
     });
     await Deno.writeTextFile(

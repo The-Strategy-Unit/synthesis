@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { config } from "./config.ts";
 import { DB } from "./db.ts";
+import { readIngestHistoryManifest } from "./ingest_history.ts";
 import { createHandler } from "./routes.ts";
 import { parseWikiPage, renderWikiPage } from "./wiki.ts";
 
@@ -1370,6 +1371,164 @@ routeTest(
         config.ingest.playlistEnabled = originalPlaylistEnabled;
       }
     });
+  },
+);
+
+routeTest(
+  "trusted batches require exact automatic-apply confirmation",
+  async () => {
+    await withTempHandler(async (handle) => {
+      const request = (body: Record<string, unknown>) =>
+        handle(
+          new Request("http://localhost/api/ingest/batch", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify(body),
+          }),
+        );
+
+      const unconfirmed = await request({
+        urls: ["dQw4w9WgXcQ"],
+        reviewMode: "automatic",
+      });
+      assert.equal(unconfirmed.status, 400);
+      assert.equal((await unconfirmed.json()).code, "CONFIRMATION_REQUIRED");
+
+      const duplicate = await request({
+        urls: ["dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ"],
+        reviewMode: "automatic",
+        confirm: "AUTO APPLY 2 TRUSTED SOURCES",
+      });
+      assert.equal(duplicate.status, 400);
+      assert.equal((await duplicate.json()).code, "INVALID_TRUSTED_BATCH");
+    });
+  },
+);
+
+routeTest(
+  "trusted batches stage, validate, apply, and audit each source",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    const originalAuth = {
+      trustProxyAuth: config.security.trustProxyAuth,
+      publicOrigin: config.security.publicOrigin,
+      allowedEmails: config.security.allowedEmails,
+      ingesterEmails: config.security.ingesterEmails,
+    };
+    try {
+      config.security.trustProxyAuth = true;
+      config.security.publicOrigin = "https://synthesis.example";
+      config.security.allowedEmails = ["trusted-batch@example.com"];
+      config.security.ingesterEmails = ["trusted-batch@example.com"];
+      await withTempHandler(async (_handle, db, dir) => {
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        await Deno.mkdir(`${dir}/sources`, { recursive: true });
+        const embedding = Array.from(
+          { length: config.embed.dimensions },
+          (_, index) => index === 0 ? 1 : 0,
+        );
+        let requests = 0;
+        globalThis.fetch = () => {
+          switch (requests++) {
+            case 0:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      items: [{
+                        title: "Automatically reviewed concept",
+                        type: "concept",
+                        body: "A bounded claim from a trusted source.",
+                        tags: ["trusted-batch"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 1:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      summary: "A trusted source summary.",
+                      notes: [{
+                        title: "Automatically reviewed concept",
+                        type: "concept",
+                        body: "A bounded claim from a trusted source.",
+                        tags: ["trusted-batch"],
+                        links: [],
+                      }],
+                    }),
+                  },
+                }],
+              }));
+            case 2:
+              return Promise.resolve(Response.json({
+                data: [{ embedding }],
+              }));
+            default:
+              return Promise.resolve(Response.json({
+                choices: [{
+                  message: { content: JSON.stringify({ discoveries: [] }) },
+                }],
+              }));
+          }
+        };
+        const ingestVideo = (url: string) =>
+          Promise.resolve({
+            transcript: "A curated transcript for automatic ingestion.",
+            sourceUrl: url,
+            title: "Trusted video",
+            sourceType: "youtube" as const,
+          });
+        const handle = createHandler(db, undefined, undefined, {
+          ingestYouTube: ingestVideo,
+        });
+
+        const response = await handle(
+          new Request("https://synthesis.example/api/ingest/batch", {
+            method: "POST",
+            headers: {
+              ...mutationHeaders("https://synthesis.example"),
+              "Cf-Access-Authenticated-User-Email": "trusted-batch@example.com",
+            },
+            body: JSON.stringify({
+              urls: ["dQw4w9WgXcQ"],
+              reviewMode: "automatic",
+              confirm: "AUTO APPLY 1 TRUSTED SOURCES",
+            }),
+          }),
+        );
+        assert.equal(response.status, 200);
+        const events = await response.text();
+        assert.match(events, /"stage":"batch_started"/);
+        assert.match(events, /"stage":"automatic_proposal"/);
+        assert.match(events, /"stage":"automatic_applied"/);
+        assert.match(events, /"stage":"synthesizing"/);
+        assert.match(events, /"stage":"batch_complete"/);
+        assert.match(events, /"stage":"done"/);
+        assert.equal(db.getAllNotes().length, 1);
+
+        const historyEntries = [...Deno.readDirSync(`${dir}/history`)];
+        assert.equal(historyEntries.length, 1);
+        const history = await readIngestHistoryManifest(
+          `${dir}/history/${historyEntries[0].name}`,
+        );
+        assert.equal(history.reviewMode, "automatic");
+        assert.match(history.batchId ?? "", /^[0-9a-f-]{36}$/i);
+        assert.equal(
+          db.getIngestProposal(history.proposalId)?.status,
+          "approved",
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      config.security.trustProxyAuth = originalAuth.trustProxyAuth;
+      config.security.publicOrigin = originalAuth.publicOrigin;
+      config.security.allowedEmails = originalAuth.allowedEmails;
+      config.security.ingesterEmails = originalAuth.ingesterEmails;
+    }
   },
 );
 

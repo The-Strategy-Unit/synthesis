@@ -112,6 +112,12 @@ export function discoveryCoverageSummary(coverage) {
 }
 
 const INGEST_STAGE_STEP = Object.freeze({
+  automatic_applied: "review",
+  automatic_proposal: "review",
+  batch_complete: "review",
+  batch_skipped: "review",
+  batch_source: "read",
+  batch_started: "read",
   discoveries: "review",
   distilled: "draft",
   distilling: "draft",

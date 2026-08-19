@@ -40,6 +40,8 @@ Deno.test({
       });
 
       assert.equal(written.manifest.proposalId, 7);
+      assert.equal(written.manifest.reviewMode, "manual");
+      assert.equal(written.manifest.batchId, undefined);
       assert.equal(written.manifest.changes[0].notePath, "notes/existing.md");
       assert.equal(written.manifest.changes[0].beforeRevision, "before/000.md");
       assert.equal(written.manifest.changes[1].beforeRevision, undefined);
@@ -86,6 +88,27 @@ Deno.test({
           ...written.manifest,
           sourceHash: "invalid",
         })
+      );
+
+      const legacy = { ...written.manifest } as Record<string, unknown>;
+      delete legacy.reviewMode;
+      assert.equal(validateIngestHistoryManifest(legacy).reviewMode, "manual");
+
+      const batchId = crypto.randomUUID();
+      const automatic = validateIngestHistoryManifest({
+        ...written.manifest,
+        reviewMode: "automatic",
+        batchId,
+      });
+      assert.equal(automatic.reviewMode, "automatic");
+      assert.equal(automatic.batchId, batchId);
+      assert.throws(
+        () =>
+          validateIngestHistoryManifest({
+            ...written.manifest,
+            reviewMode: "automatic",
+          }),
+        /batchId/,
       );
 
       await removeWrittenIngestHistory(written);

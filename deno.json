@@ -31,6 +31,7 @@
       "src/provider_runtime_test.ts",
       "src/secret_store_test.ts",
       "src/static_files_test.ts",
+      "src/trusted_batch_test.ts",
       "scripts/compile_test.ts"
     ]
   },
