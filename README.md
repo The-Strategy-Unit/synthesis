@@ -39,8 +39,9 @@ file-backed vault, while SQLite search and vector state remain rebuildable.
 - Editable `schema.md` defining the vault's purpose and compilation conventions
 - Staged new/merge/contradict proposals with human approval before wiki mutation
 - Deterministic wiki index and machine-readable change log
-- Keyword and semantic search with an explicit-link-first relationship graph
-- Reviewed, source-grounded **Discoveries** for possible cross-page connections
+- Keyword and semantic search with a cross-source semantic map and reviewed wiki
+  links overlaid
+- Resumable cross-source synthesis proposals for relationships and consolidation
 - Wiki-grounded answers with cited pages and reviewed synthesis write-back
 - Deterministic structural/provenance lint plus optional AI health analysis
 - Source review showing which pages each source created or changed
@@ -137,7 +138,14 @@ cross-compilation are provided by
     the vault and reconstruct SQLite search/catalog state from its files.
 
 The notes list, relationship graph, keyword search, and semantic search update
-as the wiki changes.
+as the wiki changes. The graph compares every embedded page with the whole wiki,
+retains its strongest cross-source semantic neighbours, and initially shows the
+strongest three around each page. Similarity shapes connected clusters, bridges,
+and hubs; distance between disconnected groups, axes, and rotation have no
+meaning. A semantic edge is a suggestion to investigate, not confirmed
+knowledge. Reviewed links from page Markdown are overlaid separately. The
+breadth control chooses how many of each page's strongest semantic suggestions
+are visible; it is not a similarity or confidence score.
 
 ## Compilation pipeline
 

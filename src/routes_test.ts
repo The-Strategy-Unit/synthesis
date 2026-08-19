@@ -59,6 +59,24 @@ routeTest(
   },
 );
 
+routeTest("UI config exposes bounded semantic graph breadth", async () => {
+  await withTempHandler(async (handle) => {
+    const response = await handle(
+      new Request("http://localhost/api/config"),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      labelZoomThreshold: config.ui.labelZoomThreshold,
+      semanticNeighbors: Math.min(
+        config.link.visibleNeighbors,
+        config.link.k,
+      ),
+      maxSemanticNeighbors: config.link.k,
+    });
+  });
+});
+
 routeTest(
   "vault export is streamed without a configured provider",
   async () => {

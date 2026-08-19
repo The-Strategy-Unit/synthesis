@@ -153,10 +153,10 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Linking
 
-| Variable                   | Default | Notes                          |
-| -------------------------- | ------- | ------------------------------ |
-| `SYNTHESIS_LINK_THRESHOLD` | `0.75`  | clamped 0–1; cosine similarity |
-| `SYNTHESIS_LINK_K`         | `50`    | min 1; kNN fanout per note     |
+| Variable                    | Default | Notes                                       |
+| --------------------------- | ------- | ------------------------------------------- |
+| `SYNTHESIS_LINK_K`          | `8`     | clamped 1–32; stored neighbours per page    |
+| `SYNTHESIS_GRAPH_NEIGHBORS` | `3`     | clamped 0–32 and capped to the stored count |
 
 ### Search
 
@@ -166,12 +166,9 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### UI
 
-| Variable                         | Default | Notes           |
-| -------------------------------- | ------- | --------------- |
-| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10    |
-| `SYNTHESIS_SLIDER_MIN`           | `0`     | clamped 0–1     |
-| `SYNTHESIS_SLIDER_MAX`           | `1`     | clamped 0–1     |
-| `SYNTHESIS_SLIDER_STEP`          | `0.025` | clamped 0.001–1 |
+| Variable                         | Default | Notes        |
+| -------------------------------- | ------- | ------------ |
+| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10 |
 
 ## Extending
 

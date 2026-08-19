@@ -1,5 +1,6 @@
 import {
   forceCenter,
+  forceCollide,
   forceLink,
   forceManyBody,
   forceSimulation,
@@ -7,6 +8,13 @@ import {
 import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
+import {
+  graphLinkDistance,
+  graphLinkStrength,
+  seededGraphRandom,
+  semanticNeighborLinks,
+  semanticSimilarityRange,
+} from "./graph_layout.js";
 import { classifyIngestSource } from "./ingest_source.js";
 import {
   compactEvidenceText,
@@ -38,10 +46,8 @@ import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 let uiConfig = {
   labelZoomThreshold: 1.5,
-  sliderMin: 0,
-  sliderMax: 1,
-  sliderStep: 0.025,
-  defaultSimilarity: 0.75,
+  semanticNeighbors: 3,
+  maxSemanticNeighbors: 8,
 };
 
 // --- Application shell ---
@@ -154,13 +160,14 @@ async function fetchConfig() {
 }
 
 function applyConfig() {
-  const slider = document.getElementById("similarity-slider");
-  slider.min = uiConfig.sliderMin;
-  slider.max = uiConfig.sliderMax;
-  slider.step = uiConfig.sliderStep;
-  slider.value = uiConfig.defaultSimilarity;
-  document.getElementById("threshold-value").textContent = uiConfig
-    .defaultSimilarity.toFixed(2);
+  const slider = document.getElementById("semantic-neighbors-slider");
+  slider.max = uiConfig.maxSemanticNeighbors;
+  slider.value = Math.min(
+    uiConfig.semanticNeighbors,
+    uiConfig.maxSemanticNeighbors,
+  );
+  document.getElementById("semantic-neighbors-value").textContent =
+    slider.value;
 }
 
 // --- API helpers ---
@@ -2544,24 +2551,19 @@ document.getElementById("ingest-title").addEventListener("keydown", (e) => {
 async function loadGraph() {
   const data = await api("graph");
   rawGraphData = {
-    nodes: data.nodes ?? [],
+    nodes: [...(data.nodes ?? [])].sort((left, right) => left.id - right.id),
     links: (data.links ?? []).map((l) => ({
       source: l.source,
       target: l.target,
       kind: l.kind ?? "semantic",
       similarity: l.similarity,
-    })),
+    })).sort((left, right) =>
+      Number(left.kind === "semantic") - Number(right.kind === "semantic") ||
+      left.source - right.source || left.target - right.target
+    ),
   };
-  graphData = JSON.parse(JSON.stringify(rawGraphData));
-  const nodeIds = new Set(graphData.nodes.map((n) => n.id));
-  graphData.links = graphData.links.filter((l) => {
-    const s = l.source.id ?? l.source;
-    const t = l.target.id ?? l.target;
-    return nodeIds.has(s) && nodeIds.has(t);
-  });
-
   graphUnavailable = false;
-  if (readerState.view === "connections") renderGraph();
+  applySemanticNeighborhoodBreadth();
 }
 
 const tooltip = select("#graph-tooltip");
@@ -2603,6 +2605,7 @@ function renderGraph() {
     .map((link) => link.similarity ?? 0.6);
   const minSim = sims.length ? Math.min(...sims) : 0.6;
   const maxSim = sims.length ? Math.max(...sims) : 0.6;
+  const similarityRange = semanticSimilarityRange(graphData.links);
 
   svg.call(
     zoom()
@@ -2689,7 +2692,7 @@ function renderGraph() {
         .text(
           `${d.title} — ${declaredConnections} wiki links, ${
             visibleConnections - declaredConnections
-          } semantic connections`,
+          } semantic suggestions`,
         );
     })
     .on("mousemove", (event) => {
@@ -2772,13 +2775,19 @@ function renderGraph() {
   );
 
   simulation = forceSimulation(graphData.nodes)
+    .randomSource(seededGraphRandom())
     .force(
       "link",
-      forceLink(graphData.links).id((d) => d.id).distance((link) =>
-        link.kind === "explicit" ? 65 : 90
-      ),
+      forceLink(graphData.links)
+        .id((d) => d.id)
+        .distance((edge) => graphLinkDistance(edge, similarityRange))
+        .strength((edge) => graphLinkStrength(edge, similarityRange)),
     )
-    .force("charge", forceManyBody().strength(-300))
+    .force("charge", forceManyBody().strength(-170))
+    .force(
+      "collision",
+      forceCollide().radius((datum) => nodeRadius(datum) + 4).iterations(2),
+    )
     .force("center", forceCenter(width / 2, height / 2))
     .on("tick", () => {
       link
@@ -2795,39 +2804,31 @@ function renderGraph() {
     });
 }
 
-// --- Similarity threshold slider ---
+// --- Semantic neighbourhood breadth ---
 
-const slider = document.getElementById("similarity-slider");
-const thresholdLabel = document.getElementById("threshold-value");
+const semanticNeighborsSlider = document.getElementById(
+  "semantic-neighbors-slider",
+);
+const semanticNeighborsValue = document.getElementById(
+  "semantic-neighbors-value",
+);
 
-slider.addEventListener("input", () => {
-  const threshold = parseFloat(slider.value);
-  thresholdLabel.textContent = threshold.toFixed(2);
-  renderGraphFiltered(threshold);
+semanticNeighborsSlider.addEventListener("input", () => {
+  semanticNeighborsValue.textContent = semanticNeighborsSlider.value;
+  applySemanticNeighborhoodBreadth();
 });
 
-function renderGraphFiltered(threshold) {
-  const filteredLinks = rawGraphData.links
-    .filter((l) => l.kind === "explicit" || (l.similarity ?? 0.6) >= threshold)
-    .map((l) => ({
-      source: l.source,
-      target: l.target,
-      kind: l.kind,
-      similarity: l.similarity,
-    }));
-
-  const connectedIds = new Set();
-  for (const l of filteredLinks) {
-    connectedIds.add(l.source);
-    connectedIds.add(l.target);
-  }
-
-  const filteredNodes = rawGraphData.nodes
-    .filter((n) => connectedIds.has(n.id))
-    .map((n) => ({ id: n.id, title: n.title }));
-
-  graphData = { nodes: filteredNodes, links: filteredLinks };
-  renderGraph();
+function applySemanticNeighborhoodBreadth() {
+  const breadth = Number(semanticNeighborsSlider.value);
+  graphData = {
+    nodes: rawGraphData.nodes.map((node) => ({ ...node })),
+    links: semanticNeighborLinks(
+      rawGraphData.nodes,
+      rawGraphData.links,
+      breadth,
+    ).map((link) => ({ ...link })),
+  };
+  if (readerState.view === "connections") renderGraph();
 }
 
 // --- Init ---

@@ -283,10 +283,11 @@ export function createHandler(
         if (path === "/api/config" && method === "GET") {
           return json({
             labelZoomThreshold: config.ui.labelZoomThreshold,
-            sliderMin: config.ui.sliderMin,
-            sliderMax: config.ui.sliderMax,
-            sliderStep: config.ui.sliderStep,
-            defaultSimilarity: config.link.similarityThreshold,
+            semanticNeighbors: Math.min(
+              config.link.visibleNeighbors,
+              config.link.k,
+            ),
+            maxSemanticNeighbors: config.link.k,
           });
         }
         if (path === "/api/status" && method === "GET") {
@@ -425,10 +426,7 @@ export function createHandler(
                 contradict: result.contradictCount,
               });
               send("linking");
-              db.computeLinksFor(
-                result.touchedIds,
-                config.link.similarityThreshold,
-              );
+              db.computeLinksFor(result.touchedIds);
               try {
                 const discoveries = await generateDiscoveries(
                   db,

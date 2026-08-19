@@ -720,12 +720,12 @@ body {
   font-size: 1rem;
 }
 
-.threshold-control {
+.graph-breadth-control {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
 
-.threshold-control label {
+.graph-breadth-control label {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -764,9 +764,16 @@ body {
   opacity: 0.65;
 }
 
-#similarity-slider {
+#semantic-neighbors-slider {
   margin-left: 0.5rem;
   vertical-align: middle;
+}
+
+.graph-method-note {
+  margin: 0 0 0.65rem;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 #graph {
