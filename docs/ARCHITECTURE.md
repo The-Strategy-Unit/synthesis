@@ -356,6 +356,12 @@ between disconnected components, axes, rotation, and overall silhouette carry no
 semantic meaning. Semantic links remain derived suggestions; only reviewed
 discoveries become canonical Markdown links.
 
+An active wiki search filters only the browser presentation. Search result IDs
+become seed pages; the graph retains their direct reviewed and currently visible
+semantic neighbours, then includes existing edges among that bounded node set.
+It does not expand to second-hop pages or alter the stored graph. Clearing the
+search restores the complete graph.
+
 ### LLM pipeline stages
 
 | Stage       | Model role         | Default model | Temperature | Max tokens | JSON mode |

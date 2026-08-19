@@ -165,6 +165,17 @@
                 <div class="graph-legend" aria-label="Connection types">
                   <span><i class="legend-explicit"></i>Reviewed wiki link</span>
                   <span><i class="legend-semantic"></i>Semantic suggestion</span>
+                  <span id="legend-search-match" class="hidden">
+                    <i class="legend-search-match"></i>Direct search result
+                  </span>
+                </div>
+                <div id="graph-search-context"
+                  class="graph-search-context hidden">
+                  <span id="graph-search-summary" role="status"
+                    aria-live="polite"></span>
+                  <button id="graph-search-clear" type="button">
+                    Clear search
+                  </button>
                 </div>
                 <p class="graph-method-note">
                   Semantic similarity draws related pages together. Clusters,

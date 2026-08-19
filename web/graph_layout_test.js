@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   graphLinkDistance,
   graphLinkStrength,
+  searchContextGraph,
   seededGraphRandom,
   semanticNeighborLinks,
   semanticSimilarityRange,
@@ -29,6 +30,28 @@ Deno.test("semantic neighbour breadth is local, deterministic, and keeps explici
     () => semanticNeighborLinks(nodes, links, -1),
     /must be non-negative/,
   );
+});
+
+Deno.test("search context keeps matches, one-hop neighbours, and their induced edges", () => {
+  const nodes = [1, 2, 3, 4, 5, 6].map((id) => ({ id }));
+  const links = [
+    { source: 1, target: 2, kind: "semantic" },
+    { source: 1, target: 3, kind: "explicit" },
+    { source: 2, target: 3, kind: "semantic" },
+    { source: 3, target: 4, kind: "semantic" },
+    { source: 5, target: 6, kind: "explicit" },
+  ];
+
+  const context = searchContextGraph(nodes, links, new Set([1, 99]));
+  assert.deepEqual(context.nodes, nodes.slice(0, 3));
+  assert.deepEqual(context.links, links.slice(0, 3));
+  assert.deepEqual(context.matchedIds, new Set([1]));
+
+  assert.deepEqual(searchContextGraph(nodes, links, new Set()), {
+    nodes: [],
+    links: [],
+    matchedIds: new Set(),
+  });
 });
 
 Deno.test("stronger semantic links pull closer and more strongly", () => {

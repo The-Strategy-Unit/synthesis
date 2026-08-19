@@ -153,7 +153,11 @@ and hubs; distance between disconnected groups, axes, and rotation have no
 meaning. A semantic edge is a suggestion to investigate, not confirmed
 knowledge. Reviewed links from page Markdown are overlaid separately. The
 breadth control chooses how many of each page's strongest semantic suggestions
-are visible; it is not a similarity or confidence score.
+are visible; it is not a similarity or confidence score. While a search is
+active, matching pages seed a one-hop contextual subgraph: their visible
+neighbours and the connections among those pages remain, while the unrelated
+remainder is hidden until the search is cleared. Direct matches are shown as
+white nodes. Clearing the search restores the complete graph.
 
 ### Automatic trusted-video batches
 

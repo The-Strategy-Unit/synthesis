@@ -11,6 +11,7 @@ import { zoom } from "d3-zoom";
 import {
   graphLinkDistance,
   graphLinkStrength,
+  searchContextGraph,
   seededGraphRandom,
   semanticNeighborLinks,
   semanticSimilarityRange,
@@ -337,6 +338,7 @@ undoIngestButton.addEventListener("click", undoIngest);
 let currentNotes = [];
 let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
+let graphSearch = null;
 let simulation = null;
 let graphUnavailable = false;
 
@@ -2330,6 +2332,21 @@ async function loadNote(id, listButton, updateHistory = true) {
 // --- Search ---
 
 const searchInput = document.getElementById("search-input");
+const graphSearchContext = document.getElementById("graph-search-context");
+const graphSearchSummary = document.getElementById("graph-search-summary");
+const graphSearchClearButton = document.getElementById("graph-search-clear");
+const graphSearchLegend = document.getElementById("legend-search-match");
+
+function clearGraphSearch() {
+  graphSearch = null;
+  applySemanticNeighborhoodBreadth();
+}
+
+async function clearSearch() {
+  searchInput.value = "";
+  clearGraphSearch();
+  await loadNoteList();
+}
 
 searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -2338,26 +2355,51 @@ searchInput.addEventListener("keydown", (e) => {
     doSearch(q);
   }
   if (e.key === "Escape") {
-    e.target.value = "";
-    loadNoteList();
+    void clearSearch();
   }
+});
+searchInput.addEventListener("input", () => {
+  if (!searchInput.value.trim() && graphSearch !== null) {
+    void clearSearch();
+  }
+});
+graphSearchClearButton.addEventListener("click", () => {
+  void clearSearch().then(() => searchInput.focus());
 });
 
 async function doSearch(q) {
-  showWikiWorkspace();
+  setPrimaryWorkspace("wiki");
   const list = document.getElementById("note-list");
+  const pageCount = document.getElementById("page-count");
 
   list.innerHTML =
     '<li style="color:#7a7f94;font-style:italic">Searching...</li>';
   searchInput.disabled = true;
+  clearGraphSearch();
 
   try {
     const searchMode = providerCapabilities(providerState.phase).searchMode;
     const data = await api(
       `search?q=${encodeURIComponent(q)}&mode=${searchMode}`,
     );
+    const results = data.results ?? [];
+    graphSearch = {
+      query: q,
+      resultIds: new Set(
+        results.map((result) => Number(result.id)).filter((id) =>
+          Number.isSafeInteger(id) && id > 0
+        ),
+      ),
+      matchedIds: new Set(),
+    };
+    applySemanticNeighborhoodBreadth();
+    pageCount.textContent = String(results.length);
+    pageCount.setAttribute(
+      "aria-label",
+      `${results.length} search result${results.length === 1 ? "" : "s"}`,
+    );
     list.innerHTML = "";
-    for (const result of data.results ?? []) {
+    for (const result of results) {
       const li = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -2373,6 +2415,7 @@ async function doSearch(q) {
         '<li style="color:#7a7f94;font-style:italic">No results</li>';
     }
   } catch (err) {
+    clearGraphSearch();
     list.innerHTML =
       `<li style="color:#ff6b6b">Search error: ${err.message}</li>`;
   } finally {
@@ -2715,7 +2758,11 @@ function renderGraph() {
       .attr("y", height / 2)
       .attr("text-anchor", "middle")
       .attr("class", "placeholder-text")
-      .text("No notes yet");
+      .text(
+        graphSearch
+          ? `No graph pages match “${graphSearch.query}”`
+          : "No notes yet",
+      );
     return;
   }
 
@@ -2790,6 +2837,10 @@ function renderGraph() {
     .data(graphData.nodes)
     .join("circle")
     .attr("class", "node")
+    .classed(
+      "is-search-match",
+      (datum) => graphSearch?.matchedIds.has(datum.id) ?? false,
+    )
     .attr("r", nodeRadius)
     .attr("role", "button")
     .attr("tabindex", 0)
@@ -2811,7 +2862,9 @@ function renderGraph() {
       tooltip
         .classed("hidden", false)
         .text(
-          `${d.title} — ${declaredConnections} wiki links, ${
+          `${
+            graphSearch?.matchedIds.has(d.id) ? "Search match · " : ""
+          }${d.title} — ${declaredConnections} wiki links, ${
             visibleConnections - declaredConnections
           } semantic suggestions`,
         );
@@ -2831,6 +2884,10 @@ function renderGraph() {
     .data(graphData.nodes)
     .join("text")
     .attr("class", "label")
+    .classed(
+      "is-search-match",
+      (datum) => graphSearch?.matchedIds.has(datum.id) ?? false,
+    )
     .text((d) => d.title.length > 20 ? d.title.slice(0, 17) + "…" : d.title)
     .attr("dx", 10)
     .attr("dy", 3)
@@ -2941,15 +2998,46 @@ semanticNeighborsSlider.addEventListener("input", () => {
 
 function applySemanticNeighborhoodBreadth() {
   const breadth = Number(semanticNeighborsSlider.value);
-  graphData = {
-    nodes: rawGraphData.nodes.map((node) => ({ ...node })),
-    links: semanticNeighborLinks(
+  const semanticLinks = semanticNeighborLinks(
+    rawGraphData.nodes,
+    rawGraphData.links,
+    breadth,
+  );
+  const visibleGraph = graphSearch
+    ? searchContextGraph(
       rawGraphData.nodes,
-      rawGraphData.links,
-      breadth,
-    ).map((link) => ({ ...link })),
+      semanticLinks,
+      graphSearch.resultIds,
+    )
+    : {
+      nodes: rawGraphData.nodes,
+      links: semanticLinks,
+      matchedIds: new Set(),
+    };
+  if (graphSearch) graphSearch.matchedIds = visibleGraph.matchedIds;
+  graphData = {
+    nodes: visibleGraph.nodes.map((node) => ({ ...node })),
+    links: visibleGraph.links.map((link) => ({ ...link })),
   };
+  renderGraphSearchContext();
   if (readerState.view === "connections") renderGraph();
+}
+
+function renderGraphSearchContext() {
+  graphSearchContext.classList.toggle("hidden", graphSearch === null);
+  graphSearchLegend.classList.toggle("hidden", graphSearch === null);
+  if (!graphSearch) {
+    graphSearchSummary.textContent = "";
+    return;
+  }
+  const matches = graphSearch.matchedIds.size;
+  const related = Math.max(0, graphData.nodes.length - matches);
+  const matchLabel = `${matches} matching page${matches === 1 ? "" : "s"}`;
+  const relatedLabel = `${related} directly connected page${
+    related === 1 ? "" : "s"
+  }`;
+  graphSearchSummary.textContent =
+    `“${graphSearch.query}” · ${matchLabel} · ${relatedLabel}`;
 }
 
 // --- Init ---

@@ -53,6 +53,32 @@ export function semanticNeighborLinks(nodes, links, neighborsPerPage) {
   ];
 }
 
+export function searchContextGraph(nodes, links, resultIds) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const matches = new Set(
+    [...resultIds].filter((id) => nodeIds.has(id)),
+  );
+  const included = new Set(matches);
+
+  for (const link of links) {
+    const source = endpointId(link.source);
+    const target = endpointId(link.target);
+    if (matches.has(source) || matches.has(target)) {
+      included.add(source);
+      included.add(target);
+    }
+  }
+
+  return {
+    nodes: nodes.filter((node) => included.has(node.id)),
+    links: links.filter((link) =>
+      included.has(endpointId(link.source)) &&
+      included.has(endpointId(link.target))
+    ),
+    matchedIds: matches,
+  };
+}
+
 export function semanticSimilarityRange(links) {
   const similarities = links
     .filter((link) => link.kind === "semantic")
