@@ -1157,9 +1157,11 @@ export class DB {
     apiBase: string,
     apiKey: string,
     model: string,
+    signal?: AbortSignal,
   ): Promise<number[]> {
     let res: Response;
     try {
+      const timeoutSignal = AbortSignal.timeout(config.security.modelTimeoutMs);
       res = await fetch(`${apiBase}/embeddings`, {
         method: "POST",
         headers: {
@@ -1167,9 +1169,12 @@ export class DB {
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({ model, input: text }),
-        signal: AbortSignal.timeout(config.security.modelTimeoutMs),
+        signal: signal
+          ? AbortSignal.any([signal, timeoutSignal])
+          : timeoutSignal,
       });
     } catch (err) {
+      if (signal?.aborted) throw err;
       const errorName = err instanceof Error ? err.name : "UnknownError";
       if (errorName === "TimeoutError" || errorName === "AbortError") {
         throw new Error("Embedding request timed out");

@@ -762,6 +762,36 @@ dbTest("embedding vectors persist with integer note IDs", async () => {
   });
 });
 
+dbTest("embedding requests preserve explicit caller cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(init.signal?.reason),
+          { once: true },
+        );
+      });
+    const controller = new AbortController();
+    const request = DB.embedText(
+      "cancelled embedding",
+      "https://provider.example/v1",
+      "secret",
+      "embedding-model",
+      controller.signal,
+    );
+    controller.abort();
+    await assert.rejects(
+      request,
+      (error: unknown) =>
+        error instanceof DOMException && error.name === "AbortError",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 dbTest(
   "hybrid search prioritizes literal matches and survives embedding failure",
   async () => {

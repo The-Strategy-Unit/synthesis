@@ -268,7 +268,10 @@ The batch stops at the first source or apply failure. Cross-source synthesis
 failures after committed sources remain warnings. Re-submit the same list to
 resume; applied source identities are skipped, while a pending proposal is
 staged again and automatically applied. Automatic history records contain
-`reviewMode` and the shared `batchId`. Clients must keep the SSE request open.
+`reviewMode` and the shared `batchId`. Cancelling the response stream requests a
+cooperative stop before the next source or discovery batch; an in-flight
+download, provider request, or atomic apply may finish first. Clients resume by
+opening a new SSE request with the same exact input.
 
 ### Export, rebuild, and undo
 

@@ -66,6 +66,37 @@ Deno.test("chat completions normalize local and remote provider requests", async
   }
 });
 
+Deno.test("chat completions preserve explicit caller cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(init.signal?.reason),
+          { once: true },
+        );
+      });
+    const controller = new AbortController();
+    const request = chatCompletion(
+      "https://provider.example/v1",
+      "secret",
+      "model",
+      "System",
+      "User",
+      { signal: controller.signal },
+    );
+    controller.abort();
+    await assert.rejects(
+      request,
+      (error: unknown) =>
+        error instanceof DOMException && error.name === "AbortError",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 Deno.test("chat completions reject malformed or incomplete responses", async () => {
   const originalFetch = globalThis.fetch;
   try {

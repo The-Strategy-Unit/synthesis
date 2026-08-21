@@ -4,7 +4,7 @@ import { config } from "./config.ts";
 import { DB } from "./db.ts";
 import { discoveryEvidenceHash } from "./discovery.ts";
 import { readIngestHistoryManifest } from "./ingest_history.ts";
-import { embeddingIdentity } from "./provider_runtime.ts";
+import { embeddingIdentity, environmentProviders } from "./provider_runtime.ts";
 import { createHandler } from "./routes.ts";
 import { parseWikiPage, renderWikiPage } from "./wiki.ts";
 
@@ -1465,6 +1465,64 @@ routeTest(
 );
 
 routeTest(
+  "cancelling a trusted batch stream stops before the next safe boundary",
+  async () => {
+    await withTempHandler(async (_defaultHandle, db) => {
+      let resolveProviders!: (
+        providers: ReturnType<typeof environmentProviders>,
+      ) => void;
+      let markProviderRequested!: () => void;
+      const providerRequested = new Promise<void>((resolve) => {
+        markProviderRequested = resolve;
+      });
+      const providers = new Promise<ReturnType<typeof environmentProviders>>(
+        (resolve) => {
+          resolveProviders = resolve;
+        },
+      );
+      let ingestCalls = 0;
+      const handle = createHandler(
+        db,
+        () => {
+          markProviderRequested();
+          return providers;
+        },
+        undefined,
+        {
+          ingestYouTube: () => {
+            ingestCalls++;
+            throw new Error("Cancelled batch must not begin its first source");
+          },
+        },
+      );
+
+      const response = await handle(
+        new Request("http://localhost/api/ingest/batch", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify({
+            urls: ["dQw4w9WgXcQ"],
+            reviewMode: "automatic",
+            confirm: "AUTO APPLY 1 TRUSTED SOURCES",
+          }),
+        }),
+      );
+      assert.equal(response.status, 200);
+      const reader = response.body!.getReader();
+      assert.match(
+        new TextDecoder().decode((await reader.read()).value),
+        /"stage":"ingesting"/,
+      );
+      await providerRequested;
+      await reader.cancel();
+      resolveProviders(environmentProviders());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(ingestCalls, 0);
+    });
+  },
+);
+
+routeTest(
   "trusted batches stage, validate, apply, and audit each source",
   async () => {
     const originalFetch = globalThis.fetch;
@@ -1580,6 +1638,29 @@ routeTest(
           db.getIngestProposal(history.proposalId)?.status,
           "approved",
         );
+
+        const resumed = await handle(
+          new Request("https://synthesis.example/api/ingest/batch", {
+            method: "POST",
+            headers: {
+              ...mutationHeaders("https://synthesis.example"),
+              "Cf-Access-Authenticated-User-Email": "trusted-batch@example.com",
+            },
+            body: JSON.stringify({
+              urls: ["dQw4w9WgXcQ"],
+              reviewMode: "automatic",
+              confirm: "AUTO APPLY 1 TRUSTED SOURCES",
+            }),
+          }),
+        );
+        assert.equal(resumed.status, 200);
+        const resumedEvents = await resumed.text();
+        assert.match(resumedEvents, /"stage":"batch_skipped"/);
+        assert.doesNotMatch(resumedEvents, /"stage":"automatic_proposal"/);
+        assert.doesNotMatch(resumedEvents, /"stage":"automatic_applied"/);
+        assert.equal(db.getAllNotes().length, 1);
+        assert.equal([...Deno.readDirSync(`${dir}/history`)].length, 1);
+        assert.equal(requests, 3);
       });
     } finally {
       globalThis.fetch = originalFetch;

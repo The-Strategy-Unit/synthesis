@@ -219,9 +219,13 @@ or consolidation candidates appear in **Synthesis review** and are never
 confirmed automatically.
 
 The batch stops on the first download, provider, validation, stale-proposal, or
-apply failure. Keep the page open while it runs. Re-submit the same exact list
-to resume: sources already applied to the current vault are detected by content
-identity and skipped. Each applied source retains its proposal and writes a
+apply failure. **Stop safely** cancels the stream cooperatively; the current
+download, model call, or atomic source apply may finish first. Re-submit the
+same exact list to resume: pending proposals are reused, sources already applied
+to the current vault are detected by content identity and skipped, and completed
+cross-source candidate decisions are checkpointed. Ordinary playlists use the
+same stop-and-resubmit behaviour but leave every source proposal for manual
+review. Each automatically applied source retains its proposal and writes a
 history manifest with `reviewMode: automatic` and the shared batch ID. This is
 an efficiency option, not a quality check; curate the source list and audit the
 resulting wiki.

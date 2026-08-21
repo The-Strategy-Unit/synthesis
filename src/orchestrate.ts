@@ -8,7 +8,7 @@ import { dirname } from "node:path";
 
 import { notesDir, sourcesDir } from "./config.ts";
 import { errMsg, slugify } from "./utils.ts";
-import { DB, type IngestProposalRecord } from "./db.ts";
+import { DB, type IngestProposalRecord, type SourceRecord } from "./db.ts";
 import { distil, type DistilNote, integrate, rewriteNote } from "./distil.ts";
 import type { IngestResult, SourceType } from "./ingest.ts";
 import {
@@ -392,6 +392,37 @@ async function persistSourceFiles(
   return { rawPath, summary: storedSummary.trim() };
 }
 
+async function appliedSourceResult(
+  db: DB,
+  ingested: IngestSource,
+  contentHash: string,
+  source: SourceRecord,
+  send: (stage: string, data?: unknown) => void,
+): Promise<AlreadyAppliedSource | undefined> {
+  const persisted = await persistSourceFiles(
+    contentHash,
+    ingested,
+    source.source_type,
+    source.summary,
+  );
+  if (persisted.rawPath !== source.file_path) {
+    throw new Error(`Source ${contentHash} has a conflicting file path`);
+  }
+  const notes = db.getNotesForSource(source.id);
+  if (notes.length === 0) return undefined;
+  send("source_exists", { title: source.title, noteCount: notes.length });
+  return {
+    kind: "already-applied",
+    result: {
+      notes: notes.map((note) => ({ id: note.id, title: note.title })),
+      newCount: 0,
+      mergeCount: 0,
+      contradictCount: 0,
+      touchedIds: [],
+    },
+  };
+}
+
 async function replaceFile(filePath: string, content: string): Promise<void> {
   const tempPath = await Deno.makeTempFile({
     dir: dirname(filePath),
@@ -449,6 +480,7 @@ async function applyPreparedWikiChanges(
     proposalId?: number;
     finalizeTransaction?: () => void;
     review?: IngestReviewAudit;
+    signal?: AbortSignal;
   },
 ): Promise<{
   notes: Array<{ id: number; title: string }>;
@@ -464,6 +496,7 @@ async function applyPreparedWikiChanges(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      options?.signal,
     );
     embeddedUpdates.push({ ...update, embedding });
   }
@@ -474,6 +507,7 @@ async function applyPreparedWikiChanges(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      options?.signal,
     );
     embeddedCreates.push({ ...create, embedding });
   }
@@ -616,39 +650,19 @@ async function prepareSingleSourceChanges(
   isText: boolean,
   send: (stage: string, data?: unknown) => void,
   providers: ActiveProviders = environmentProviders(),
+  signal?: AbortSignal,
 ): Promise<PreparedSourceChanges | AlreadyAppliedSource> {
   const contentHash = await sourceHash(ingested);
   const knownSource = db.getSourceByHash(contentHash);
   if (knownSource) {
-    const persisted = await persistSourceFiles(
-      contentHash,
+    const applied = await appliedSourceResult(
+      db,
       ingested,
-      knownSource.source_type,
-      knownSource.summary,
+      contentHash,
+      knownSource,
+      send,
     );
-    if (persisted.rawPath !== knownSource.file_path) {
-      throw new Error(`Source ${contentHash} has a conflicting file path`);
-    }
-    const knownNotes = db.getNotesForSource(knownSource.id);
-    if (knownNotes.length > 0) {
-      send("source_exists", {
-        title: knownSource.title,
-        noteCount: knownNotes.length,
-      });
-      return {
-        kind: "already-applied",
-        result: {
-          notes: knownNotes.map((note) => ({
-            id: note.id,
-            title: note.title,
-          })),
-          newCount: 0,
-          mergeCount: 0,
-          contradictCount: 0,
-          touchedIds: [],
-        },
-      };
-    }
+    if (applied) return applied;
   }
 
   const schema = await ensureWikiSchema();
@@ -666,6 +680,7 @@ async function prepareSingleSourceChanges(
     providers.llm.apiKey,
     schema,
     sourceType === "pdf" ? ingested.pageCount : undefined,
+    signal,
   );
   send("distilled", { noteCount: distilled.notes.length });
 
@@ -719,6 +734,7 @@ async function prepareSingleSourceChanges(
     providers.llm.apiKey,
     providers.llm.integrateModel,
     schema,
+    signal,
   );
   const canonicalTitles = new Map<string, string>();
   for (let index = 0; index < distilled.notes.length; index++) {
@@ -799,6 +815,7 @@ async function prepareSingleSourceChanges(
       providers.llm.apiKey,
       providers.llm.rewriteModel,
       schema,
+      signal,
     );
     const sourcePages = [
       ...new Set(group.notes.flatMap((note) => note.sourcePages ?? [])),
@@ -972,21 +989,21 @@ export async function stageSingleSource(
   isText: boolean,
   send: (stage: string, data?: unknown) => void,
   providers: ActiveProviders = environmentProviders(),
+  signal?: AbortSignal,
 ): Promise<StagedIngestResult> {
   const hash = await sourceHash(ingested);
   const knownSource = db.getSourceByHash(hash);
   if (knownSource) {
+    const applied = await appliedSourceResult(
+      db,
+      ingested,
+      hash,
+      knownSource,
+      send,
+    );
+    if (applied) return applied;
     const knownProposal = db.getIngestProposalForSource(knownSource.id);
     if (knownProposal) {
-      const persisted = await persistSourceFiles(
-        hash,
-        ingested,
-        knownSource.source_type,
-        knownSource.summary,
-      );
-      if (persisted.rawPath !== knownSource.file_path) {
-        throw new Error(`Source ${hash} has a conflicting file path`);
-      }
       return { kind: "proposal", proposal: proposalReview(db, knownProposal) };
     }
   }
@@ -997,6 +1014,7 @@ export async function stageSingleSource(
     isText,
     send,
     providers,
+    signal,
   );
   if (prepared.kind === "already-applied") {
     return { kind: "already-applied", result: prepared.result };
@@ -1034,6 +1052,7 @@ export async function approveIngestProposal(
   providers: ActiveProviders = environmentProviders(),
   approvalValue: IngestProposalApproval = {},
   review: IngestReviewAudit = { reviewMode: "manual" },
+  signal?: AbortSignal,
 ): Promise<AppliedIngestResult> {
   const record = db.getIngestProposal(id);
   if (!record) {
@@ -1189,6 +1208,7 @@ export async function approveIngestProposal(
     {
       proposalId: id,
       review,
+      signal,
       finalizeTransaction: () => {
         if (!db.reviewIngestProposal(id, "approved")) {
           throw new IngestProposalStateError(

@@ -341,9 +341,9 @@
               the wiki. Trusted sources do not guarantee accurate model output.
             </p>
             <p>
-              The batch stops on its first failure. Keep this page open. To
-              resume, submit the same list again; already applied sources are
-              skipped.
+              Stop safely at any time. The current source or model step may
+              finish first. To resume, submit the same list again; already
+              applied sources are skipped.
             </p>
             <label for="trusted-batch-confirmation">
               Type <code id="trusted-batch-confirmation-phrase">the confirmation shown after adding videos</code>
@@ -374,6 +374,8 @@
           <div class="source-actions">
             <button id="ingest-btn" type="button"
               aria-describedby="provider-mode">Prepare for review</button>
+            <button id="ingest-cancel-btn"
+              class="secondary-action hidden" type="button">Stop safely</button>
             <span id="ingest-status" role="status" aria-live="polite"></span>
           </div>
         </div>

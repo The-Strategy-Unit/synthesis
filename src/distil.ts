@@ -187,6 +187,7 @@ async function extractChunk(
   apiKey: string,
   model: string,
   schema: string,
+  signal?: AbortSignal,
 ): Promise<ExtractedItem[]> {
   return await structuredChatCompletion(
     "Extraction response",
@@ -199,6 +200,7 @@ async function extractChunk(
       temperature: config.llm.extractTemperature,
       maxTokens: config.llm.extractMaxTokens,
       jsonMode: true,
+      signal,
     },
     (content) => {
       const parsed = asRecord(
@@ -297,6 +299,7 @@ async function consolidateCandidates(
   apiKey: string,
   model: string,
   schema: string,
+  signal?: AbortSignal,
 ): Promise<DistilResult> {
   const providerCandidates = candidates.map((candidate) => {
     const { sourcePages, ...page } = candidate;
@@ -316,6 +319,7 @@ async function consolidateCandidates(
       temperature: config.llm.consolidateTemperature,
       maxTokens: config.llm.consolidateMaxTokens,
       jsonMode: true,
+      signal,
     },
     (content) => {
       const parsed = asRecord(
@@ -336,6 +340,7 @@ async function extractChunks(
   apiBase: string,
   apiKey: string,
   schema: string,
+  signal?: AbortSignal,
 ): Promise<ExtractedItem[]> {
   const results = new Array<ExtractedItem[]>(chunks.length);
   let nextIndex = 0;
@@ -349,6 +354,7 @@ async function extractChunks(
         apiKey,
         config.llm.extractModel,
         schema,
+        signal,
       );
     }
   }
@@ -370,6 +376,7 @@ export async function distil(
   apiKey: string,
   schema: string = DEFAULT_WIKI_SCHEMA,
   sourcePageCount?: number,
+  signal?: AbortSignal,
 ): Promise<DistilResult> {
   const validatedSchema = validateWikiSchema(schema);
   const chunks = splitTranscript(
@@ -388,6 +395,7 @@ export async function distil(
     apiBase,
     apiKey,
     validatedSchema,
+    signal,
   );
   if (candidates.length === 0 || candidates.length > MAX_CANDIDATES) {
     throw new Error(
@@ -402,6 +410,7 @@ export async function distil(
     apiKey,
     config.llm.consolidateModel,
     validatedSchema,
+    signal,
   );
   if (sourcePageCount === undefined) {
     return {
@@ -720,6 +729,7 @@ export async function integrate(
   apiKey: string,
   model: string,
   schema: string = DEFAULT_WIKI_SCHEMA,
+  signal?: AbortSignal,
 ): Promise<IntegrationDecision[]> {
   if (existingNotes.length === 0) {
     return newNotes.map(() => ({ action: "new" as const }));
@@ -755,6 +765,7 @@ export async function integrate(
         temperature: config.llm.integrateTemperature,
         maxTokens: config.llm.integrateMaxTokens,
         jsonMode: true,
+        signal,
       },
       (content) => {
         parseAttempts++;
@@ -834,6 +845,7 @@ export async function rewriteNote(
   apiKey: string,
   model: string,
   schema: string = DEFAULT_WIKI_SCHEMA,
+  signal?: AbortSignal,
 ): Promise<WikiPage> {
   const existing = validateWikiPage(existingPage);
   if (newPages.length === 0) {
@@ -866,6 +878,7 @@ export async function rewriteNote(
       temperature: config.llm.temperature,
       maxTokens: config.llm.rewriteMaxTokens,
       jsonMode: true,
+      signal,
     },
     (content) => {
       const parsed = asRecord(

@@ -11,6 +11,7 @@ export interface ChatCompletionOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  signal?: AbortSignal;
 }
 
 const MAX_TRUNCATION_RETRY_TOKENS = 16_000;
@@ -58,6 +59,7 @@ export async function chatCompletion(
 
   let response: Response;
   try {
+    const timeoutSignal = AbortSignal.timeout(config.security.modelTimeoutMs);
     response = await fetch(`${apiBase}/chat/completions`, {
       method: "POST",
       headers: {
@@ -65,9 +67,12 @@ export async function chatCompletion(
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(config.security.modelTimeoutMs),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, timeoutSignal])
+        : timeoutSignal,
     });
   } catch (error) {
+    if (options.signal?.aborted) throw error;
     const name = error instanceof Error ? error.name : "UnknownError";
     if (name === "TimeoutError" || name === "AbortError") {
       throw new LlmServiceError("LLM request timed out");
