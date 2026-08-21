@@ -47,6 +47,11 @@ import {
   providerEmptyState,
   providerPresentation,
 } from "./provider_readiness.js";
+import {
+  searchMethodSummary,
+  searchResultMetric,
+  sortSearchResults,
+} from "./search_results.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 // --- Config (fetched from backend) ---
@@ -356,6 +361,10 @@ async function loadNoteList() {
   currentNotes = data.notes ?? [];
   const list = document.getElementById("note-list");
   const pageCount = document.getElementById("page-count");
+  document.getElementById("note-list-heading").textContent = "Wiki pages";
+  const searchMethod = document.getElementById("search-method");
+  searchMethod.textContent = "";
+  searchMethod.classList.add("hidden");
   const emptyHeading = readerEmpty.querySelector("h2");
   const emptyCopy = readerEmpty.querySelector("h2 + p");
   const emptyAction = document.getElementById("reader-add-source");
@@ -1674,7 +1683,10 @@ function setProviderBusy(busy) {
 function renderProviderState(nextState) {
   providerState = { ...providerState, ...nextState };
   const presentation = providerPresentation(providerState);
-  const capabilities = providerCapabilities(providerState.phase);
+  const capabilities = providerCapabilities(
+    providerState.phase,
+    providerState.semanticIndex,
+  );
   providerModeBadge.dataset.mode = presentation.badgeMode;
   providerModeBadge.textContent = presentation.text;
   providerModeBadge.title = presentation.description;
@@ -1728,6 +1740,7 @@ async function refreshProviderMode() {
     renderProviderState({
       phase: data.readiness?.ready ? "ready" : "unavailable",
       mode: data.readiness?.mode ?? configured.mode,
+      semanticIndex: data.semanticIndex ?? null,
     });
     return { ...configured, readiness: data.readiness };
   } catch {
@@ -2474,7 +2487,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-async function doSearch(q) {
+async function doSearch(q, requestedMode) {
   setPrimaryWorkspace("wiki");
   const list = document.getElementById("note-list");
   const pageCount = document.getElementById("page-count");
@@ -2483,13 +2496,24 @@ async function doSearch(q) {
     '<li style="color:#7a7f94;font-style:italic">Searching...</li>';
   searchInput.disabled = true;
   clearGraphSearch();
+  let attemptedMode = requestedMode ?? "keyword";
 
   try {
-    const searchMode = providerCapabilities(providerState.phase).searchMode;
+    await refreshProviderMode();
+    const searchMode = requestedMode ?? providerCapabilities(
+      providerState.phase,
+      providerState.semanticIndex,
+    ).searchMode;
+    attemptedMode = searchMode;
+    document.getElementById("note-list-heading").textContent =
+      "Search results";
+    const searchMethod = document.getElementById("search-method");
+    searchMethod.textContent = searchMethodSummary(searchMode);
+    searchMethod.classList.remove("hidden");
     const data = await api(
       `search?q=${encodeURIComponent(q)}&mode=${searchMode}`,
     );
-    const results = data.results ?? [];
+    const results = sortSearchResults(data.results, searchMode);
     graphSearch = {
       query: q,
       resultIds: new Set(
@@ -2506,12 +2530,27 @@ async function doSearch(q) {
       `${results.length} search result${results.length === 1 ? "" : "s"}`,
     );
     list.innerHTML = "";
-    for (const result of results) {
+    for (const [resultIndex, result] of results.entries()) {
       const li = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "note-list-button";
-      button.textContent = result.title;
+      button.className = "note-list-button search-result";
+      const title = document.createElement("span");
+      title.className = "search-result-title";
+      title.textContent = result.title;
+      button.appendChild(title);
+      const metric = searchResultMetric(result, resultIndex + 1);
+      if (metric) {
+        const relevance = document.createElement("span");
+        relevance.className = "search-result-relevance";
+        relevance.textContent = metric.text;
+        relevance.title = metric.explanation;
+        relevance.setAttribute(
+          "aria-label",
+          `${metric.text}. ${metric.explanation}`,
+        );
+        button.appendChild(relevance);
+      }
       button.dataset.id = String(result.id);
       button.addEventListener("click", () => loadNote(result.id, button));
       li.appendChild(button);
@@ -2523,8 +2562,20 @@ async function doSearch(q) {
     }
   } catch (err) {
     clearGraphSearch();
-    list.innerHTML =
-      `<li style="color:#ff6b6b">Search error: ${err.message}</li>`;
+    list.replaceChildren();
+    const item = document.createElement("li");
+    item.className = "search-error";
+    const message = document.createElement("span");
+    message.textContent = `Search error: ${err.message}`;
+    item.appendChild(message);
+    if (attemptedMode !== "keyword") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Retry with keyword search";
+      retry.addEventListener("click", () => doSearch(q, "keyword"));
+      item.appendChild(retry);
+    }
+    list.appendChild(item);
   } finally {
     searchInput.disabled = false;
   }

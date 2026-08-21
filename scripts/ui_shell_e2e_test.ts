@@ -162,6 +162,9 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /searchContextGraph/);
     assert.match(bundle, /graphFocusNodeIds/);
     assert.match(bundle, /setGraphMaximized/);
+    assert.match(bundle, /fitGraphToViewport/);
+    assert.match(bundle, /Retry with keyword search/);
+    assert.match(bundle, /Semantic similarity/);
     assert.match(bundle, /\/api\/ingest\/batch/);
     assert.equal(status.status, "ok");
 
