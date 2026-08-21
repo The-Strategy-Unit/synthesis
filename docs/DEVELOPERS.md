@@ -284,8 +284,7 @@ coverage, and discoveries. Do not add a provider call to this path.
 
 `GET /api/semantic-index` reports whether the index has a recorded model
 identity and its page coverage, without disclosing that identity or requiring a
-provider.
-`POST /api/semantic-index/rebuild` requires
+provider. `POST /api/semantic-index/rebuild` requires
 `{ "confirm": "REBUILD SEMANTIC INDEX", "limit": 20 }`, resolves the explicitly
 configured embedding provider, and processes 1-100 missing pages. Each vector is
 committed only if its page stayed unchanged. Repeating the request resumes from
