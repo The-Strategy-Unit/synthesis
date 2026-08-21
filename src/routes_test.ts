@@ -600,7 +600,12 @@ routeTest(
             }));
           }
           return Promise.resolve(Response.json({
-            data: [{ id: config.llm.extractModel }],
+            data: [
+              config.llm.extractModel,
+              config.llm.consolidateModel,
+              config.llm.integrateModel,
+              config.llm.rewriteModel,
+            ].map((id) => ({ id })),
           }));
         };
         const diagnostics = await handle(
