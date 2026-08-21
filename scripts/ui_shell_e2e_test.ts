@@ -145,6 +145,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="proposal-include-all"/);
     assert.match(index, /id="ingest-stages"/);
     assert.match(index, /id="trusted-batch-controls"/);
+    assert.match(index, /id="rebuild-semantic-btn"/);
     assert.match(index, /value="trusted-batch"/);
     assert.doesNotMatch(index, /id="review-modal"/);
     assert.match(index, /<dialog id="ask-modal" class="modal"/);

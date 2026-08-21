@@ -20,6 +20,7 @@ main.ts                     # Composition root and loopback HTTP server
 ├── src/vault_manifest.ts   # Stable vault identity and format version
 ├── src/vault_export.ts     # Streaming portable tar export
 ├── src/vault_rebuild.ts    # Provider-free catalog reconstruction
+├── src/semantic_index.ts   # Model-bound bounded/resumable vector rebuild
 ├── src/wiki_schema.ts      # Editable vault policy supplied to model workflows
 ├── src/wiki_graph.ts       # Explicit-link-first graph and related-page views
 ├── src/discovery.ts        # Cross-source synthesis candidates and review lifecycle
@@ -73,7 +74,8 @@ Prepare and validate every proposed Markdown page without mutating the wiki
   ↓
 Persist one pending ingest proposal with new/merge/contradict changes
   ↓
-Manual default: a human reviews the exact Markdown and approves or rejects it
+Manual default: a human explicitly selects reviewed changes, edits body text if
+needed, and approves or rejects them; an empty approval is invalid
 Trusted batch: an exact confirmed source list automatically selects all changes
   ↓ approve or automatic apply
 Revalidate target-page hashes → embed every change before mutation
@@ -83,7 +85,8 @@ Write a durable history manifest and before-images
 Apply files, catalogue, FTS, embeddings, provenance, index, and log
   as one recoverable operation; restore files if the DB transaction fails
   ↓
-Manual ingest: recompute the rank-bounded semantic graph after apply
+Manual ingest: recompute the positive mutual-neighbour semantic graph after
+apply only when every current page has a compatible embedding
 Trusted batch: defer one graph rebuild until the final source has applied
   ↓
 Manual ingest: compare touched pages with cross-source candidates across the vault
@@ -122,20 +125,27 @@ keyword mode:
   db.searchKeyword(query)
     → FTS5 MATCH on notes_fts → ranked by FTS rank
 
-semantic mode (default):
+semantic mode:
   DB.embedText(query) → embedding
   db.searchSemantic(qEmb)
     → sqlite-vec MATCH + kNN → cosine distance → similarity = 1 - distance
 
-Both return: [{ id, title, score, matchType }]
+Both return descending `[{ id, title, score, matchType }]` results. Semantic
+scores are cosine similarities. Keyword scores negate SQLite FTS rank so that
+higher consistently means more relevant; neither score is a probability.
 ```
 
-`db.ts` also has a combined `db.search()` method that merges keyword + semantic
-results with matchType `"both"`, but `routes.ts` uses the requested single mode.
-Keyword search, browsing, sources, the graph, deterministic lint, export,
-rebuild, and undo do not resolve a provider and remain available offline. Wiki
-queries seed context from FTS, optionally add semantic results, and expand one
-explicit-link hop.
+The API default is hybrid. `db.ts` has a combined `db.search()` method that
+merges keyword + semantic results with matchType `"both"`. The browser requests
+semantic search only while a provider is ready and the model-bound semantic
+index is complete; otherwise it requests deterministic keyword search. It
+refreshes readiness before each search, states the active method, displays raw
+cosine similarity for semantic results, and displays canonical result order for
+keyword matches. API clients can request hybrid search explicitly. Keyword
+search, browsing, sources, the graph, deterministic lint, export, rebuild, and
+undo do not resolve a provider and remain available offline. Wiki queries seed
+context from FTS, optionally add semantic results, and expand one explicit-link
+hop.
 
 ### Export and recovery
 
@@ -146,9 +156,11 @@ explicit-link hop.
 compiler-managed pages, unique titles, exact wiki-link targets, and provenance
 before any database mutation. It regenerates `index.md`, then atomically
 replaces the SQLite source/note/provenance/FTS catalog. Embeddings and semantic
-links are empty after rebuild. Proposals, discovery candidate coverage, and
-discoveries are cleared because their numeric-ID review state is not yet
-represented as durable vault files.
+links are empty after rebuild. A separately confirmed, provider-backed
+`POST /api/semantic-index/rebuild` processes missing page embeddings in bounded
+resumable batches and recreates links only after complete coverage. Proposals,
+discovery candidate coverage, and discoveries are cleared because their
+numeric-ID review state is not yet represented as durable vault files.
 
 `POST /api/ingest/undo` selects the newest not-yet-undone history manifest. All
 current affected pages must match their recorded approved hashes. The operation
@@ -209,6 +221,11 @@ CREATE VIRTUAL TABLE embeddings USING vec0(
 
 Vector dimensions default to 768 (`SYNTHESIS_EMBED_DIMENSIONS`).
 
+`catalog_metadata.embedding_identity` binds current vectors to the normalised
+embedding-provider URL, model, and dimensions. A different identity atomically
+clears vectors and derived links. Legacy vectors without identity are cleared
+during database migration rather than assumed compatible.
+
 ### `links` table
 
 ```sql
@@ -222,13 +239,13 @@ CREATE TABLE links (
 );
 ```
 
-This table stores the union of each embedded page's strongest cross-source
-semantic neighbours. `computeLinks()` normalises to `min(id), max(id)` ordering
-and deduplicates via the `UNIQUE` constraint. It stores similarity even when its
-absolute value would be low under another embedding model; rank within the
-current vault determines inclusion. Explicit links are read from canonical page
-Markdown and are not cached here; when both types connect the same pages, the
-explicit relationship wins.
+This table stores positive mutual cross-source nearest neighbours:
+`computeLinks()` retains a pair only when each page ranks the other within its
+bounded candidate set. This rank-stability condition avoids manufacturing an
+edge merely to fill `k`; zero and negative cosine pairs are excluded. Direction
+is normalised to `min(id), max(id)` and deduplicated by the `UNIQUE` constraint.
+Explicit links are read from canonical page Markdown and are not cached here;
+when both types connect the same pages, the explicit relationship wins.
 
 ### `notes_fts` (FTS5 virtual table)
 
@@ -264,21 +281,26 @@ their base content hashes so approval refuses stale rewrites.
 ### `discoveries`
 
 Stores deduplicated cross-source synthesis proposals with relationship type,
-explanation, significance, evidence page/source IDs, model metadata, and a
-guarded `pending|investigating → confirmed|rejected` lifecycle. The model can
-only judge a supplied pair; it cannot invent page or source IDs.
+explanation, significance, evidence page/source IDs, exact evidence page hashes,
+model metadata, and a guarded `pending|investigating → confirmed|rejected`
+lifecycle. The model can only judge a supplied pair; it cannot invent page or
+source IDs.
 
 ### `discovery_candidates`
 
 Stores rebuildable progress for systematic cross-source review. A generation
 contains the current lexical and embedding candidate frontier after excluding
-shared provenance, existing explicit links, and previously proposed pairs. Each
-candidate is keyed by the exact evidence-bearing page content hashes, model, and
-prompt version, and moves from `queued` to either `reviewed` (no proposal) or
-`proposed`. Re-running a sweep reuses unchanged decisions, while changed pages,
-models, or prompts receive new candidate identities. Failed model calls leave
-their batch queued. The browser and trusted-batch workflow process bounded
-chunks until the generation is complete, so provider interruption is resumable.
+shared provenance, existing explicit links, and still-current proposed pairs.
+`discovery_generations` binds each resume token to its scope, seeds,
+eligible-page snapshot, prompt version, and model. Each candidate is keyed by
+the exact evidence-bearing page content hashes, model, and prompt version, and
+moves from `queued` to either `reviewed` (no proposal) or `proposed`. Re-running
+a sweep reuses unchanged decisions, while changed pages, models, or prompts
+receive new candidate identities. Full page provenance remains in identity and
+review records; only source metadata sent in one prompt is bounded, so mature
+multi-source pages remain eligible. Failed model calls leave their batch queued.
+The browser and trusted-batch workflow process bounded chunks until the
+generation is complete, so provider interruption is resumable.
 
 Candidate retrieval is a recall mechanism, not evidence. The model sees only the
 exact supplied pair and its source metadata; every proposal remains pending
@@ -286,9 +308,11 @@ until human confirmation.
 
 `consolidation_candidate` identifies pages that may cover the same durable
 concept. Confirmation promotes the reviewed overlap into canonical Markdown as
-an explicit wiki link, but does not merge or delete either page. Other confirmed
-proposal types likewise become explicit links. Post-ingest page merging needs a
-separate exact-Markdown, hash-guarded, recoverable mutation workflow.
+an explicit wiki link, but does not merge or delete either page. Confirmed
+proposal types also retain portable typed frontmatter with explanation,
+significance, evidence page hashes, and confirmation time. Post-ingest page
+merging needs a separate exact-Markdown, hash-guarded, recoverable mutation
+workflow.
 
 ## Key algorithms
 
@@ -344,14 +368,14 @@ asymmetric results.
    sqlite-vec kNN query.
 3. Exclude pages that share any source provenance, so pages from one source do
    not crowd out cross-source relationships.
-4. Retain the strongest `k` remaining neighbours for each page. There is no
-   absolute cosine threshold because score distributions vary by model and
-   corpus.
-5. Normalise direction, deduplicate the undirected union, and store similarity.
+4. Retain up to `k` positive neighbours for each page; zero and negative cosine
+   pairs cannot become proximity links.
+5. Keep a pair only when the ranking is mutual, then normalise direction,
+   deduplicate the undirected set, and store similarity.
 
 `buildWikiGraph()` then overlays authoritative explicit links parsed from files.
-The browser initially keeps the strongest configured number of incident semantic
-neighbours around each page and uses similarity to set link force and distance.
+The browser initially keeps the strongest configured number of stored mutual
+semantic neighbours around each page and uses similarity for force and distance.
 This makes connected clusters, bridges, and hubs reproducible and potentially
 informative. Distances between disconnected components, the axes, rotation, and
 the overall silhouette carry no semantic meaning.
@@ -364,7 +388,9 @@ search restores the complete graph. A pinned node focus is also presentation
 state: it keeps positions fixed, fades unrelated nodes and edges, and offers an
 explicit transition to the page reader. Clearing the search clears the pin. The
 maximised graph is the same live SVG and force simulation in a fixed viewport,
-not a second graph instance; resizing preserves zoom and presentation state.
+not a second graph instance. Explicitly choosing Connections maximises it and
+fits the settled node bounds once; user zoom, pan, drag, or focus cancels the
+pending automatic fit, while an explicit **Fit graph** action remains available.
 
 Semantic links remain derived suggestions. Only a separately reviewed discovery
 can promote a relationship into canonical Markdown.

@@ -272,6 +272,7 @@ async function consumeSse(response, onEvent) {
 }
 
 const rebuildCatalogButton = document.getElementById("rebuild-catalog-btn");
+const rebuildSemanticButton = document.getElementById("rebuild-semantic-btn");
 
 async function rebuildCatalog() {
   const confirmed = globalThis.confirm(
@@ -292,7 +293,7 @@ async function rebuildCatalog() {
     globalThis.alert(
       `Rebuilt ${data.rebuild.noteCount} wiki pages from ` +
         `${data.rebuild.sourceCount} sources. Keyword search and explicit ` +
-        "wiki links are ready; semantic connections can be regenerated later.",
+        "wiki links are ready. Use Build semantic index to restore semantic search and proximity suggestions.",
     );
   } catch (error) {
     globalThis.alert(error.message);
@@ -303,6 +304,47 @@ async function rebuildCatalog() {
 }
 
 rebuildCatalogButton.addEventListener("click", rebuildCatalog);
+
+async function rebuildSemanticIndex() {
+  const confirmed = globalThis.confirm(
+    "Build or resume the semantic index using the explicitly configured embedding provider? Relevant wiki text will be sent to that provider. Up to 20 pages are processed in this batch.",
+  );
+  if (!confirmed) return;
+
+  rebuildSemanticButton.disabled = true;
+  rebuildSemanticButton.textContent = "Building semantic index...";
+  try {
+    const data = await api("semantic-index/rebuild", {
+      method: "POST",
+      body: JSON.stringify({
+        confirm: "REBUILD SEMANTIC INDEX",
+        limit: 20,
+      }),
+    });
+    const status = data.semanticIndex;
+    await Promise.all([refreshProviderMode(), loadGraph()]);
+    globalThis.alert(
+      status.complete
+        ? `Semantic index ready for ${status.total} wiki pages; ${status.links} mutual proximity links were rebuilt.`
+        : `Indexed ${status.embedded} of ${status.total} wiki pages. Choose Resume semantic index to process the remaining ${status.remaining}.`,
+    );
+  } catch (error) {
+    globalThis.alert(error.message);
+  } finally {
+    const semanticIndex = providerState.semanticIndex;
+    rebuildSemanticButton.disabled = !providerCapabilities(
+      providerState.phase,
+      semanticIndex,
+    ).modelActions;
+    rebuildSemanticButton.textContent = semanticIndex?.complete
+      ? "Semantic index ready"
+      : semanticIndex?.embedded > 0
+      ? "Resume semantic index"
+      : "Build semantic index";
+  }
+}
+
+rebuildSemanticButton.addEventListener("click", rebuildSemanticIndex);
 
 const undoIngestButton = document.getElementById("undo-ingest-btn");
 
@@ -1331,8 +1373,8 @@ function showDiscovery(discovery) {
     ? "Confirm overlap link"
     : "Confirm link";
   discoveryActionNote.textContent = isConsolidation
-    ? "Confirmation records the reviewed overlap as an explicit link. It does not merge or delete either page."
-    : "Confirmation records this reviewed relationship as an explicit wiki link.";
+    ? "Confirmation records the reviewed overlap as a typed relationship and explicit link. It does not merge or delete either page."
+    : "Confirmation records this typed reviewed relationship and an ordinary explicit wiki link.";
   discoveryDetail.classList.remove("hidden");
   updateDiscoveryControls();
 }
@@ -1541,7 +1583,7 @@ function beginDiscoveryBatch(action) {
   discoveryBatchSnapshot = { action, ids, phrase };
   discoveryBatchConfirmationPhrase.textContent = phrase;
   discoveryBatchWarning.textContent = action === "confirm"
-    ? `This records ${ids.length} model-proposed relationships as explicit wiki links. The selection is not evidence and will not be reinterpreted by the model.`
+    ? `This records ${ids.length} model-proposed relationships as portable typed metadata and explicit wiki links. Every evidence page must still match the version reviewed by the model.`
     : `This rejects ${ids.length} selected proposals. No wiki links will be added.`;
   discoveryBatchConfirmationInput.value = "";
   discoveryBatchConfirmationPanel.classList.remove("hidden");
@@ -1573,7 +1615,7 @@ async function applyDiscoveryBatch() {
     closeDiscoveryBatchConfirmation();
     await loadDiscoveries();
     discoveriesStatus.textContent = snapshot.action === "confirm"
-      ? `Confirmed ${result.reviewed.length} proposals and added ${result.linksAdded} explicit wiki links.`
+      ? `Confirmed ${result.reviewed.length} proposals and added ${result.linksAdded} typed reviewed links.`
       : `Rejected ${result.reviewed.length} proposals. No wiki links were added.`;
   } catch (error) {
     discoveriesStatus.textContent = error.message;
@@ -1700,6 +1742,12 @@ function renderProviderState(nextState) {
   discoveriesScan.disabled = !capabilities.modelActions;
   lintAnalyze.disabled = !capabilities.modelActions;
   ingestButton.disabled = !capabilities.modelActions;
+  rebuildSemanticButton.disabled = !capabilities.modelActions;
+  rebuildSemanticButton.textContent = providerState.semanticIndex?.complete
+    ? "Semantic index ready"
+    : providerState.semanticIndex?.embedded > 0
+    ? "Resume semantic index"
+    : "Build semantic index";
   const emptyState = providerEmptyState(providerState.phase);
   readerAddSourceButton.textContent = emptyState.label;
   readerAddSourceButton.title = capabilities.modelActions
@@ -2316,14 +2364,24 @@ function renderEvidence(page) {
       `<small>${escapeHtml(detail)}</small>` +
       `${sourceSummary}</li>`;
   }).join("");
-  const related = (page.related ?? []).map((item) =>
-    `<li><a href="/?note=${encodeURIComponent(item.id)}" ` +
-    `data-id="${item.id}" class="related-link">${
-      escapeHtml(item.title)
-    }</a><small>${
-      item.kind === "explicit" ? "Reviewed wiki link" : "Semantic suggestion"
-    }</small></li>`
-  ).join("");
+  const related = (page.related ?? []).map((item) => {
+    const relationshipTypes = item.kind === "explicit"
+      ? [...new Set((item.relationships ?? []).map((relationship) =>
+        String(relationship.type).replaceAll("_", " ")
+      ))]
+      : [];
+    const label = item.kind === "explicit"
+      ? `Reviewed wiki link${
+        relationshipTypes.length > 0
+          ? ` · ${relationshipTypes.join(", ")}`
+          : ""
+      }`
+      : "Mutual semantic proximity";
+    return `<li><a href="/?note=${encodeURIComponent(item.id)}" ` +
+      `data-id="${item.id}" class="related-link">${
+        escapeHtml(item.title)
+      }</a><small>${escapeHtml(label)}</small></li>`;
+  }).join("");
 
   evidenceContent.innerHTML = `
     <div class="evidence-summary" aria-label="Evidence summary">
@@ -2879,6 +2937,7 @@ async function loadGraph() {
       target: l.target,
       kind: l.kind ?? "semantic",
       similarity: l.similarity,
+      relationships: l.relationships,
     })).sort((left, right) =>
       Number(left.kind === "semantic") - Number(right.kind === "semantic") ||
       left.source - right.source || left.target - right.target
@@ -3040,9 +3099,9 @@ function renderGraph() {
         .text(
           `${
             graphSearch?.matchedIds.has(d.id) ? "Search match · " : ""
-          }${d.title} — ${declaredConnections} wiki links, ${
+          }${d.title} — ${declaredConnections} reviewed wiki links, ${
             visibleConnections - declaredConnections
-          } semantic suggestions`,
+          } mutual semantic proximity suggestions`,
         );
     })
     .on("mousemove", (event) => {
