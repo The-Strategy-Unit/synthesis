@@ -86,6 +86,33 @@ The setup task checks Ollama and reports any models that still need to be
 pulled. The start task creates the local vault if necessary and opens
 `http://localhost:8000`.
 
+### Model sizing
+
+The accessible default uses `qwen3.5:9b` for every language-model role. It is a
+practical starting point for supervised local evaluation, not a quality
+guarantee. On hardware that can run the larger model, the recommended
+quality-oriented profile keeps high-volume extraction on 9B and assigns harder
+editorial judgements to 122B:
+
+```bash
+SYNTHESIS_EXTRACT_MODEL=qwen3.5:9b \
+SYNTHESIS_CONSOLIDATE_MODEL=qwen3.5:122b \
+SYNTHESIS_INTEGRATE_MODEL=qwen3.5:122b \
+SYNTHESIS_REWRITE_MODEL=qwen3.5:122b \
+deno task app
+```
+
+The larger model then handles source consolidation, `new|merge|contradict`
+decisions, page-body rewriting, and cross-source discovery; the configured
+embedding model remains responsible for retrieval and candidate similarity.
+Saved Provider profiles take precedence over these environment defaults, so set
+the same role models in **Provider** when a profile already exists.
+
+This profile trades speed for capacity. It should be evaluated on representative
+sources and does not remove evidence checking or human review. In particular,
+trusting a source does not guarantee that an automatically generated summary or
+relationship preserves every qualification in that source.
+
 ### Remote OpenAI-compatible provider
 
 Skip the Ollama-specific setup and start directly:
