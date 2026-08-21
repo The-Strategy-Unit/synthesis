@@ -19,14 +19,15 @@ exploration. It is not an official product of, or maintained by, the originating
 organisation.
 
 The current `main` line is a single-user MVP for local use and controlled
-private beta evaluation. It is stateful software: one process owns one writable,
-file-backed vault, while SQLite search and vector state remain rebuildable.
+private beta evaluation. It is stateful software: one process owns one
+writeable, file-backed vault, while SQLite search and vector state remain
+rebuildable.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — runtime, persistence, and compiler flow
-- [Developer guide](docs/DEVELOPERS.md) — setup, configuration, testing, and API
-- [Private beta deployment](docs/DEPLOYMENT.md) — protected stateful hosting,
+- [Architecture](docs/ARCHITECTURE.md) - runtime, persistence, and compiler flow
+- [Developer guide](docs/DEVELOPERS.md) - setup, configuration, testing, and API
+- [Private beta deployment](docs/DEPLOYMENT.md) - protected stateful hosting,
   backups, and rollout
 
 ## MVP capabilities
@@ -76,7 +77,7 @@ experimental QuickJS executables requires Deno 2.9.5 or later.
 Install and start [Ollama](https://ollama.com/), then run:
 
 ```bash
-git clone https://github.com/The-Strategy-Unit/synthesis.git
+git clone https://github.com/ai-mindset/synthesis.git
 cd synthesis
 deno task setup
 deno task app
@@ -118,7 +119,7 @@ ten-minute default timeout so slower local 122B decisions can complete.
 Skip the Ollama-specific setup and start directly:
 
 ```bash
-git clone https://github.com/The-Strategy-Unit/synthesis.git
+git clone https://github.com/ai-mindset/synthesis.git
 cd synthesis
 deno task app
 ```
@@ -149,12 +150,48 @@ sign it before distributing it beyond a controlled internal demo. QuickJS and
 cross-compilation are provided by
 [Deno compile](https://docs.deno.com/runtime/reference/cli/compile/).
 
+## Create, open, export, and restore a vault
+
+A vault is an ordinary directory containing the authoritative Markdown, sources,
+schema, and history. One running Synthesis process owns one writeable vault.
+
+Create or open the default vault at `~/Synthesis`:
+
+```bash
+deno task app
+```
+
+Create a vault at a chosen location - or reopen it later with the same command:
+
+```bash
+SYNTHESIS_VAULT="$PWD/my-vault" deno task app
+```
+
+To make a portable backup, choose **Vault tools → Export vault**. The downloaded
+tar archive contains the authoritative vault and excludes the rebuildable SQLite
+catalogue and provider credentials.
+
+To restore it, extract the archive into a new empty directory and open that
+directory as the vault:
+
+```bash
+mkdir restored-vault
+tar -xf synthesis-vault-YYYY-MM-DD.tar -C restored-vault
+SYNTHESIS_VAULT="$PWD/restored-vault" deno task app
+```
+
+Then choose **Vault tools → Rebuild catalogue** to restore keyword search and
+explicit links. Choose **Build semantic index** - or **Resume semantic index**
+until complete - to restore model-bound semantic search and proximity
+suggestions. Provider settings and credentials remain separate and must be
+configured on the restored installation.
+
 ## Demo workflow
 
 1. Configure a provider, if not using the default Ollama configuration, and use
    **Diagnose active provider** to verify that its required models are present.
-2. Choose a representative PDF, Markdown, or text file—or paste source text—then
-   choose **Ingest**. Image-only PDFs need OCR before ingestion.
+2. Choose a representative PDF, Markdown, or text file - or paste source text -
+   then choose **Ingest**. Image-only PDFs need OCR before ingestion.
 3. Open **Review**, inspect the proposed page changes and provenance, then
    approve them to mutate the wiki.
 4. Ingest and approve a second source that supports, extends, or contradicts the
@@ -169,7 +206,7 @@ cross-compilation are provided by
    contradictions, orphan pages, and optional AI findings.
 9. Choose **Export** to download the authoritative Markdown, sources, schema,
    manifest, and revision history as a portable tar archive.
-10. Demonstrate recovery with **Undo ingest**, or use **Rebuild catalog** to
+10. Demonstrate recovery with **Undo ingest**, or use **Rebuild catalogue** to
     reconstruct provider-independent state, followed by **Build semantic index**
     to restore model-bound search and proximity suggestions.
 
@@ -232,20 +269,20 @@ resulting wiki.
 
 ## Compilation pipeline
 
-1. **Archive** — preserve the raw source or original uploaded file, extracted
+1. **Archive** - preserve the raw source or original uploaded file, extracted
    page-aware text, metadata, hash, and source summary.
-2. **Extract** — identify durable concepts, entities, findings, procedures, and
+2. **Extract** - identify durable concepts, entities, findings, procedures, and
    cautions from bounded chunks.
-3. **Consolidate** — deduplicate candidate pages within the source.
-4. **Integrate** — classify each page as `new`, `merge`, or `contradict` against
+3. **Consolidate** - deduplicate candidate pages within the source.
+4. **Integrate** - classify each page as `new`, `merge`, or `contradict` against
    the existing wiki.
-5. **Rewrite** — update affected pages while preserving links and provenance.
-6. **Index** — update SQLite FTS, embeddings, graph links, `index.md`, and
+5. **Rewrite** - update affected pages while preserving links and provenance.
+6. **Index** - update SQLite FTS, embeddings, graph links, `index.md`, and
    `log.md`.
-7. **Synthesize across sources** — shortlist cross-source page pairs across the
+7. **Synthesize across sources** - shortlist cross-source page pairs across the
    vault without excluding highly consolidated pages, then propose grounded
    relationships or possible consolidations for review.
-8. **Query** — answer from compiled pages, cite them, and optionally compile a
+8. **Query** - answer from compiled pages, cite them, and optionally compile a
    reviewed answer back into the wiki.
 
 Manual ingest runs the cross-source pass around newly accepted pages. Trusted
