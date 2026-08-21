@@ -33,6 +33,7 @@ deno task lint     # deno lint --fix && deno fmt
 deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
 deno task test:e2e           # provider-independent server/UI workflow tests
+deno task test:browser       # real browser search/graph smoke; pass a Chromium path if it is not discoverable
 ```
 
 Compile a self-extracting QuickJS executable for the current host with
