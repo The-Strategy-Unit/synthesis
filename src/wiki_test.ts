@@ -130,6 +130,28 @@ Deno.test("rendered wiki pages parse back into the same domain value", () => {
   );
 });
 
+Deno.test("reviewed relationship meaning remains portable in wiki frontmatter", () => {
+  const relationshipPage = {
+    ...page,
+    links: ["Claim One"],
+    relationships: [{
+      target: "Claim One",
+      type: "contradicts" as const,
+      explanation: "The reviewed pages report incompatible findings.",
+      significance: "The disagreement must remain visible.",
+      pageHashes: ["a".repeat(64), "b".repeat(64)],
+      confirmedAt: "2026-08-19T12:00:00.000Z",
+    }],
+  };
+  const rendered = renderWikiPage(relationshipPage, []);
+  assert.match(rendered, /^relationships: /m);
+  assert.deepEqual(parseWikiPage(rendered), relationshipPage);
+  assert.throws(
+    () => renderWikiPage({ ...relationshipPage, links: [] }, []),
+    /target must also appear in Wiki page.links/,
+  );
+});
+
 Deno.test("wiki parsing rejects ambiguous or inconsistent Markdown", () => {
   const rendered = renderWikiPage(page, []);
   assert.throws(

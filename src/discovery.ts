@@ -10,7 +10,12 @@ import type {
 } from "./db.ts";
 import { parseJsonResponse, structuredChatCompletion } from "./llm.ts";
 import { errMsg } from "./utils.ts";
-import { parseWikiPage, renderWikiPage, validateWikiPage } from "./wiki.ts";
+import {
+  parseWikiPage,
+  renderWikiPage,
+  validateWikiPage,
+  type WikiRelationship,
+} from "./wiki.ts";
 import { buildWikiGraph } from "./wiki_graph.ts";
 import { DEFAULT_WIKI_SCHEMA, promptWithWikiSchema } from "./wiki_schema.ts";
 
@@ -31,10 +36,11 @@ const MAX_SEEDED_CANDIDATES = 5;
 const MAX_VAULT_CANDIDATES = 20;
 const MAX_NEAREST_PER_PAGE = 64;
 const MAX_CROSS_SOURCE_NEIGHBORS_PER_PAGE = 8;
-const MAX_SOURCE_IDS = 8;
+const MAX_DISCOVERY_SOURCE_IDS = 4_096;
+const MAX_PROMPT_SOURCES_PER_PAGE = 4;
 const MIN_SEMANTIC_CANDIDATE = 0.5;
 const MIN_LEXICAL_CANDIDATE = 0.12;
-const DISCOVERY_PROMPT_VERSION = "cross-source-v2";
+const DISCOVERY_PROMPT_VERSION = "cross-source-v3";
 export const MAX_DISCOVERY_BATCH_ITEMS = 500;
 
 const CANDIDATE_STOP_WORDS = new Set([
@@ -89,6 +95,7 @@ export interface DiscoveryView {
   explanation: string;
   significance: string;
   pages: Array<{ id: number; title: string }>;
+  pageHashes: string[];
   sources: Array<{
     id: number;
     title: string;
@@ -135,6 +142,7 @@ interface ValidatedSuggestion {
   explanation: string;
   significance: string;
   pageIds: number[];
+  pageHashes: string[];
   sourceIds: number[];
   confidence: number;
 }
@@ -311,19 +319,51 @@ function storedIds(
   return idArray(parsed, context, min, max, allowed);
 }
 
+function storedHashes(
+  value: string,
+  context: string,
+  count: number,
+): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`${context} is invalid JSON`);
+  }
+  if (
+    !Array.isArray(parsed) || parsed.length !== count ||
+    parsed.some((hash) =>
+      typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)
+    )
+  ) {
+    throw new Error(`${context} must contain ${count} SHA-256 hashes`);
+  }
+  return parsed as string[];
+}
+
 function discoveryView(db: DB, record: DiscoveryRecord): DiscoveryView {
   const pageIds = storedIds(record.page_ids_json, "Discovery page IDs", 2, 4);
   const sourceIds = storedIds(
     record.source_ids_json,
     "Discovery source IDs",
     1,
-    8,
+    MAX_DISCOVERY_SOURCE_IDS,
   );
   const pages = pageIds.map((id) => {
     const note = db.getNote(id);
     if (!note) throw new Error(`Discovery ${record.id} page ${id} is missing`);
     return { id: note.id, title: note.title };
   });
+  let pageHashes: string[] = [];
+  try {
+    pageHashes = storedHashes(
+      record.page_hashes_json,
+      `Discovery ${record.id} page hashes`,
+      pageIds.length,
+    );
+  } catch {
+    // Legacy proposals remain inspectable but cannot be confirmed.
+  }
   const sources = sourceIds.map((id) => {
     const source = db.getSource(id);
     if (!source) {
@@ -355,6 +395,7 @@ function discoveryView(db: DB, record: DiscoveryRecord): DiscoveryView {
       1_000,
     ),
     pages,
+    pageHashes,
     sources,
     productionMethod: requiredText(
       record.production_method,
@@ -410,6 +451,18 @@ async function sha256(value: string): Promise<string> {
   ).join("");
 }
 
+export async function discoveryEvidenceHash(
+  page: { title: string; type: string; body: string },
+  sourceIds: number[],
+): Promise<string> {
+  return await sha256(JSON.stringify({
+    title: page.title,
+    type: page.type,
+    body: page.body,
+    sourceIds: [...sourceIds].sort((left, right) => left - right),
+  }));
+}
+
 async function candidateFingerprint(
   pair: CandidatePair,
   model: string,
@@ -452,7 +505,10 @@ function sourceSetsOverlap(left: number[], right: number[]): boolean {
   return right.some((sourceId) => leftSet.has(sourceId));
 }
 
-function knownDiscoveryPairs(db: DB): Set<string> {
+function knownDiscoveryPairs(
+  db: DB,
+  pages: ReadonlyMap<number, CandidatePage>,
+): Set<string> {
   const pairs = new Set<string>();
   for (const discovery of db.getDiscoveries()) {
     const pageIds = storedIds(
@@ -461,6 +517,21 @@ function knownDiscoveryPairs(db: DB): Set<string> {
       2,
       4,
     );
+    let pageHashes: string[];
+    try {
+      pageHashes = storedHashes(
+        discovery.page_hashes_json,
+        `Discovery ${discovery.id} page hashes`,
+        pageIds.length,
+      );
+    } catch {
+      continue;
+    }
+    if (
+      pageIds.some((id, index) =>
+        pages.get(id)?.contentHash !== pageHashes[index]
+      )
+    ) continue;
     for (let left = 0; left < pageIds.length; left++) {
       for (let right = left + 1; right < pageIds.length; right++) {
         pairs.add(pairKey(pageIds[left], pageIds[right]));
@@ -470,32 +541,36 @@ function knownDiscoveryPairs(db: DB): Set<string> {
   return pairs;
 }
 
+async function candidatePage(
+  db: DB,
+  note: { id: number; title: string; file_path: string },
+): Promise<CandidatePage | null> {
+  try {
+    const page = parseWikiPage(await Deno.readTextFile(note.file_path));
+    const sourceIds = db.getSourceProvenanceForNote(note.id).map((source) =>
+      source.id
+    ).sort((left, right) => left - right);
+    if (sourceIds.length === 0) return null;
+    const contentHash = await discoveryEvidenceHash(page, sourceIds);
+    return {
+      id: note.id,
+      title: note.title,
+      type: page.type,
+      body: page.body,
+      sourceIds,
+      contentHash,
+    };
+  } catch {
+    // Wiki health reports unreadable or legacy pages separately.
+    return null;
+  }
+}
+
 async function candidatePages(db: DB): Promise<Map<number, CandidatePage>> {
   const pages = new Map<number, CandidatePage>();
   for (const note of db.getAllNotes()) {
-    try {
-      const page = parseWikiPage(await Deno.readTextFile(note.file_path));
-      const sourceIds = db.getSourceProvenanceForNote(note.id).map((source) =>
-        source.id
-      ).sort((left, right) => left - right);
-      if (sourceIds.length === 0 || sourceIds.length > MAX_SOURCE_IDS) continue;
-      const contentHash = await sha256(JSON.stringify({
-        title: page.title,
-        type: page.type,
-        body: page.body,
-        sourceIds,
-      }));
-      pages.set(note.id, {
-        id: note.id,
-        title: note.title,
-        type: page.type,
-        body: page.body,
-        sourceIds,
-        contentHash,
-      });
-    } catch {
-      // Wiki health reports unreadable or legacy pages separately.
-    }
+    const page = await candidatePage(db, note);
+    if (page) pages.set(note.id, page);
   }
   return pages;
 }
@@ -514,7 +589,7 @@ async function crossSourceCandidates(
   const graph = await buildWikiGraph(db);
   const excludedPairs = new Set([
     ...explicitPairKeys(graph.links),
-    ...knownDiscoveryPairs(db),
+    ...knownDiscoveryPairs(db, pages),
   ]);
   const pairs = new Map<string, CandidatePair>();
   const addPair = (
@@ -522,27 +597,26 @@ async function crossSourceCandidates(
     candidate: CandidatePage,
     semanticSimilarity?: number,
     allowWeak = false,
-  ) => {
+  ): boolean => {
     if (
       seed.id === candidate.id ||
       sourceSetsOverlap(seed.sourceIds, candidate.sourceIds)
-    ) return;
+    ) return false;
     const key = pairKey(seed.id, candidate.id);
-    if (excludedPairs.has(key)) return;
+    if (excludedPairs.has(key)) return false;
     const sourceIds = [
       ...new Set([
         ...seed.sourceIds,
         ...candidate.sourceIds,
       ]),
     ].sort((left, right) => left - right);
-    if (sourceIds.length > MAX_SOURCE_IDS) return;
     const lexical = lexicalSimilarity(seed, candidate);
     if (
       !allowWeak &&
       (semanticSimilarity === undefined ||
         semanticSimilarity < MIN_SEMANTIC_CANDIDATE) &&
       lexical < MIN_LEXICAL_CANDIDATE
-    ) return;
+    ) return false;
     const boundedSemantic = semanticSimilarity === undefined
       ? undefined
       : Math.max(-1, Math.min(1, semanticSimilarity));
@@ -561,7 +635,9 @@ async function crossSourceCandidates(
         ? {}
         : { semanticSimilarity: boundedSemantic }),
     };
-    if ((pairs.get(key)?.score ?? -1) < score) pairs.set(key, pair);
+    const previous = pairs.get(key);
+    if ((previous?.score ?? -1) < score) pairs.set(key, pair);
+    return previous === undefined;
   };
 
   const nearestLimit = Math.min(
@@ -580,8 +656,8 @@ async function crossSourceCandidates(
         ) {
           continue;
         }
-        addPair(seed, candidate, nearest.similarity);
-        if (++added >= MAX_CROSS_SOURCE_NEIGHBORS_PER_PAGE) break;
+        if (addPair(seed, candidate, nearest.similarity)) added++;
+        if (added >= MAX_CROSS_SOURCE_NEIGHBORS_PER_PAGE) break;
       }
     }
     for (
@@ -610,8 +686,10 @@ async function crossSourceCandidates(
 }
 
 function suggestionFingerprint(suggestion: ValidatedSuggestion): string {
-  return `${suggestion.relationshipType}|${suggestion.pageIds.join(",")}|${
-    suggestion.sourceIds.join(",")
+  return `${suggestion.relationshipType}|${
+    suggestion.pageIds.map((id, index) =>
+      `${id}:${suggestion.pageHashes[index]}`
+    ).join("|")
   }`;
 }
 
@@ -660,8 +738,7 @@ function storedCandidatePair(
     (first, second) => first - second,
   );
   if (
-    sourceSetsOverlap(left.sourceIds, right.sourceIds) ||
-    sourceIds.length > MAX_SOURCE_IDS
+    sourceSetsOverlap(left.sourceIds, right.sourceIds)
   ) return null;
   return {
     key: pairKey(left.id, right.id),
@@ -680,6 +757,9 @@ async function stageCandidateGeneration(
   db: DB,
   candidates: CandidatePair[],
   model: string,
+  scope: "seeded" | "vault",
+  seedIds: number[],
+  pageSnapshotHash: string,
 ): Promise<string | null> {
   if (candidates.length === 0) return null;
   const generation = crypto.randomUUID();
@@ -698,8 +778,26 @@ async function stageCandidateGeneration(
       semantic_similarity: candidate.semanticSimilarity ?? null,
     })),
   );
+  db.addDiscoveryGeneration({
+    generation,
+    scope,
+    seed_ids_json: JSON.stringify(seedIds),
+    page_snapshot_hash: pageSnapshotHash,
+    prompt_version: DISCOVERY_PROMPT_VERSION,
+    model,
+  });
   db.stageDiscoveryCandidates(generation, stored);
   return generation;
+}
+
+async function discoveryPageSnapshot(
+  pages: ReadonlyMap<number, CandidatePage>,
+): Promise<string> {
+  return await sha256(JSON.stringify(
+    [...pages.values()].sort((left, right) => left.id - right.id).map((
+      page,
+    ) => [page.id, page.contentHash]),
+  ));
 }
 
 export async function generateDiscoveries(
@@ -713,18 +811,45 @@ export async function generateDiscoveries(
 ): Promise<DiscoveryGenerationResult> {
   const scope = options.scope ?? "seeded";
   const pages = await candidatePages(db);
-  let generation = options.generation ?? null;
-  const storedCandidates = generation === null
+  const normalizedSeedIds = scope === "vault"
     ? []
-    : db.getDiscoveryCandidates(generation);
-  const canResume = storedCandidates.length > 0 &&
-    storedCandidates.every((candidate) =>
-      candidate.model === model &&
-      storedCandidatePair(candidate, pages) !== null
-    );
-  if (!canResume) {
+    : [...new Set(seedIds)].filter((id) => pages.has(id)).sort((a, b) => a - b);
+  const pageSnapshotHash = await discoveryPageSnapshot(pages);
+  let generation = options.generation ?? null;
+  if (generation !== null) {
+    const manifest = db.getDiscoveryGeneration(generation);
+    let manifestSeeds: unknown;
+    try {
+      manifestSeeds = manifest ? JSON.parse(manifest.seed_ids_json) : null;
+    } catch {
+      manifestSeeds = null;
+    }
+    const storedCandidates = db.getDiscoveryCandidates(generation);
+    const canResume = manifest !== undefined &&
+      manifest.scope === scope && manifest.model === model &&
+      manifest.prompt_version === DISCOVERY_PROMPT_VERSION &&
+      manifest.page_snapshot_hash === pageSnapshotHash &&
+      JSON.stringify(manifestSeeds) === JSON.stringify(normalizedSeedIds) &&
+      storedCandidates.length > 0 &&
+      storedCandidates.every((candidate) =>
+        candidate.model === model &&
+        storedCandidatePair(candidate, pages) !== null
+      );
+    if (!canResume) {
+      throw new DiscoveryStateError(
+        "Discovery sweep scope or wiki evidence changed; start a new comparison",
+      );
+    }
+  } else {
     const candidates = await crossSourceCandidates(db, seedIds, scope, pages);
-    generation = await stageCandidateGeneration(db, candidates, model);
+    generation = await stageCandidateGeneration(
+      db,
+      candidates,
+      model,
+      scope,
+      normalizedSeedIds,
+      pageSnapshotHash,
+    );
   }
   if (generation === null) {
     return {
@@ -772,10 +897,13 @@ export async function generateDiscoveries(
       candidateCount: batch.length,
       coverage: discoveryCoverage(db, generation, pages.size),
     });
-    const sourceIds = [
-      ...new Set(batch.flatMap(({ pair }) => pair.sourceIds)),
+    const promptSourceIds = [
+      ...new Set(batch.flatMap(({ pair }) => [
+        ...pair.left.sourceIds.slice(0, MAX_PROMPT_SOURCES_PER_PAGE),
+        ...pair.right.sourceIds.slice(0, MAX_PROMPT_SOURCES_PER_PAGE),
+      ])),
     ];
-    const sources = sourceIds.map((id) => {
+    const sources = promptSourceIds.map((id) => {
       const source = db.getSource(id);
       if (!source) throw new Error(`Synthesis source ${id} is missing`);
       return {
@@ -798,14 +926,20 @@ export async function generateDiscoveries(
             title: pair.left.title,
             type: pair.left.type,
             body: pair.left.body.slice(0, 1_400),
-            source_ids: pair.left.sourceIds,
+            source_ids: pair.left.sourceIds.slice(
+              0,
+              MAX_PROMPT_SOURCES_PER_PAGE,
+            ),
           },
           right: {
             id: pair.right.id,
             title: pair.right.title,
             type: pair.right.type,
             body: pair.right.body.slice(0, 1_400),
-            source_ids: pair.right.sourceIds,
+            source_ids: pair.right.sourceIds.slice(
+              0,
+              MAX_PROMPT_SOURCES_PER_PAGE,
+            ),
           },
           candidate_signals: {
             lexical_similarity: Number(
@@ -896,6 +1030,10 @@ export async function generateDiscoveries(
               1_000,
             ),
             pageIds: [candidate.left.id, candidate.right.id],
+            pageHashes: [
+              candidate.left.contentHash,
+              candidate.right.contentHash,
+            ],
             sourceIds: candidate.sourceIds,
             confidence: item.confidence,
           });
@@ -935,6 +1073,7 @@ export async function generateDiscoveries(
           explanation: suggestion.explanation,
           significance: suggestion.significance,
           page_ids_json: JSON.stringify(suggestion.pageIds),
+          page_hashes_json: JSON.stringify(suggestion.pageHashes),
           source_ids_json: JSON.stringify(suggestion.sourceIds),
           production_method: "llm_cross_source_review",
           model,
@@ -987,9 +1126,20 @@ async function replaceFile(filePath: string, content: string): Promise<void> {
   }
 }
 
-function renderWithExistingSources(markdown: string, links: string[]): string {
+function renderWithExistingSources(
+  markdown: string,
+  links: string[],
+  relationship: WikiRelationship,
+): string {
   const page = parseWikiPage(markdown);
-  const rendered = renderWikiPage(validateWikiPage({ ...page, links }), []);
+  const rendered = renderWikiPage(
+    validateWikiPage({
+      ...page,
+      links,
+      relationships: [...(page.relationships ?? []), relationship],
+    }),
+    [],
+  );
   const sourceLines = markdown.split("\n").filter((line) =>
     /<!-- synthesis-source:[a-f0-9]{64} -->/.test(line)
   );
@@ -1031,7 +1181,37 @@ function selectDiscoveryPair(
   return undefined;
 }
 
-function reviewableDiscovery(db: DB, id: number): DiscoveryView {
+async function assertDiscoveryEvidenceCurrent(
+  db: DB,
+  record: DiscoveryRecord,
+): Promise<void> {
+  const pageIds = storedIds(
+    record.page_ids_json,
+    `Discovery ${record.id} page IDs`,
+    2,
+    4,
+  );
+  const hashes = storedHashes(
+    record.page_hashes_json,
+    `Discovery ${record.id} page hashes`,
+    pageIds.length,
+  );
+  for (let index = 0; index < pageIds.length; index++) {
+    const note = db.getNote(pageIds[index]);
+    const current = note ? await candidatePage(db, note) : null;
+    if (!current || current.contentHash !== hashes[index]) {
+      throw new DiscoveryStateError(
+        `Discovery ${record.id} is stale because its wiki evidence changed`,
+      );
+    }
+  }
+}
+
+async function reviewableDiscovery(
+  db: DB,
+  id: number,
+  requireFresh = true,
+): Promise<DiscoveryView> {
   const record = db.getDiscovery(id);
   if (!record) throw new DiscoveryNotFoundError(`Discovery ${id} not found`);
   if (!["pending", "investigating"].includes(record.status)) {
@@ -1039,6 +1219,7 @@ function reviewableDiscovery(db: DB, id: number): DiscoveryView {
       `Discovery ${id} is already ${record.status}`,
     );
   }
+  if (requireFresh) await assertDiscoveryEvidenceCurrent(db, record);
   return discoveryView(db, record);
 }
 
@@ -1062,7 +1243,7 @@ export async function confirmDiscovery(
   db: DB,
   id: number,
 ): Promise<DiscoveryView> {
-  const view = reviewableDiscovery(db, id);
+  const view = await reviewableDiscovery(db, id);
   const graph = await buildWikiGraph(db);
   const explicitPairs = explicitPairKeys(graph.links);
   const pair = selectDiscoveryPair(db, view, explicitPairs);
@@ -1077,7 +1258,17 @@ export async function confirmDiscovery(
     original = await Deno.readTextFile(sourcePath);
     const page = parseWikiPage(original);
     const links = [...page.links, target.title];
-    await replaceFile(sourcePath, renderWithExistingSources(original, links));
+    await replaceFile(
+      sourcePath,
+      renderWithExistingSources(original, links, {
+        target: target.title,
+        type: view.relationshipType as WikiRelationship["type"],
+        explanation: view.explanation,
+        significance: view.significance,
+        pageHashes: view.pageHashes,
+        confirmedAt: new Date().toISOString(),
+      }),
+    );
   }
 
   try {
@@ -1097,7 +1288,11 @@ export async function reviewDiscoveryBatch(
   db: DB,
   batch: ValidatedDiscoveryBatch,
 ): Promise<DiscoveryBatchResult> {
-  const views = batch.ids.map((id) => reviewableDiscovery(db, id));
+  const views = await Promise.all(
+    batch.ids.map((id) =>
+      reviewableDiscovery(db, id, batch.action === "confirm")
+    ),
+  );
   if (batch.action === "reject") {
     db.withTransaction(() => {
       for (const id of batch.ids) {
@@ -1143,7 +1338,14 @@ export async function reviewDiscoveryBatch(
     const page = parseWikiPage(current);
     finalContents.set(
       source.file_path,
-      renderWithExistingSources(current, [...page.links, target.title]),
+      renderWithExistingSources(current, [...page.links, target.title], {
+        target: target.title,
+        type: view.relationshipType as WikiRelationship["type"],
+        explanation: view.explanation,
+        significance: view.significance,
+        pageHashes: view.pageHashes,
+        confirmedAt: new Date().toISOString(),
+      }),
     );
   }
 
@@ -1200,13 +1402,16 @@ export async function reviewDiscoveryBatch(
   };
 }
 
-export function reviewDiscovery(
+export async function reviewDiscovery(
   db: DB,
   id: number,
   status: "investigating" | "rejected",
-): DiscoveryView {
+): Promise<DiscoveryView> {
   const record = db.getDiscovery(id);
   if (!record) throw new DiscoveryNotFoundError(`Discovery ${id} not found`);
+  if (status === "investigating") {
+    await assertDiscoveryEvidenceCurrent(db, record);
+  }
   if (!db.reviewDiscovery(id, status)) {
     throw new DiscoveryStateError(
       `Discovery ${id} is already ${record.status}`,

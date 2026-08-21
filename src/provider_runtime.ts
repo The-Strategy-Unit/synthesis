@@ -66,6 +66,28 @@ export class ProviderRuntimeError extends Error {
   }
 }
 
+export function embeddingIdentity(
+  embedding: { apiBase: string; model: string },
+  dimensions = config.embed.dimensions,
+): string {
+  let apiBase: string;
+  try {
+    const url = new URL(embedding.apiBase);
+    url.hash = "";
+    url.search = "";
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    apiBase = url.toString().replace(/\/$/, "");
+  } catch {
+    throw new ProviderRuntimeError("Embedding provider URL is invalid");
+  }
+  return JSON.stringify({
+    version: 1,
+    apiBase,
+    model: embedding.model.normalize("NFKC").trim(),
+    dimensions,
+  });
+}
+
 type Profiles = Pick<ProviderProfileStore, "load">;
 type SecretStoreFactory = () => Promise<SecretStore>;
 

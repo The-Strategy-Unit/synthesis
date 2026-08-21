@@ -58,10 +58,15 @@ import {
   type ActiveProviders,
   checkProviderReadiness,
   diagnoseProviders,
+  embeddingIdentity,
   environmentProviders,
   providerMode,
   ProviderRuntimeError,
 } from "./provider_runtime.ts";
+import {
+  rebuildSemanticIndex,
+  validateSemanticRebuildLimit,
+} from "./semantic_index.ts";
 import type { ProviderProfileStore } from "./provider_profile_store.ts";
 import { ProviderProfileError } from "./provider_profile.ts";
 import {
@@ -155,8 +160,13 @@ class IngestGate {
   private globalJobs = 0;
   private userJobs = new Map<string, number>();
 
-  acquire(identity: string, signal: AbortSignal): Promise<() => void> {
+  acquire(
+    identity: string,
+    signal: AbortSignal,
+    options: { countTowardsQuota?: boolean } = {},
+  ): Promise<() => void> {
     this.resetDay();
+    const countTowardsQuota = options.countTowardsQuota !== false;
     if (
       this.activeIdentity === identity ||
       this.queue.some((entry) => entry.identity === identity)
@@ -164,6 +174,7 @@ class IngestGate {
       throw new ApiError(429, "BUSY", "An ingest job is already pending", 30);
     }
     if (
+      countTowardsQuota &&
       (this.userJobs.get(identity) ?? 0) >= config.security.perUserDailyJobs
     ) {
       throw new ApiError(
@@ -173,7 +184,9 @@ class IngestGate {
         3600,
       );
     }
-    if (this.globalJobs >= config.security.globalDailyJobs) {
+    if (
+      countTowardsQuota && this.globalJobs >= config.security.globalDailyJobs
+    ) {
       throw new ApiError(
         429,
         "QUOTA_EXCEEDED",
@@ -191,8 +204,10 @@ class IngestGate {
       throw new ApiError(400, "REQUEST_CANCELLED", "Request cancelled");
     }
 
-    this.globalJobs++;
-    this.userJobs.set(identity, (this.userJobs.get(identity) ?? 0) + 1);
+    if (countTowardsQuota) {
+      this.globalJobs++;
+      this.userJobs.set(identity, (this.userJobs.get(identity) ?? 0) + 1);
+    }
     if (this.activeIdentity === null) {
       this.activeIdentity = identity;
       return Promise.resolve(this.releaseFor(identity));
@@ -241,8 +256,6 @@ class IngestGate {
   }
 }
 
-const ingestGate = new IngestGate();
-
 class SemanticSearchGate {
   private windows = new Map<string, { startedAt: number; count: number }>();
 
@@ -265,12 +278,27 @@ class SemanticSearchGate {
   }
 }
 
-const semanticSearchGate = new SemanticSearchGate();
-
 function asSseData(data: unknown): SseData {
   return data !== null && typeof data === "object" && !Array.isArray(data)
     ? data as SseData
     : {};
+}
+
+function semanticIndexView(
+  status: ReturnType<DB["semanticIndexStatus"]> & {
+    processed?: number;
+    links?: number;
+  },
+) {
+  return {
+    compatible: status.compatible,
+    embedded: status.embedded,
+    total: status.total,
+    remaining: status.remaining,
+    complete: status.complete,
+    ...(status.processed === undefined ? {} : { processed: status.processed }),
+    ...(status.links === undefined ? {} : { links: status.links }),
+  };
 }
 
 export function createHandler(
@@ -280,6 +308,8 @@ export function createHandler(
   providerSettings?: ProviderSettingsDependencies,
   ingestDependencies: IngestDependencies = { ingestYouTube },
 ): (req: Request) => Promise<Response> {
+  const ingestGate = new IngestGate();
+  const semanticSearchGate = new SemanticSearchGate();
   return async function handle(req: Request): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
@@ -330,6 +360,9 @@ export function createHandler(
               "Set 'confirm' to 'REBUILD' to rebuild the local catalog",
             );
           }
+          const release = await ingestGate.acquire(identity, req.signal, {
+            countTowardsQuota: false,
+          });
           try {
             return json({ rebuild: await rebuildVaultCatalog(db) });
           } catch (error) {
@@ -341,6 +374,47 @@ export function createHandler(
               );
             }
             throw error;
+          } finally {
+            release();
+          }
+        }
+        if (path === "/api/semantic-index" && method === "GET") {
+          return json({
+            semanticIndex: semanticIndexView(db.semanticIndexStatus()),
+          });
+        }
+        if (path === "/api/semantic-index/rebuild" && method === "POST") {
+          requireIngester(identity);
+          const body = await readJson(req);
+          if (body.confirm !== "REBUILD SEMANTIC INDEX") {
+            throw new ApiError(
+              400,
+              "CONFIRMATION_REQUIRED",
+              "Set 'confirm' to 'REBUILD SEMANTIC INDEX' to rebuild semantic search and suggestions",
+            );
+          }
+          let limit: number;
+          try {
+            limit = validateSemanticRebuildLimit(body.limit);
+          } catch (error) {
+            throw new ApiError(400, "INVALID_INPUT", errMsg(error));
+          }
+          semanticSearchGate.check(identity);
+          const release = await ingestGate.acquire(identity, req.signal, {
+            countTowardsQuota: false,
+          });
+          try {
+            return json({
+              semanticIndex: semanticIndexView(
+                await rebuildSemanticIndex(
+                  db,
+                  await resolveProviders(),
+                  limit,
+                ),
+              ),
+            });
+          } finally {
+            release();
           }
         }
         if (path === "/api/schema" && method === "PUT") {
@@ -402,6 +476,7 @@ export function createHandler(
             try {
               approval = validateIngestProposalApproval(
                 req.body ? await readJson(req) : {},
+                { requireChanges: true },
               );
             } catch (error) {
               throw new ApiError(
@@ -488,26 +563,41 @@ export function createHandler(
           const pageIds = body.pageIds === undefined
             ? db.getAllNotes().map((note) => note.id)
             : positiveIdArray(body.pageIds, "pageIds", 12);
-          const providers = await resolveProviders();
-          return json(
-            await generateDiscoveries(
-              db,
-              pageIds,
-              providers.llm.apiBase,
-              providers.llm.apiKey,
-              providers.llm.consolidateModel,
-              await ensureWikiSchema(),
-              {
-                scope: body.pageIds === undefined ? "vault" : "seeded",
-                generation,
-              },
-            ),
-          );
+          semanticSearchGate.check(identity);
+          const release = await ingestGate.acquire(identity, req.signal, {
+            countTowardsQuota: false,
+          });
+          try {
+            const providers = await resolveProviders();
+            return json(
+              await generateDiscoveries(
+                db,
+                pageIds,
+                providers.llm.apiBase,
+                providers.llm.apiKey,
+                providers.llm.consolidateModel,
+                await ensureWikiSchema(),
+                {
+                  scope: body.pageIds === undefined ? "vault" : "seeded",
+                  generation,
+                },
+              ),
+            );
+          } finally {
+            release();
+          }
         }
         if (path === "/api/discoveries/batch" && method === "POST") {
           requireIngester(identity);
           const batch = validateDiscoveryBatchRequest(await readJson(req));
-          return json(await reviewDiscoveryBatch(db, batch));
+          const release = await ingestGate.acquire(identity, req.signal, {
+            countTowardsQuota: false,
+          });
+          try {
+            return json(await reviewDiscoveryBatch(db, batch));
+          } finally {
+            release();
+          }
         }
         const discoveryMatch = path.match(
           /^\/api\/discoveries\/(\d+)(?:\/(investigate|confirm|reject))?$/,
@@ -523,14 +613,21 @@ export function createHandler(
           }
           if (action && method === "POST") {
             requireIngester(identity);
-            const discovery = action === "confirm"
-              ? await confirmDiscovery(db, discoveryId)
-              : reviewDiscovery(
-                db,
-                discoveryId,
-                action === "investigate" ? "investigating" : "rejected",
-              );
-            return json({ discovery });
+            const release = await ingestGate.acquire(identity, req.signal, {
+              countTowardsQuota: false,
+            });
+            try {
+              const discovery = action === "confirm"
+                ? await confirmDiscovery(db, discoveryId)
+                : await reviewDiscovery(
+                  db,
+                  discoveryId,
+                  action === "investigate" ? "investigating" : "rejected",
+                );
+              return json({ discovery });
+            } finally {
+              release();
+            }
           }
         }
         if (path === "/api/provider" && method === "GET") {
@@ -566,6 +663,9 @@ export function createHandler(
             providers = await resolveProviders();
             return json({
               readiness: await checkProviderReadiness(providers),
+              semanticIndex: semanticIndexView(db.semanticIndexStatus(
+                embeddingIdentity(providers.embedding),
+              )),
             });
           } catch {
             const mode = providers
@@ -612,17 +712,30 @@ export function createHandler(
           }
           const body = await readJson(req);
           try {
+            const status = await configureProviders(
+              providerSettings.profiles,
+              providerSettings.secrets,
+              {
+                profile: body.profile,
+                llmApiKey: body.llmApiKey,
+                embeddingApiKey: body.embeddingApiKey,
+              },
+            );
+            if (!status.profile) {
+              throw new ProviderRuntimeError(
+                "Saved provider profile is unavailable",
+              );
+            }
+            const semanticIndex = semanticIndexView(db.activateSemanticIndex(
+              embeddingIdentity({
+                apiBase: status.profile.embedding.apiBase,
+                model: status.profile.embedding.model,
+              }),
+            ));
             return json({
-              ...await configureProviders(
-                providerSettings.profiles,
-                providerSettings.secrets,
-                {
-                  profile: body.profile,
-                  llmApiKey: body.llmApiKey,
-                  embeddingApiKey: body.embeddingApiKey,
-                },
-              ),
+              ...status,
               source: "profile",
+              semanticIndex,
             });
           } catch (error) {
             if (
@@ -1074,10 +1187,23 @@ export function createHandler(
             const results = mode === "keyword"
               ? keywordSearch(db, q)
               : mode === "semantic"
-              ? await semanticSearch(db, q, identity, resolveProviders)
-              : await hybridSearch(db, q, identity, resolveProviders);
-            return json({ results, query: q });
+              ? await semanticSearch(
+                db,
+                q,
+                identity,
+                resolveProviders,
+                semanticSearchGate,
+              )
+              : await hybridSearch(
+                db,
+                q,
+                identity,
+                resolveProviders,
+                semanticSearchGate,
+              );
+            return json({ results: orderSearchResults(results), query: q });
           } catch (err) {
+            if (err instanceof ApiError) throw err;
             logFailure(requestId, "Search", err);
             return errorResponse(
               500,
@@ -1171,6 +1297,7 @@ async function retrieveWikiContext(
   );
   let semanticIds: number[] = [];
   try {
+    requireSemanticIndex(db, providers);
     const embedding = await DB.embedText(
       question,
       providers.embedding.apiBase,
@@ -1206,6 +1333,22 @@ async function retrieveWikiContext(
   );
 }
 
+function requireSemanticIndex(
+  db: DB,
+  providers: ActiveProviders,
+): void {
+  const status = db.semanticIndexStatus(
+    embeddingIdentity(providers.embedding),
+  );
+  if (!status.complete) {
+    throw new ApiError(
+      409,
+      "SEMANTIC_INDEX_INCOMPLETE",
+      `Semantic index is incomplete (${status.embedded}/${status.total} pages). Rebuild or resume it, or use keyword search.`,
+    );
+  }
+}
+
 async function wikiLintContext(
   db: DB,
   priorityIds: number[],
@@ -1238,9 +1381,11 @@ async function semanticSearch(
   query: string,
   identity: string,
   resolveProviders: ProviderResolver,
+  gate: SemanticSearchGate,
 ) {
-  semanticSearchGate.check(identity);
+  gate.check(identity);
   const provider = await resolveProviders();
+  requireSemanticIndex(db, provider);
   return db.searchSemantic(
     await DB.embedText(
       query,
@@ -1260,7 +1405,9 @@ function keywordSearch(db: DB, query: string) {
   return db.searchKeyword(query).map((result) => ({
     id: result.id,
     title: result.title,
-    score: 1 / (1 + Math.abs(result.rank)),
+    // SQLite FTS ranks better matches with smaller values. Negating the rank
+    // gives every search mode the same public ordering rule: higher is better.
+    score: -result.rank,
     matchType: "keyword",
   }));
 }
@@ -1270,19 +1417,33 @@ async function hybridSearch(
   query: string,
   identity: string,
   resolveProviders: ProviderResolver,
+  gate: SemanticSearchGate,
 ) {
   try {
     const provider = await resolveProviders();
-    semanticSearchGate.check(identity);
+    requireSemanticIndex(db, provider);
+    gate.check(identity);
     return await db.search(
       query,
       provider.embedding.apiBase,
       provider.embedding.apiKey,
       provider.embedding.model,
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "RATE_LIMITED") {
+      throw error;
+    }
     return keywordSearch(db, query);
   }
+}
+
+function orderSearchResults<
+  T extends { title: string; score: number },
+>(results: T[]): T[] {
+  return [...results].sort((left, right) =>
+    right.score - left.score ||
+    left.title.localeCompare(right.title, "en-US")
+  );
 }
 
 function authenticate(req: Request): string {
@@ -1585,7 +1746,16 @@ async function approveProposalAndRefresh(
   });
   if (refreshLinks) {
     send("linking");
-    db.computeLinksFor(result.touchedIds);
+    const semanticIndex = db.semanticIndexStatus();
+    if (semanticIndex.complete) db.computeLinksFor(result.touchedIds);
+    else {
+      db.clearLinks();
+      send("warning", {
+        error:
+          `Accepted changes were saved, but the semantic index is incomplete (${semanticIndex.embedded}/${semanticIndex.total} pages)`,
+        requestId,
+      });
+    }
   }
   if (!generateSynthesis) return result;
   try {
@@ -1797,7 +1967,9 @@ function trustedBatchStream(
     }
     if (applied > 0) {
       send("linking", { batchId, scope: "vault" });
-      db.computeLinks(config.link.k);
+      const semanticIndex = db.semanticIndexStatus();
+      if (semanticIndex.complete) db.computeLinks(config.link.k);
+      else db.clearLinks();
     }
     send("synthesizing", {
       batchId,

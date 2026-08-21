@@ -185,9 +185,17 @@ export function parseStoredIngestProposal(
 
 export function validateIngestProposalApproval(
   value: unknown,
+  options: { requireChanges?: boolean } = {},
 ): IngestProposalApproval {
   const approval = asRecord(value, "Ingest proposal approval");
-  if (approval.changes === undefined) return {};
+  if (approval.changes === undefined) {
+    if (options.requireChanges) {
+      throw new Error(
+        "Ingest proposal approval.changes must explicitly select reviewed changes",
+      );
+    }
+    return {};
+  }
   if (
     !Array.isArray(approval.changes) || approval.changes.length < 1 ||
     approval.changes.length > MAX_CHANGES

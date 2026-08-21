@@ -27,6 +27,7 @@ import {
 } from "./ingest_history.ts";
 import {
   type ActiveProviders,
+  embeddingIdentity,
   environmentProviders,
 } from "./provider_runtime.ts";
 import {
@@ -454,6 +455,7 @@ async function applyPreparedWikiChanges(
   touchedIds: number[];
   historyId?: string;
 }> {
+  db.activateSemanticIndex(embeddingIdentity(providers.embedding));
   send("embedding");
   const embeddedUpdates: EmbeddedUpdate[] = [];
   for (const update of preparedUpdates) {

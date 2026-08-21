@@ -1,5 +1,5 @@
 import type { DB } from "./db.ts";
-import { parseWikiPage } from "./wiki.ts";
+import { parseWikiPage, type WikiRelationship } from "./wiki.ts";
 
 export interface WikiGraphNode {
   id: number;
@@ -7,7 +7,12 @@ export interface WikiGraphNode {
 }
 
 export type WikiGraphLink =
-  | { source: number; target: number; kind: "explicit" }
+  | {
+    source: number;
+    target: number;
+    kind: "explicit";
+    relationships?: WikiRelationship[];
+  }
   | {
     source: number;
     target: number;
@@ -49,10 +54,25 @@ export async function buildWikiGraph(db: DB): Promise<WikiGraph> {
       if (targetIds?.length !== 1 || targetIds[0] === note.id) continue;
       const targetId = targetIds[0];
       const key = edgeKey(note.id, targetId);
+      const relationship = page.relationships?.filter((item) =>
+        normalizedTitle(item.target) === normalizedTitle(title)
+      ) ?? [];
+      const existing = explicit.get(key);
       explicit.set(key, {
         source: Math.min(note.id, targetId),
         target: Math.max(note.id, targetId),
         kind: "explicit",
+        ...((existing?.kind === "explicit" && existing.relationships) ||
+            relationship.length > 0
+          ? {
+            relationships: [
+              ...(existing?.kind === "explicit"
+                ? existing.relationships ?? []
+                : []),
+              ...relationship,
+            ],
+          }
+          : {}),
       });
     }
   }
@@ -91,6 +111,7 @@ export async function getRelatedWikiPages(
     title: string;
     kind: "explicit" | "semantic";
     similarity?: number;
+    relationships?: WikiRelationship[];
   }>
 > {
   const graph = await buildWikiGraph(db);
@@ -108,6 +129,9 @@ export async function getRelatedWikiPages(
       title,
       kind: link.kind,
       ...(link.kind === "semantic" ? { similarity: link.similarity } : {}),
+      ...(link.kind === "explicit" && link.relationships
+        ? { relationships: link.relationships }
+        : {}),
     }];
   }).sort((left, right) =>
     Number(left.kind === "semantic") - Number(right.kind === "semantic") ||

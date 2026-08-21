@@ -182,6 +182,7 @@ dbTest("catalog replacement is complete and transactional", async () => {
       explanation: "Old explanation.",
       significance: "Old significance.",
       page_ids_json: JSON.stringify([oldNoteId]),
+      page_hashes_json: JSON.stringify(["a".repeat(64)]),
       source_ids_json: JSON.stringify([oldSourceId]),
       production_method: "test",
       model: "test-model",
@@ -385,6 +386,7 @@ dbTest(
         explanation: "The pages report compatible observations.",
         significance: "The connection may focus a follow-up review.",
         page_ids_json: "[1,2]",
+        page_hashes_json: JSON.stringify(["a".repeat(64), "b".repeat(64)]),
         source_ids_json: "[4]",
         production_method: "llm_graph_review",
         model: "local-model",
@@ -496,6 +498,7 @@ dbTest("discovery candidate progress is resumable and guarded", async () => {
       explanation: "Evidence supports a connection.",
       significance: "The connection may matter.",
       page_ids_json: JSON.stringify([first, second]),
+      page_hashes_json: JSON.stringify(["a".repeat(64), "b".repeat(64)]),
       source_ids_json: "[1,2]",
       production_method: "test",
       model: "local-model",
@@ -528,7 +531,7 @@ dbTest("discovery candidate progress is resumable and guarded", async () => {
 });
 
 dbTest(
-  "semantic links exhaustively retain ranked cross-source neighbours",
+  "semantic links require positive mutual cross-source neighbours",
   async () => {
     await withTempDb((db, dir) => {
       const first = db.addNote("First", `${dir}/first.md`, null, "text");
@@ -578,7 +581,7 @@ dbTest(
       db.upsertLink(first, second, 0.99);
       db.upsertLink(first, fourth, 0.98);
 
-      assert.equal(db.computeLinksFor([first, first], 1), 3);
+      assert.equal(db.computeLinksFor([first, first], 1), 1);
       const rebuilt = db.getLinks().map((link) => ({ ...link }));
       assert.equal(
         rebuilt.some((link) => link.source === first && link.target === second),
@@ -586,9 +589,9 @@ dbTest(
         "pages from the same source must not consume cross-source neighbours",
       );
       assert.equal(
-        rebuilt.some((link) => link.source === first && link.target === third),
+        rebuilt.some((link) => link.source === second && link.target === third),
         true,
-        "a lower-scoring cross-source neighbour must survive without an absolute threshold",
+        "a mutually ranked cross-source neighbour must survive",
       );
       assert.equal(
         rebuilt.some((link) => link.source === first && link.target === fourth),
@@ -597,7 +600,7 @@ dbTest(
       );
       assert.deepEqual(
         rebuilt.map((link) => [link.source, link.target]),
-        [[first, third], [second, third], [third, fourth]],
+        [[second, third]],
       );
 
       assert.equal(db.computeLinksFor([], 1), 0);
@@ -611,7 +614,7 @@ dbTest(
 );
 
 dbTest(
-  "large single-source groups cannot hide their nearest cross-source page",
+  "orthogonal nearest neighbours do not become semantic links",
   async () => {
     await withTempDb((db, dir) => {
       const sharedSource = db.addSource(
@@ -635,7 +638,7 @@ dbTest(
         y,
         ...Array<number>(config.embed.dimensions - 2).fill(0),
       ];
-      const sharedNotes = Array.from({ length: 66 }, (_, index) => {
+      for (let index = 0; index < 66; index++) {
         const noteId = db.addNote(
           `Shared ${index}`,
           `${dir}/shared-${index}.md`,
@@ -644,8 +647,7 @@ dbTest(
         );
         db.attachNoteSource(noteId, sharedSource, "new");
         db.upsertEmbedding(noteId, vector(1, 0));
-        return noteId;
-      });
+      }
       const external = db.addNote(
         "External",
         `${dir}/external.md`,
@@ -655,18 +657,9 @@ dbTest(
       db.attachNoteSource(external, externalSource, "new");
       db.upsertEmbedding(external, vector(0, 1));
 
-      assert.equal(db.computeLinks(1), sharedNotes.length);
+      assert.equal(db.computeLinks(1), 0);
       const links = db.getLinks();
-      assert.equal(links.length, sharedNotes.length);
-      assert.equal(
-        sharedNotes.every((noteId) =>
-          links.some((link) =>
-            link.source === Math.min(noteId, external) &&
-            link.target === Math.max(noteId, external)
-          )
-        ),
-        true,
-      );
+      assert.deepEqual(links, []);
     });
   },
 );

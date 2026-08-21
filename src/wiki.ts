@@ -1,11 +1,33 @@
 export type WikiPageType = "concept" | "entity" | "synthesis";
 
+export type WikiRelationshipType =
+  | "consolidation_candidate"
+  | "supports"
+  | "contradicts"
+  | "mechanistic"
+  | "causal_hypothesis"
+  | "temporal"
+  | "depends_on"
+  | "analogous"
+  | "shared_constraint"
+  | "research_gap";
+
+export interface WikiRelationship {
+  target: string;
+  type: WikiRelationshipType;
+  explanation: string;
+  significance: string;
+  pageHashes: string[];
+  confirmedAt: string;
+}
+
 export interface WikiPage {
   title: string;
   type: WikiPageType;
   body: string;
   tags: string[];
   links: string[];
+  relationships?: WikiRelationship[];
 }
 
 export interface WikiChange {
@@ -51,8 +73,21 @@ const MAX_BODY_LENGTH = 20_000;
 const MAX_TAGS = 12;
 const MAX_TAG_LENGTH = 64;
 const MAX_LINKS = 50;
+const MAX_RELATIONSHIPS = 50;
 const MAX_SOURCE_PAGES = 50;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const RELATIONSHIP_TYPES = new Set<WikiRelationshipType>([
+  "consolidation_candidate",
+  "supports",
+  "contradicts",
+  "mechanistic",
+  "causal_hypothesis",
+  "temporal",
+  "depends_on",
+  "analogous",
+  "shared_constraint",
+  "research_gap",
+]);
 const CLAIM_MARKER_PATTERN =
   /^<!-- synthesis-claim:([a-f0-9]{64}(?:,[a-f0-9]{64})*) -->$/;
 
@@ -158,6 +193,10 @@ export function validateWikiPage(value: unknown): WikiPage {
     link.toLocaleLowerCase("en-US") !== title.toLocaleLowerCase("en-US")
   );
 
+  const relationships = page.relationships === undefined
+    ? undefined
+    : validateWikiRelationships(page.relationships, title, links);
+
   return {
     title,
     type: page.type as WikiPageType,
@@ -169,7 +208,83 @@ export function validateWikiPage(value: unknown): WikiPage {
       (tag, context) => requiredText(tag, context, MAX_TAG_LENGTH),
     ),
     links,
+    ...(relationships === undefined ? {} : { relationships }),
   };
+}
+
+function validateWikiRelationships(
+  value: unknown,
+  pageTitleValue: string,
+  links: string[],
+): WikiRelationship[] {
+  if (!Array.isArray(value) || value.length > MAX_RELATIONSHIPS) {
+    throw new Error(
+      `Wiki page.relationships must contain at most ${MAX_RELATIONSHIPS} items`,
+    );
+  }
+  const linkKeys = new Set(
+    links.map((link) => link.toLocaleLowerCase("en-US")),
+  );
+  const unique = new Map<string, WikiRelationship>();
+  value.forEach((item, index) => {
+    const context = `Wiki page.relationships[${index}]`;
+    const relationship = asRecord(item, context);
+    const target = pageTitle(relationship.target, `${context}.target`);
+    if (
+      target.toLocaleLowerCase("en-US") ===
+        pageTitleValue.toLocaleLowerCase("en-US")
+    ) {
+      throw new Error(`${context}.target must reference another page`);
+    }
+    if (!linkKeys.has(target.toLocaleLowerCase("en-US"))) {
+      throw new Error(`${context}.target must also appear in Wiki page.links`);
+    }
+    if (
+      typeof relationship.type !== "string" ||
+      !RELATIONSHIP_TYPES.has(relationship.type as WikiRelationshipType)
+    ) {
+      throw new Error(`${context}.type is not supported`);
+    }
+    if (
+      !Array.isArray(relationship.pageHashes) ||
+      relationship.pageHashes.length < 2 ||
+      relationship.pageHashes.length > 4 ||
+      relationship.pageHashes.some((hash) =>
+        typeof hash !== "string" || !SHA256_PATTERN.test(hash)
+      )
+    ) {
+      throw new Error(`${context}.pageHashes must contain 2-4 SHA-256 hashes`);
+    }
+    const confirmedAt = requiredText(
+      relationship.confirmedAt,
+      `${context}.confirmedAt`,
+      40,
+    );
+    if (!Number.isFinite(Date.parse(confirmedAt))) {
+      throw new Error(`${context}.confirmedAt must be an ISO timestamp`);
+    }
+    const parsed: WikiRelationship = {
+      target,
+      type: relationship.type as WikiRelationshipType,
+      explanation: requiredText(
+        relationship.explanation,
+        `${context}.explanation`,
+        1_000,
+      ),
+      significance: requiredText(
+        relationship.significance,
+        `${context}.significance`,
+        1_000,
+      ),
+      pageHashes: [...new Set(relationship.pageHashes as string[])],
+      confirmedAt: new Date(confirmedAt).toISOString(),
+    };
+    unique.set(
+      `${target.toLocaleLowerCase("en-US")}|${parsed.type}`,
+      parsed,
+    );
+  });
+  return [...unique.values()];
 }
 
 export function renderWikiLink(title: string): string {
@@ -312,6 +427,9 @@ export function parseWikiPage(markdown: string): WikiPage {
   const type = fields.get("type");
   const tags = parseJsonField(fields, "tags");
   const links = parseJsonField(fields, "links");
+  const relationships = fields.has("relationships")
+    ? parseJsonField(fields, "relationships")
+    : undefined;
   const content = normalized.slice(frontmatter[0].length);
   const headingEnd = content.indexOf("\n");
   if (headingEnd === -1 || !content.startsWith("# ")) {
@@ -333,7 +451,14 @@ export function parseWikiPage(markdown: string): WikiPage {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return validateWikiPage({ title, type, body, tags, links });
+  return validateWikiPage({
+    title,
+    type,
+    body,
+    tags,
+    links,
+    ...(relationships === undefined ? {} : { relationships }),
+  });
 }
 
 function validateSourceReference(source: SourceReference): SourceReference {
@@ -521,6 +646,9 @@ export function renderWikiPage(
     `type: ${page.type}`,
     `tags: [${page.tags.map((tag) => JSON.stringify(tag)).join(", ")}]`,
     `links: [${page.links.map((link) => JSON.stringify(link)).join(", ")}]`,
+    ...(page.relationships?.length
+      ? [`relationships: ${JSON.stringify(page.relationships)}`]
+      : []),
     "---",
   ];
   const sections = [frontmatter.join("\n"), `# ${page.title}`, renderedBody];
