@@ -87,9 +87,18 @@ async function seedWiki(vault: string): Promise<void> {
   );
 }
 
+export function browserExecutableArgument(
+  args: readonly string[],
+): string | undefined {
+  const candidate = args[0] === "--" ? args[1] : args[0];
+  return candidate?.trim() || undefined;
+}
+
 async function browserCommand(): Promise<string> {
-  const explicit = Deno.args[0]?.trim();
-  const candidates = explicit ? [explicit] : Deno.build.os === "windows"
+  const explicit = browserExecutableArgument(Deno.args);
+  if (explicit) return explicit;
+
+  const candidates = Deno.build.os === "windows"
     ? [
       "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
@@ -395,4 +404,4 @@ async function run(): Promise<void> {
   }
 }
 
-await run();
+if (import.meta.main) await run();
