@@ -110,7 +110,8 @@ environment defaults and currently use one selected chat model for every role.
 This profile trades speed for capacity. It should be evaluated on representative
 sources and does not remove evidence checking or human review. In particular,
 trusting a source does not guarantee that an automatically generated summary or
-relationship preserves every qualification in that source.
+relationship preserves every qualification in that source. Provider calls have a
+ten-minute default timeout so slower local 122B decisions can complete.
 
 ### Remote OpenAI-compatible provider
 
@@ -320,6 +321,7 @@ environment variables. Common settings are:
 | `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                       | Multipart upload limit       |
 | `SYNTHESIS_MAX_PDF_PAGES`           | `500`                            | PDF page limit               |
 | `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                          | PDF extraction timeout       |
+| `SYNTHESIS_MODEL_TIMEOUT_MS`        | `600000`                         | Provider request timeout     |
 | `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS` | `100`                            | Automatic video limit        |
 
 See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the complete configuration

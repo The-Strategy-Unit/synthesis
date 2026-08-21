@@ -91,7 +91,7 @@ override with validation (clamping, enum checks, minimum bounds).
 | `SYNTHESIS_MAX_TRANSCRIPT_CHARS`         | 500000  | clamped 1000–2,000,000                 |
 | `SYNTHESIS_MAX_SUBTITLE_BYTES`           | 10 MiB  | clamped 1–100 MiB                      |
 | `SYNTHESIS_YT_DLP_TIMEOUT_MS`            | 120000  | clamped 5 seconds–30 minutes           |
-| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 180000  | clamped 5 seconds–30 minutes           |
+| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 600000  | clamped 5 seconds–30 minutes           |
 | `SYNTHESIS_INGEST_QUEUE_SIZE`            | 4       | clamped 0–100                          |
 | `SYNTHESIS_PER_USER_DAILY_JOBS`          | 5       | clamped 1–10000                        |
 | `SYNTHESIS_GLOBAL_DAILY_JOBS`            | 20      | clamped 1–100000                       |

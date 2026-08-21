@@ -186,7 +186,7 @@ export const config = {
       "SYNTHESIS_MODEL_TIMEOUT_MS",
       5000,
       30 * 60 * 1000,
-      3 * 60 * 1000,
+      10 * 60 * 1000,
     ),
     pdfParseTimeoutMs: envIntClamped(
       "SYNTHESIS_PDF_PARSE_TIMEOUT_MS",
