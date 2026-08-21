@@ -744,6 +744,24 @@ Deno.test({
         initial.discoveries[0].id,
       );
       assert.equal(calls, 2);
+
+      const firstPage = parseWikiPage(
+        await Deno.readTextFile(pagePaths[0]),
+      );
+      await Deno.writeTextFile(
+        pagePaths[0],
+        renderWikiPage({
+          ...firstPage,
+          links: ["Stale concept 2"],
+        }, [{
+          title: "Stale source 1",
+          contentHash: "7".repeat(64),
+        }]),
+      );
+      await assert.rejects(
+        confirmDiscovery(db, refreshed.discoveries[0].id),
+        /no longer has an unlinked page pair/,
+      );
     } finally {
       globalThis.fetch = originalFetch;
       db.close();

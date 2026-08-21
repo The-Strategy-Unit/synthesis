@@ -1247,38 +1247,43 @@ export async function confirmDiscovery(
   const graph = await buildWikiGraph(db);
   const explicitPairs = explicitPairKeys(graph.links);
   const pair = selectDiscoveryPair(db, view, explicitPairs);
-
-  let original: string | undefined;
-  let sourcePath: string | undefined;
-  if (pair) {
-    const source = db.getNote(pair[0]);
-    const target = db.getNote(pair[1]);
-    if (!source || !target) throw new Error(`Discovery ${id} page is missing`);
-    sourcePath = source.file_path;
-    original = await Deno.readTextFile(sourcePath);
-    const page = parseWikiPage(original);
-    const links = [...page.links, target.title];
-    await replaceFile(
-      sourcePath,
-      renderWithExistingSources(original, links, {
-        target: target.title,
-        type: view.relationshipType as WikiRelationship["type"],
-        explanation: view.explanation,
-        significance: view.significance,
-        pageHashes: view.pageHashes,
-        confirmedAt: new Date().toISOString(),
-      }),
+  if (!pair) {
+    throw new DiscoveryStateError(
+      `Discovery ${id} no longer has an unlinked page pair`,
     );
   }
+
+  const source = db.getNote(pair[0]);
+  const target = db.getNote(pair[1]);
+  if (!source || !target) throw new Error(`Discovery ${id} page is missing`);
+  const sourcePath = source.file_path;
+  const original = await Deno.readTextFile(sourcePath);
+  const page = parseWikiPage(original);
+  const links = [...page.links, target.title];
+  const content = renderWithExistingSources(original, links, {
+    target: target.title,
+    type: view.relationshipType as WikiRelationship["type"],
+    explanation: view.explanation,
+    significance: view.significance,
+    pageHashes: view.pageHashes,
+    confirmedAt: new Date().toISOString(),
+  });
+  const record = db.getDiscovery(id);
+  if (!record) throw new DiscoveryNotFoundError(`Discovery ${id} not found`);
+  await assertDiscoveryEvidenceCurrent(db, record);
+  if (await Deno.readTextFile(sourcePath) !== original) {
+    throw new DiscoveryStateError(
+      `Discovery ${id} page changed while confirmation was prepared`,
+    );
+  }
+  await replaceFile(sourcePath, content);
 
   try {
     if (!db.reviewDiscovery(id, "confirmed")) {
       throw new DiscoveryStateError(`Discovery ${id} is no longer reviewable`);
     }
   } catch (error) {
-    if (original !== undefined && sourcePath !== undefined) {
-      await replaceFile(sourcePath, original);
-    }
+    await replaceFile(sourcePath, original);
     throw error;
   }
   return getDiscoveryView(db, id);
@@ -1349,6 +1354,13 @@ export async function reviewDiscoveryBatch(
     );
   }
 
+  for (const view of views) {
+    const record = db.getDiscovery(view.id);
+    if (!record) {
+      throw new DiscoveryNotFoundError(`Discovery ${view.id} not found`);
+    }
+    await assertDiscoveryEvidenceCurrent(db, record);
+  }
   for (const [path, original] of originals) {
     if (await Deno.readTextFile(path) !== original) {
       throw new DiscoveryStateError(
