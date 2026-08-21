@@ -397,12 +397,12 @@ can promote a relationship into canonical Markdown.
 
 ### LLM pipeline stages
 
-| Stage       | Model role         | Default model | Temperature | Max tokens | JSON mode |
-| ----------- | ------------------ | ------------- | ----------- | ---------- | --------- |
-| Extract     | `extractModel`     | `qwen3.5:9b`  | 0           | 2000       | yes       |
-| Consolidate | `consolidateModel` | `qwen3.5:9b`  | 0.1         | 4000       | yes       |
-| Integrate   | `integrateModel`   | `qwen3.5:9b`  | 0.1         | 2000       | yes       |
-| Rewrite     | `rewriteModel`     | `qwen3.5:9b`  | -           | 2000       | no        |
+| Stage       | Model role         | Default model  | Temperature | Max tokens | JSON mode |
+| ----------- | ------------------ | -------------- | ----------- | ---------- | --------- |
+| Extract     | `extractModel`     | `qwen3.5:9b`   | 0           | 2000       | yes       |
+| Consolidate | `consolidateModel` | `qwen3.5:122b` | 0.1         | 4000       | yes       |
+| Integrate   | `integrateModel`   | `qwen3.5:122b` | 0.1         | 2000       | yes       |
+| Rewrite     | `rewriteModel`     | `qwen3.5:122b` | -           | 2000       | no        |
 
 All LLM calls go through `src/llm.ts`, which constructs OpenAI-compatible
 `/chat/completions` requests and validates provider envelopes. Local Ollama

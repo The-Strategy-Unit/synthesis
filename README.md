@@ -88,11 +88,8 @@ pulled. The start task creates the local vault if necessary and opens
 
 ### Model sizing
 
-The accessible default uses `qwen3.5:9b` for every language-model role. It is a
-practical starting point for supervised local evaluation, not a quality
-guarantee. On hardware that can run the larger model, the recommended
-quality-oriented profile keeps high-volume extraction on 9B and assigns harder
-editorial judgements to 122B:
+The quality-first default keeps high-volume extraction on `qwen3.5:9b` and
+assigns harder editorial judgements to `qwen3.5:122b`:
 
 ```bash
 SYNTHESIS_EXTRACT_MODEL=qwen3.5:9b \
@@ -102,11 +99,13 @@ SYNTHESIS_REWRITE_MODEL=qwen3.5:122b \
 deno task app
 ```
 
-The larger model then handles source consolidation, `new|merge|contradict`
-decisions, page-body rewriting, and cross-source discovery; the configured
-embedding model remains responsible for retrieval and candidate similarity.
-Saved Provider profiles take precedence over these environment defaults, so set
-the same role models in **Provider** when a profile already exists.
+The larger model handles source consolidation, `new|merge|contradict` decisions,
+page-body rewriting, and cross-source discovery; the configured embedding model
+remains responsible for retrieval and candidate similarity. Synthesis reports a
+missing 122B model instead of silently substituting a smaller model. On hosts
+where 122B is not practical, explicitly override the three decision roles with a
+smaller evaluated model. Saved Provider profiles take precedence over
+environment defaults and currently use one selected chat model for every role.
 
 This profile trades speed for capacity. It should be evaluated on representative
 sources and does not remove evidence checking or human review. In particular,
@@ -311,9 +310,9 @@ environment variables. Common settings are:
 | `SYNTHESIS_PORT`                    | `8000`                           | HTTP port                    |
 | `SYNTHESIS_API_BASE`                | `http://localhost:11434/v1`      | Default chat API             |
 | `SYNTHESIS_EXTRACT_MODEL`           | `qwen3.5:9b`                     | Chunk extraction             |
-| `SYNTHESIS_CONSOLIDATE_MODEL`       | `qwen3.5:9b`                     | Source synthesis             |
-| `SYNTHESIS_INTEGRATE_MODEL`         | `qwen3.5:9b`                     | Integration decisions        |
-| `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:9b`                     | Page rewriting               |
+| `SYNTHESIS_CONSOLIDATE_MODEL`       | `qwen3.5:122b`                   | Source synthesis             |
+| `SYNTHESIS_INTEGRATE_MODEL`         | `qwen3.5:122b`                   | Integration decisions        |
+| `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:122b`                   | Page rewriting               |
 | `SYNTHESIS_EMBED_MODEL`             | `nomic-embed-text-v2-moe:latest` | Embeddings                   |
 | `SYNTHESIS_EMBED_DIMENSIONS`        | `768`                            | Required embedding width     |
 | `SYNTHESIS_LINK_K`                  | `8`                              | Mutual-neighbour breadth     |

@@ -107,13 +107,13 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Model roles
 
-| Variable                      | Default      | Used by                             |
-| ----------------------------- | ------------ | ----------------------------------- |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b` | Per-chunk extraction                |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:9b` | Source-level consolidation          |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b` | new/merge/contradict decisions      |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:9b` | Rewriting existing notes            |
-| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:9b` | Backward-compat / API response only |
+| Variable                      | Default        | Used by                             |
+| ----------------------------- | -------------- | ----------------------------------- |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`   | Per-chunk extraction                |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:122b` | Source-level consolidation          |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:122b` | new/merge/contradict decisions      |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:122b` | Rewriting existing notes            |
+| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:122b` | Backward-compat / API response only |
 
 ### LLM tuning
 

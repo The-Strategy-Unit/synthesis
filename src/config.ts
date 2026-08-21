@@ -224,13 +224,14 @@ export const config = {
     apiBase: env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
     apiKey: env("SYNTHESIS_API_KEY", "ollama"),
 
-    // Roles can be overridden independently; one model keeps local setup simple.
+    // Keep bulk extraction responsive while using the quality-first model for
+    // editorial and cross-source synthesis decisions.
     extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.5:9b"),
-    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.5:9b"),
-    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:9b"),
-    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.5:9b"),
+    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.5:122b"),
+    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:122b"),
+    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.5:122b"),
     // Kept for backward compat in API responses
-    model: env("SYNTHESIS_LLM_MODEL", "qwen3.5:9b"),
+    model: env("SYNTHESIS_LLM_MODEL", "qwen3.5:122b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
     extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),
@@ -336,7 +337,7 @@ export const config = {
 
   build: {
     version: "0.1.0",
-    llmModel: env("SYNTHESIS_LLM_MODEL", "qwen3.5:9b"),
+    llmModel: env("SYNTHESIS_LLM_MODEL", "qwen3.5:122b"),
     embedModel: env(
       "SYNTHESIS_EMBED_MODEL",
       "nomic-embed-text-v2-moe:latest",
