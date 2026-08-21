@@ -22,6 +22,10 @@ export function compiledFileName(
   return hostOs === "windows" ? "synthesis.exe" : "synthesis";
 }
 
+export function compiledDisplayPath(fileName: string): string {
+  return `dist/${fileName}`;
+}
+
 export function compileArguments(
   target: CompileTarget,
   output: string,
@@ -71,7 +75,11 @@ async function main(): Promise<void> {
   const output = join(DIST_DIRECTORY, compiledFileName(target));
   await runDeno(compileArguments(target, output));
   const sizeMiB = (await Deno.stat(output)).size / 1024 / 1024;
-  console.log(`Created ${output} (${sizeMiB.toFixed(1)} MiB)`);
+  console.log(
+    `Created ${compiledDisplayPath(compiledFileName(target))} (${
+      sizeMiB.toFixed(1)
+    } MiB)`,
+  );
 }
 
 if (import.meta.main) await main();

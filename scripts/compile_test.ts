@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   compileArguments,
+  compiledDisplayPath,
   compiledFileName,
   parseCompileTarget,
 } from "./compile.ts";
@@ -15,6 +16,8 @@ Deno.test("Windows compilation is explicit, native-compatible, and QuickJS", () 
     "synthesis-windows-x86_64.exe",
   );
   assert.equal(compiledFileName("host", "windows"), "synthesis.exe");
+  assert.equal(compiledDisplayPath("synthesis"), "dist/synthesis");
+  assert.equal(compiledDisplayPath("synthesis").startsWith("/"), false);
 
   const args = compileArguments("windows", "dist/synthesis.exe");
   assert.deepEqual(args.slice(0, 6), [
