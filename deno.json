@@ -16,8 +16,8 @@
     "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
     "test:unit": "deno test && deno test --no-config --allow-read=web web/",
     "test:integration": "deno run --allow-all scripts/test.ts",
-    "test:e2e": "deno test --allow-run --allow-net=127.0.0.1 --allow-read=.,/tmp --allow-write=/tmp scripts/ui_shell_e2e_test.ts",
-    "test:compiled": "deno run --allow-read=.,/tmp --allow-write=/tmp --allow-run --allow-net=127.0.0.1 scripts/compiled_smoke.ts"
+    "test:e2e": "deno run --allow-env=TEMP,TMP,TMPDIR --allow-run scripts/scoped_test_runner.ts e2e",
+    "test:compiled": "deno run --allow-env=TEMP,TMP,TMPDIR --allow-run scripts/scoped_test_runner.ts compiled"
   },
   "test": {
     "include": [
@@ -31,7 +31,8 @@
       "src/provider_runtime_test.ts",
       "src/secret_store_test.ts",
       "src/static_files_test.ts",
-      "scripts/compile_test.ts"
+      "scripts/compile_test.ts",
+      "scripts/scoped_test_runner_test.ts"
     ]
   },
   "imports": {
