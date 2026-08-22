@@ -528,13 +528,41 @@ dbTest("discovery candidate progress is resumable and guarded", async () => {
 });
 
 dbTest(
-  "incremental and full link recomputation maintain the expected graph",
+  "semantic links exhaustively retain ranked cross-source neighbours",
   async () => {
     await withTempDb((db, dir) => {
       const first = db.addNote("First", `${dir}/first.md`, null, "text");
       const second = db.addNote("Second", `${dir}/second.md`, null, "text");
       const third = db.addNote("Third", `${dir}/third.md`, null, "text");
       const fourth = db.addNote("Fourth", `${dir}/fourth.md`, null, "text");
+      const sharedSource = db.addSource(
+        "shared-source-hash",
+        "Shared source",
+        null,
+        "text",
+        `${dir}/shared-source.txt`,
+        "",
+      );
+      const thirdSource = db.addSource(
+        "third-source-hash",
+        "Third source",
+        null,
+        "text",
+        `${dir}/third-source.txt`,
+        "",
+      );
+      const fourthSource = db.addSource(
+        "fourth-source-hash",
+        "Fourth source",
+        null,
+        "text",
+        `${dir}/fourth-source.txt`,
+        "",
+      );
+      db.attachNoteSource(first, sharedSource, "new");
+      db.attachNoteSource(second, sharedSource, "new");
+      db.attachNoteSource(third, thirdSource, "new");
+      db.attachNoteSource(fourth, fourthSource, "new");
 
       const vector = (x: number, y: number, z: number): number[] => [
         x,
@@ -543,45 +571,102 @@ dbTest(
         ...Array<number>(config.embed.dimensions - 3).fill(0),
       ];
       db.upsertEmbedding(first, vector(1, 0, 0));
-      db.upsertEmbedding(second, vector(0.8, 0.6, 0));
-      db.upsertEmbedding(third, vector(0, 1, 0));
-      db.upsertEmbedding(fourth, vector(0, 0, 1));
+      db.upsertEmbedding(second, vector(0.9, 0.435_889_9, 0));
+      db.upsertEmbedding(third, vector(0.8, 0.6, 0));
+      db.upsertEmbedding(fourth, vector(0, 1, 0));
 
-      db.upsertLink(first, third, 0.95);
-      db.upsertLink(third, fourth, 0.88);
+      db.upsertLink(first, second, 0.99);
+      db.upsertLink(first, fourth, 0.98);
 
-      assert.equal(db.computeLinksFor([first, first], 0.75, 4), 1);
-      const incremental = db.getLinks().map((link) => ({ ...link }));
+      assert.equal(db.computeLinksFor([first, first], 1), 3);
+      const rebuilt = db.getLinks().map((link) => ({ ...link }));
       assert.equal(
-        incremental.filter((link) =>
-          link.source === first && link.target === second
-        ).length,
-        1,
-        "the qualifying pair must be created exactly once",
-      );
-      assert.equal(
-        incremental.some((link) =>
-          link.source === first && link.target === third
-        ),
+        rebuilt.some((link) => link.source === first && link.target === second),
         false,
-        "the stale touched link must be removed",
+        "pages from the same source must not consume cross-source neighbours",
       );
       assert.equal(
-        incremental.some((link) =>
-          link.source === third && link.target === fourth &&
-          link.similarity === 0.88
+        rebuilt.some((link) => link.source === first && link.target === third),
+        true,
+        "a lower-scoring cross-source neighbour must survive without an absolute threshold",
+      );
+      assert.equal(
+        rebuilt.some((link) => link.source === first && link.target === fourth),
+        false,
+        "full recomputation must remove stale relationships",
+      );
+      assert.deepEqual(
+        rebuilt.map((link) => [link.source, link.target]),
+        [[first, third], [second, third], [third, fourth]],
+      );
+
+      assert.equal(db.computeLinksFor([], 1), 0);
+      assert.throws(
+        () => db.computeLinks(0),
+        /must be a positive integer/,
+      );
+      assert.equal(db.getLinks().length, rebuilt.length);
+    });
+  },
+);
+
+dbTest(
+  "large single-source groups cannot hide their nearest cross-source page",
+  async () => {
+    await withTempDb((db, dir) => {
+      const sharedSource = db.addSource(
+        "large-shared-source-hash",
+        "Large shared source",
+        null,
+        "text",
+        `${dir}/large-shared-source.txt`,
+        "",
+      );
+      const externalSource = db.addSource(
+        "external-source-hash",
+        "External source",
+        null,
+        "text",
+        `${dir}/external-source.txt`,
+        "",
+      );
+      const vector = (x: number, y: number): number[] => [
+        x,
+        y,
+        ...Array<number>(config.embed.dimensions - 2).fill(0),
+      ];
+      const sharedNotes = Array.from({ length: 66 }, (_, index) => {
+        const noteId = db.addNote(
+          `Shared ${index}`,
+          `${dir}/shared-${index}.md`,
+          null,
+          "text",
+        );
+        db.attachNoteSource(noteId, sharedSource, "new");
+        db.upsertEmbedding(noteId, vector(1, 0));
+        return noteId;
+      });
+      const external = db.addNote(
+        "External",
+        `${dir}/external.md`,
+        null,
+        "text",
+      );
+      db.attachNoteSource(external, externalSource, "new");
+      db.upsertEmbedding(external, vector(0, 1));
+
+      assert.equal(db.computeLinks(1), sharedNotes.length);
+      const links = db.getLinks();
+      assert.equal(links.length, sharedNotes.length);
+      assert.equal(
+        sharedNotes.every((noteId) =>
+          links.some((link) =>
+            link.source === Math.min(noteId, external) &&
+            link.target === Math.max(noteId, external)
+          )
         ),
         true,
-        "an unrelated link must survive incremental recomputation",
       );
-
-      db.upsertLink(first, fourth, 0.99);
-      assert.equal(db.computeLinks(0.75, 4), 1);
-      const rebuilt = db.getLinks().map((link) => ({ ...link }));
-      assert.equal(rebuilt.length, 1);
-      assert.equal(rebuilt[0].source, first);
-      assert.equal(rebuilt[0].target, second);
-      assert.ok(Math.abs(rebuilt[0].similarity - 0.8) < 0.000_001);
     });
   },
 );

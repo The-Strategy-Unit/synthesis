@@ -66,9 +66,9 @@
                 aria-label="No pending reviews">0</span>
             </button>
             <button id="discoveries-open-btn" class="nav-item" type="button">
-              <span>Discoveries</span>
+              <span>Synthesis review</span>
               <span id="discoveries-count" class="nav-badge hidden"
-                aria-label="No open discoveries">0</span>
+                aria-label="No open synthesis proposals">0</span>
             </button>
             <button id="ask-open-btn" class="nav-item" type="button"
               aria-describedby="provider-mode">
@@ -153,17 +153,25 @@
                     <p class="workspace-eyebrow">Explore</p>
                     <h2 id="connections-title">Knowledge connections</h2>
                   </div>
-                  <div class="threshold-control">
-                    <label>Min semantic similarity
-                    <span id="threshold-value">0.75</span></label>
-                    <input type="range" id="similarity-slider" min="0" max="1"
-                      step="0.025" value="0.75" />
+                  <div class="graph-breadth-control">
+                    <label for="semantic-neighbors-slider">
+                      Semantic suggestions per page
+                      <span id="semantic-neighbors-value">3</span>
+                    </label>
+                    <input type="range" id="semantic-neighbors-slider"
+                      min="0" max="8" step="1" value="3" />
                   </div>
                 </div>
                 <div class="graph-legend" aria-label="Connection types">
-                  <span><i class="legend-explicit"></i>Wiki link</span>
-                  <span><i class="legend-semantic"></i>Semantic</span>
+                  <span><i class="legend-explicit"></i>Reviewed wiki link</span>
+                  <span><i class="legend-semantic"></i>Semantic suggestion</span>
                 </div>
+                <p class="graph-method-note">
+                  Semantic similarity draws related pages together. Clusters,
+                  bridges, and hubs can reveal patterns worth investigating.
+                  Distances between disconnected groups, axes, and rotation
+                  have no meaning.
+                </p>
                 <svg id="graph" aria-label="Knowledge connection map"></svg>
               </section>
             </div>
@@ -339,25 +347,72 @@
       <div class="modal-content discoveries-content">
         <button id="discoveries-close" class="modal-close" type="button"
           aria-label="Close">&times;</button>
-        <h2 id="discoveries-title">Discoveries</h2>
+        <h2 id="discoveries-title">Cross-source synthesis</h2>
         <p class="modal-intro">
-          Evidence-backed connections that may be useful but are still
-          hypotheses. Confidence is model metadata, not proof. Only a confirmed
-          discovery becomes an explicit wiki link.
+          Synthesis systematically evaluates plausible page pairs from
+          different sources and remembers its progress. Proposed relationships
+          and possible consolidations are hypotheses for review. Similarity and
+          model confidence are not evidence, and no link is added automatically.
         </p>
         <div class="discoveries-toolbar">
           <button id="discoveries-scan" aria-describedby="provider-mode"
-            type="button">Scan for connections</button>
+            type="button">Compare all sources</button>
         </div>
+        <div class="discovery-filters">
+          <label for="discovery-filter-text">
+            Filter proposals
+            <input id="discovery-filter-text" type="search"
+              placeholder="Page, source, or explanation" autocomplete="off" />
+          </label>
+          <label for="discovery-filter-type">
+            Relationship
+            <select id="discovery-filter-type">
+              <option value="all">All relationships</option>
+            </select>
+          </label>
+        </div>
+        <div class="discovery-batch-actions">
+          <button id="discovery-select-filtered" type="button">
+            Select current filter
+          </button>
+          <button id="discovery-clear-selection" type="button" disabled>
+            Clear selection
+          </button>
+          <span id="discovery-selection-count" role="status"
+            aria-live="polite">0 selected</span>
+          <button id="discovery-batch-reject" type="button" disabled>
+            Reject selected
+          </button>
+          <button id="discovery-batch-confirm" type="button" disabled>
+            Confirm selected
+          </button>
+        </div>
+        <section id="discovery-batch-confirmation"
+          class="batch-confirmation hidden"
+          aria-labelledby="discovery-batch-confirmation-title">
+          <h3 id="discovery-batch-confirmation-title">Confirm exact batch</h3>
+          <p id="discovery-batch-warning"></p>
+          <label for="discovery-batch-confirmation-input">
+            Type <code id="discovery-batch-confirmation-phrase"></code>
+          </label>
+          <input id="discovery-batch-confirmation-input" type="text"
+            autocomplete="off" spellcheck="false" />
+          <div class="batch-confirmation-actions">
+            <button id="discovery-batch-cancel" type="button">Cancel</button>
+            <button id="discovery-batch-apply" type="button" disabled>
+              Apply exact batch
+            </button>
+          </div>
+        </section>
         <p id="discoveries-status" role="status" aria-live="polite"></p>
         <div class="discoveries-layout">
-          <ul id="discoveries-list" aria-label="Open discoveries"></ul>
+          <ul id="discoveries-list" aria-label="Open synthesis proposals"></ul>
           <section id="discovery-detail" class="hidden">
             <div class="discovery-heading">
               <span id="discovery-relationship"></span>
               <span id="discovery-review-state"></span>
             </div>
-            <h3>Potential connection</h3>
+            <h3 id="discovery-detail-title">Potential relationship</h3>
             <p id="discovery-explanation"></p>
             <h4>Why it may matter</h4>
             <p id="discovery-significance"></p>
@@ -372,6 +427,7 @@
               <button id="discovery-reject" type="button">Reject</button>
               <button id="discovery-confirm" type="button">Confirm link</button>
             </div>
+            <p id="discovery-action-note" class="field-help"></p>
           </section>
         </div>
       </div>

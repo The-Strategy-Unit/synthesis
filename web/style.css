@@ -720,12 +720,12 @@ body {
   font-size: 1rem;
 }
 
-.threshold-control {
+.graph-breadth-control {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
 
-.threshold-control label {
+.graph-breadth-control label {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -764,9 +764,16 @@ body {
   opacity: 0.65;
 }
 
-#similarity-slider {
+#semantic-neighbors-slider {
   margin-left: 0.5rem;
   vertical-align: middle;
+}
+
+.graph-method-note {
+  margin: 0 0 0.65rem;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 #graph {
@@ -1516,6 +1523,77 @@ body {
   justify-content: flex-end;
 }
 
+.discovery-filters {
+  align-items: end;
+  display: grid;
+  gap: 0.35rem 0.65rem;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.55fr);
+  margin-top: 0.8rem;
+}
+
+.discovery-filters label {
+  color: var(--text-faint);
+  display: grid;
+  font-size: 0.74rem;
+  gap: 0.35rem;
+}
+
+.discovery-filters input,
+.discovery-filters select {
+  margin: 0;
+  width: 100%;
+}
+
+.discovery-batch-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.discovery-batch-actions button,
+.batch-confirmation-actions button {
+  padding: 0.48rem 0.75rem;
+}
+
+#discovery-selection-count {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  margin-right: auto;
+}
+
+.batch-confirmation {
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  margin-top: 0.8rem;
+  padding: 0.85rem;
+}
+
+.batch-confirmation h3,
+.batch-confirmation p {
+  margin: 0 0 0.55rem;
+}
+
+.batch-confirmation p,
+.batch-confirmation label {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.batch-confirmation input {
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.batch-confirmation-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.65rem;
+}
+
 #discoveries-status {
   min-height: 1.25rem;
   margin: 0.75rem 0;
@@ -1542,6 +1620,17 @@ body {
   gap: 0.45rem;
   max-height: 56vh;
   overflow-y: auto;
+}
+
+.discovery-list-row {
+  align-items: start;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.discovery-select-checkbox {
+  margin-top: 0.75rem;
 }
 
 .discovery-list-button {
@@ -1653,6 +1742,11 @@ body {
 }
 
 #discoveries-scan:disabled,
+#discovery-select-filtered:disabled,
+#discovery-clear-selection:disabled,
+#discovery-batch-reject:disabled,
+#discovery-batch-confirm:disabled,
+#discovery-batch-apply:disabled,
 #discovery-investigate:disabled,
 #discovery-reject:disabled,
 #discovery-confirm:disabled {
@@ -2580,6 +2674,10 @@ body {
   }
 
   #provider-form {
+    grid-template-columns: 1fr;
+  }
+
+  .discovery-filters {
     grid-template-columns: 1fr;
   }
 

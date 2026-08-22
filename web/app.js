@@ -1,5 +1,6 @@
 import {
   forceCenter,
+  forceCollide,
   forceLink,
   forceManyBody,
   forceSimulation,
@@ -7,6 +8,13 @@ import {
 import { select } from "d3-selection";
 import { drag } from "d3-drag";
 import { zoom } from "d3-zoom";
+import {
+  graphLinkDistance,
+  graphLinkStrength,
+  seededGraphRandom,
+  semanticNeighborLinks,
+  semanticSimilarityRange,
+} from "./graph_layout.js";
 import { classifyIngestSource } from "./ingest_source.js";
 import {
   compactEvidenceText,
@@ -17,8 +25,12 @@ import {
   reduceReaderState,
 } from "./reader_workspace.js";
 import {
+  discoveryBatchConfirmation,
+  discoveryCoverageSummary,
+  discoveryMatchesFilter,
   formatPageRanges,
   ingestProgress,
+  MAX_DISCOVERY_BATCH_ITEMS,
   REVIEW_DECISIONS,
   reviewDecisionsForEveryChange,
   reviewDecisionSummary,
@@ -34,10 +46,8 @@ import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 let uiConfig = {
   labelZoomThreshold: 1.5,
-  sliderMin: 0,
-  sliderMax: 1,
-  sliderStep: 0.025,
-  defaultSimilarity: 0.75,
+  semanticNeighbors: 3,
+  maxSemanticNeighbors: 8,
 };
 
 // --- Application shell ---
@@ -150,13 +160,14 @@ async function fetchConfig() {
 }
 
 function applyConfig() {
-  const slider = document.getElementById("similarity-slider");
-  slider.min = uiConfig.sliderMin;
-  slider.max = uiConfig.sliderMax;
-  slider.step = uiConfig.sliderStep;
-  slider.value = uiConfig.defaultSimilarity;
-  document.getElementById("threshold-value").textContent = uiConfig
-    .defaultSimilarity.toFixed(2);
+  const slider = document.getElementById("semantic-neighbors-slider");
+  slider.max = uiConfig.maxSemanticNeighbors;
+  slider.value = Math.min(
+    uiConfig.semanticNeighbors,
+    uiConfig.maxSemanticNeighbors,
+  );
+  document.getElementById("semantic-neighbors-value").textContent =
+    slider.value;
 }
 
 // --- API helpers ---
@@ -214,8 +225,8 @@ async function refreshShellCounts() {
     setShellQueueCount(
       "discoveries-count",
       discoveries.value.discoveries?.length ?? 0,
-      "open discovery",
-      "open discoveries",
+      "open synthesis proposal",
+      "open synthesis proposals",
     );
   }
 }
@@ -1058,19 +1069,124 @@ const discoveryInvestigate = document.getElementById(
 const discoveryReject = document.getElementById("discovery-reject");
 const discoveryConfirm = document.getElementById("discovery-confirm");
 const discoveriesScan = document.getElementById("discoveries-scan");
+const discoveryDetailTitle = document.getElementById(
+  "discovery-detail-title",
+);
+const discoveryActionNote = document.getElementById("discovery-action-note");
+const discoveryFilterText = document.getElementById("discovery-filter-text");
+const discoveryFilterType = document.getElementById("discovery-filter-type");
+const discoverySelectFiltered = document.getElementById(
+  "discovery-select-filtered",
+);
+const discoveryClearSelection = document.getElementById(
+  "discovery-clear-selection",
+);
+const discoverySelectionCount = document.getElementById(
+  "discovery-selection-count",
+);
+const discoveryBatchReject = document.getElementById(
+  "discovery-batch-reject",
+);
+const discoveryBatchConfirm = document.getElementById(
+  "discovery-batch-confirm",
+);
+const discoveryBatchConfirmationPanel = document.getElementById(
+  "discovery-batch-confirmation",
+);
+const discoveryBatchWarning = document.getElementById(
+  "discovery-batch-warning",
+);
+const discoveryBatchConfirmationPhrase = document.getElementById(
+  "discovery-batch-confirmation-phrase",
+);
+const discoveryBatchConfirmationInput = document.getElementById(
+  "discovery-batch-confirmation-input",
+);
+const discoveryBatchCancel = document.getElementById(
+  "discovery-batch-cancel",
+);
+const discoveryBatchApply = document.getElementById("discovery-batch-apply");
 let selectedDiscoveryId = null;
+let selectedDiscoveryStatus = null;
+let openDiscoveries = [];
+let filteredDiscoveries = [];
+let discoveryBusy = false;
+let discoveryBatchSnapshot = null;
+const selectedDiscoveryIds = new Set();
+let discoverySweepRunning = false;
+let discoverySweepStopRequested = false;
+
+function discoveryKindLabel(discovery) {
+  return discovery.proposalKind === "consolidation"
+    ? "Consolidation candidate"
+    : discovery.relationshipType.replaceAll("_", " ");
+}
+
+function updateDiscoveryControls() {
+  const selectionCount = selectedDiscoveryIds.size;
+  discoveriesScan.disabled = !providerCapabilities(providerState.phase)
+    .modelActions ||
+    (discoveryBusy && !discoverySweepRunning) || discoverySweepStopRequested;
+  discoveriesScan.textContent = discoverySweepRunning
+    ? "Pause after current batch"
+    : "Compare all sources";
+  discoveryInvestigate.disabled = discoveryBusy || !selectedDiscoveryId ||
+    selectedDiscoveryStatus === "investigating";
+  discoveryReject.disabled = discoveryBusy || !selectedDiscoveryId;
+  discoveryConfirm.disabled = discoveryBusy || !selectedDiscoveryId;
+  discoveryFilterText.disabled = discoveryBusy;
+  discoveryFilterType.disabled = discoveryBusy;
+  discoveryBatchConfirmationInput.disabled = discoveryBusy;
+  discoveryBatchCancel.disabled = discoveryBusy;
+  discoverySelectFiltered.disabled = discoveryBusy ||
+    filteredDiscoveries.length === 0;
+  discoveryClearSelection.disabled = discoveryBusy || selectionCount === 0;
+  discoveryBatchReject.disabled = discoveryBusy || selectionCount === 0;
+  discoveryBatchConfirm.disabled = discoveryBusy || selectionCount === 0;
+  discoverySelectionCount.textContent = `${selectionCount} selected`;
+  for (
+    const control of discoveriesList.querySelectorAll(
+      ".discovery-select-checkbox, .discovery-list-button",
+    )
+  ) control.disabled = discoveryBusy;
+  const expected = discoveryBatchSnapshot?.phrase ?? "";
+  discoveryBatchApply.disabled = discoveryBusy || !expected ||
+    discoveryBatchConfirmationInput.value !== expected;
+}
 
 function setDiscoveryBusy(busy) {
-  discoveriesScan.disabled = busy ||
-    !providerCapabilities(providerState.phase).modelActions;
-  discoveryInvestigate.disabled = busy;
-  discoveryReject.disabled = busy;
-  discoveryConfirm.disabled = busy;
+  discoveryBusy = busy;
+  updateDiscoveryControls();
+}
+
+function closeDiscoveryBatchConfirmation() {
+  discoveryBatchSnapshot = null;
+  discoveryBatchConfirmationInput.value = "";
+  discoveryBatchConfirmationPanel.classList.add("hidden");
+  updateDiscoveryControls();
+}
+
+function changeDiscoverySelection(id, selected) {
+  closeDiscoveryBatchConfirmation();
+  if (selected) {
+    if (selectedDiscoveryIds.size >= MAX_DISCOVERY_BATCH_ITEMS) {
+      discoveriesStatus.textContent =
+        `A batch can contain at most ${MAX_DISCOVERY_BATCH_ITEMS} proposals. Narrow the filter or review this selection first.`;
+      return false;
+    }
+    selectedDiscoveryIds.add(id);
+  } else {
+    selectedDiscoveryIds.delete(id);
+  }
+  updateDiscoveryControls();
+  return true;
 }
 
 function closeDiscoveriesModal() {
   closeModalDialog(discoveriesModal);
   selectedDiscoveryId = null;
+  selectedDiscoveryStatus = null;
+  closeDiscoveryBatchConfirmation();
 }
 
 function discoveryPageButton(page) {
@@ -1104,8 +1220,9 @@ function discoverySourceItem(source) {
 
 function showDiscovery(discovery) {
   selectedDiscoveryId = discovery.id;
-  document.getElementById("discovery-relationship").textContent = discovery
-    .relationshipType.replaceAll("_", " ");
+  selectedDiscoveryStatus = discovery.status;
+  document.getElementById("discovery-relationship").textContent =
+    discoveryKindLabel(discovery);
   document.getElementById("discovery-review-state").textContent = discovery
     .status;
   document.getElementById("discovery-explanation").textContent = discovery
@@ -1122,12 +1239,23 @@ function showDiscovery(discovery) {
   document.getElementById("discovery-sources").replaceChildren(
     ...discovery.sources.map(discoverySourceItem),
   );
-  discoveryInvestigate.disabled = discovery.status === "investigating";
+  const isConsolidation = discovery.proposalKind === "consolidation";
+  discoveryDetailTitle.textContent = isConsolidation
+    ? "Possible consolidation"
+    : "Potential relationship";
+  discoveryConfirm.textContent = isConsolidation
+    ? "Confirm overlap link"
+    : "Confirm link";
+  discoveryActionNote.textContent = isConsolidation
+    ? "Confirmation records the reviewed overlap as an explicit link. It does not merge or delete either page."
+    : "Confirmation records this reviewed relationship as an explicit wiki link.";
   discoveryDetail.classList.remove("hidden");
+  updateDiscoveryControls();
 }
 
 async function loadDiscoveryDetail(discoveryId, button) {
   selectedDiscoveryId = discoveryId;
+  selectedDiscoveryStatus = null;
   for (const item of discoveriesList.querySelectorAll("button")) {
     item.classList.toggle("active", item === button);
   }
@@ -1145,26 +1273,58 @@ async function loadDiscoveryDetail(discoveryId, button) {
   }
 }
 
-async function loadDiscoveries(preferredId) {
-  discoveriesList.replaceChildren();
-  discoveryDetail.classList.add("hidden");
-  selectedDiscoveryId = null;
-  discoveriesStatus.textContent = "Loading open discoveries...";
-  const data = await api("discoveries");
-  const discoveries = data.discoveries ?? [];
-  setShellQueueCount(
-    "discoveries-count",
-    discoveries.length,
-    "open discovery",
-    "open discoveries",
+function refreshDiscoveryTypeFilter() {
+  const current = discoveryFilterType.value;
+  const options = [
+    Object.assign(document.createElement("option"), {
+      value: "all",
+      textContent: "All relationships",
+    }),
+    ...[...new Set(openDiscoveries.map((item) => item.relationshipType))]
+      .sort()
+      .map((relationshipType) =>
+        Object.assign(document.createElement("option"), {
+          value: relationshipType,
+          textContent: relationshipType.replaceAll("_", " "),
+        })
+      ),
+  ];
+  discoveryFilterType.replaceChildren(...options);
+  if (options.some((option) => option.value === current)) {
+    discoveryFilterType.value = current;
+  }
+}
+
+function renderDiscoveryList(preferredId) {
+  filteredDiscoveries = openDiscoveries.filter((discovery) =>
+    discoveryMatchesFilter(
+      discovery,
+      discoveryFilterText.value,
+      discoveryFilterType.value,
+    )
   );
-  for (const discovery of discoveries) {
+  discoveriesList.replaceChildren();
+  for (const discovery of filteredDiscoveries) {
     const item = document.createElement("li");
+    item.className = "discovery-list-row";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "discovery-select-checkbox";
+    checkbox.checked = selectedDiscoveryIds.has(discovery.id);
+    checkbox.setAttribute(
+      "aria-label",
+      `Select ${discovery.pages.map((page) => page.title).join(" and ")}`,
+    );
+    checkbox.addEventListener("change", () => {
+      if (!changeDiscoverySelection(discovery.id, checkbox.checked)) {
+        checkbox.checked = false;
+      }
+    });
     const button = document.createElement("button");
     button.type = "button";
     button.className = "discovery-list-button";
     const relationship = document.createElement("span");
-    relationship.textContent = discovery.relationshipType.replaceAll("_", " ");
+    relationship.textContent = discoveryKindLabel(discovery);
     const pages = document.createElement("small");
     pages.textContent = discovery.pages.map((page) => page.title).join(" ↔ ");
     button.append(relationship, pages);
@@ -1173,19 +1333,52 @@ async function loadDiscoveries(preferredId) {
       () => loadDiscoveryDetail(discovery.id, button),
     );
     if (discovery.id === preferredId) button.dataset.preferred = "true";
-    item.appendChild(button);
+    if (discovery.id === selectedDiscoveryId) button.classList.add("active");
+    item.append(checkbox, button);
     discoveriesList.appendChild(item);
   }
-  if (discoveries.length === 0) {
-    discoveriesStatus.textContent =
-      "No open discoveries. Run a scan after adding connected evidence.";
+  if (filteredDiscoveries.length === 0) {
+    selectedDiscoveryId = null;
+    selectedDiscoveryStatus = null;
+    discoveryDetail.classList.add("hidden");
+    discoveriesStatus.textContent = openDiscoveries.length === 0
+      ? "No open synthesis proposals. Compare all sources after adding evidence."
+      : "No synthesis proposals match the current filter.";
+    updateDiscoveryControls();
     return;
   }
-  discoveriesStatus.textContent = `${discoveries.length} connection${
-    discoveries.length === 1 ? "" : "s"
-  } awaiting review.`;
-  const preferred = discoveriesList.querySelector('[data-preferred="true"]');
-  (preferred ?? discoveriesList.querySelector("button"))?.click();
+  const selectedIsVisible = filteredDiscoveries.some((discovery) =>
+    discovery.id === selectedDiscoveryId
+  );
+  if (!selectedIsVisible) {
+    selectedDiscoveryId = null;
+    selectedDiscoveryStatus = null;
+    discoveryDetail.classList.add("hidden");
+    const preferred = discoveriesList.querySelector(
+      '[data-preferred="true"]',
+    );
+    (preferred ?? discoveriesList.querySelector(".discovery-list-button"))
+      ?.click();
+  }
+  updateDiscoveryControls();
+}
+
+async function loadDiscoveries(preferredId) {
+  discoveriesStatus.textContent = "Loading open synthesis proposals...";
+  const data = await api("discoveries");
+  openDiscoveries = data.discoveries ?? [];
+  const openIds = new Set(openDiscoveries.map((discovery) => discovery.id));
+  for (const id of selectedDiscoveryIds) {
+    if (!openIds.has(id)) selectedDiscoveryIds.delete(id);
+  }
+  setShellQueueCount(
+    "discoveries-count",
+    openDiscoveries.length,
+    "open synthesis proposal",
+    "open synthesis proposals",
+  );
+  refreshDiscoveryTypeFilter();
+  renderDiscoveryList(preferredId);
 }
 
 async function openDiscoveriesModal(preferredId) {
@@ -1198,18 +1391,106 @@ async function openDiscoveriesModal(preferredId) {
 }
 
 async function scanDiscoveries() {
+  if (discoverySweepRunning) {
+    discoverySweepStopRequested = true;
+    discoveriesScan.disabled = true;
+    discoveriesStatus.textContent = "Pausing after the current batch...";
+    return;
+  }
+  discoverySweepRunning = true;
+  discoverySweepStopRequested = false;
   setDiscoveryBusy(true);
-  discoveriesStatus.textContent = "Scanning a bounded wiki neighborhood...";
+  discoveriesStatus.textContent =
+    "Building the cross-source candidate frontier...";
+  let generation;
+  let preferredId;
+  let lastCoverage;
   try {
-    const data = await api("discoveries/generate", {
-      method: "POST",
-      body: "{}",
-    });
-    await loadDiscoveries(data.discoveries?.[0]?.id);
-    if (!data.discoveries?.length) {
-      discoveriesStatus.textContent =
-        "No new evidence-backed connection was found.";
+    while (true) {
+      const data = await api("discoveries/generate", {
+        method: "POST",
+        body: JSON.stringify(generation === undefined ? {} : { generation }),
+      });
+      generation = data.coverage?.generation ?? undefined;
+      preferredId ??= data.discoveries?.[0]?.id;
+      lastCoverage = data.coverage;
+      discoveriesStatus.textContent = discoveryCoverageSummary(lastCoverage);
+      if (lastCoverage?.complete || discoverySweepStopRequested) break;
     }
+    await loadDiscoveries(preferredId);
+    discoveriesStatus.textContent = discoverySweepStopRequested
+      ? `Sweep paused. ${discoveryCoverageSummary(lastCoverage)}`
+      : discoveryCoverageSummary(lastCoverage);
+  } catch (error) {
+    discoveriesStatus.textContent = error.message;
+  } finally {
+    discoverySweepRunning = false;
+    discoverySweepStopRequested = false;
+    setDiscoveryBusy(false);
+  }
+}
+
+function selectFilteredDiscoveries() {
+  closeDiscoveryBatchConfirmation();
+  let added = 0;
+  for (const discovery of filteredDiscoveries) {
+    if (selectedDiscoveryIds.has(discovery.id)) continue;
+    if (selectedDiscoveryIds.size >= MAX_DISCOVERY_BATCH_ITEMS) break;
+    selectedDiscoveryIds.add(discovery.id);
+    added++;
+  }
+  renderDiscoveryList(selectedDiscoveryId);
+  if (selectedDiscoveryIds.size >= MAX_DISCOVERY_BATCH_ITEMS) {
+    discoveriesStatus.textContent =
+      `Selected ${MAX_DISCOVERY_BATCH_ITEMS} proposals, the maximum per batch. Review this batch or narrow the filter.`;
+  } else {
+    discoveriesStatus.textContent = `${added} proposal${
+      added === 1 ? "" : "s"
+    } added to the selection.`;
+  }
+}
+
+function beginDiscoveryBatch(action) {
+  if (selectedDiscoveryIds.size === 0) return;
+  const ids = [...selectedDiscoveryIds].sort((left, right) => left - right);
+  const phrase = discoveryBatchConfirmation(action, ids.length);
+  discoveryBatchSnapshot = { action, ids, phrase };
+  discoveryBatchConfirmationPhrase.textContent = phrase;
+  discoveryBatchWarning.textContent = action === "confirm"
+    ? `This records ${ids.length} model-proposed relationships as explicit wiki links. The selection is not evidence and will not be reinterpreted by the model.`
+    : `This rejects ${ids.length} selected proposals. No wiki links will be added.`;
+  discoveryBatchConfirmationInput.value = "";
+  discoveryBatchConfirmationPanel.classList.remove("hidden");
+  discoveryBatchConfirmationInput.focus();
+  updateDiscoveryControls();
+}
+
+async function applyDiscoveryBatch() {
+  const snapshot = discoveryBatchSnapshot;
+  if (
+    !snapshot ||
+    discoveryBatchConfirmationInput.value !== snapshot.phrase
+  ) return;
+  setDiscoveryBusy(true);
+  discoveriesStatus.textContent = snapshot.action === "confirm"
+    ? `Confirming ${snapshot.ids.length} selected relationships...`
+    : `Rejecting ${snapshot.ids.length} selected proposals...`;
+  try {
+    const result = await api("discoveries/batch", {
+      method: "POST",
+      body: JSON.stringify({
+        action: snapshot.action,
+        ids: snapshot.ids,
+        confirm: snapshot.phrase,
+      }),
+    });
+    if (snapshot.action === "confirm") await loadGraph();
+    for (const id of snapshot.ids) selectedDiscoveryIds.delete(id);
+    closeDiscoveryBatchConfirmation();
+    await loadDiscoveries();
+    discoveriesStatus.textContent = snapshot.action === "confirm"
+      ? `Confirmed ${result.reviewed.length} proposals and added ${result.linksAdded} explicit wiki links.`
+      : `Rejected ${result.reviewed.length} proposals. No wiki links were added.`;
   } catch (error) {
     discoveriesStatus.textContent = error.message;
   } finally {
@@ -1241,6 +1522,29 @@ async function reviewSelectedDiscovery(action) {
   }
 }
 
+discoveryFilterText.addEventListener("input", () => renderDiscoveryList());
+discoveryFilterType.addEventListener("change", () => renderDiscoveryList());
+discoverySelectFiltered.addEventListener("click", selectFilteredDiscoveries);
+discoveryClearSelection.addEventListener("click", () => {
+  selectedDiscoveryIds.clear();
+  closeDiscoveryBatchConfirmation();
+  renderDiscoveryList(selectedDiscoveryId);
+  discoveriesStatus.textContent = "Selection cleared.";
+});
+discoveryBatchReject.addEventListener(
+  "click",
+  () => beginDiscoveryBatch("reject"),
+);
+discoveryBatchConfirm.addEventListener(
+  "click",
+  () => beginDiscoveryBatch("confirm"),
+);
+discoveryBatchConfirmationInput.addEventListener(
+  "input",
+  updateDiscoveryControls,
+);
+discoveryBatchCancel.addEventListener("click", closeDiscoveryBatchConfirmation);
+discoveryBatchApply.addEventListener("click", applyDiscoveryBatch);
 document.getElementById("discoveries-open-btn").addEventListener(
   "click",
   () => openDiscoveriesModal(),
@@ -2247,24 +2551,19 @@ document.getElementById("ingest-title").addEventListener("keydown", (e) => {
 async function loadGraph() {
   const data = await api("graph");
   rawGraphData = {
-    nodes: data.nodes ?? [],
+    nodes: [...(data.nodes ?? [])].sort((left, right) => left.id - right.id),
     links: (data.links ?? []).map((l) => ({
       source: l.source,
       target: l.target,
       kind: l.kind ?? "semantic",
       similarity: l.similarity,
-    })),
+    })).sort((left, right) =>
+      Number(left.kind === "semantic") - Number(right.kind === "semantic") ||
+      left.source - right.source || left.target - right.target
+    ),
   };
-  graphData = JSON.parse(JSON.stringify(rawGraphData));
-  const nodeIds = new Set(graphData.nodes.map((n) => n.id));
-  graphData.links = graphData.links.filter((l) => {
-    const s = l.source.id ?? l.source;
-    const t = l.target.id ?? l.target;
-    return nodeIds.has(s) && nodeIds.has(t);
-  });
-
   graphUnavailable = false;
-  if (readerState.view === "connections") renderGraph();
+  applySemanticNeighborhoodBreadth();
 }
 
 const tooltip = select("#graph-tooltip");
@@ -2306,6 +2605,7 @@ function renderGraph() {
     .map((link) => link.similarity ?? 0.6);
   const minSim = sims.length ? Math.min(...sims) : 0.6;
   const maxSim = sims.length ? Math.max(...sims) : 0.6;
+  const similarityRange = semanticSimilarityRange(graphData.links);
 
   svg.call(
     zoom()
@@ -2392,7 +2692,7 @@ function renderGraph() {
         .text(
           `${d.title} — ${declaredConnections} wiki links, ${
             visibleConnections - declaredConnections
-          } semantic connections`,
+          } semantic suggestions`,
         );
     })
     .on("mousemove", (event) => {
@@ -2475,13 +2775,19 @@ function renderGraph() {
   );
 
   simulation = forceSimulation(graphData.nodes)
+    .randomSource(seededGraphRandom())
     .force(
       "link",
-      forceLink(graphData.links).id((d) => d.id).distance((link) =>
-        link.kind === "explicit" ? 65 : 90
-      ),
+      forceLink(graphData.links)
+        .id((d) => d.id)
+        .distance((edge) => graphLinkDistance(edge, similarityRange))
+        .strength((edge) => graphLinkStrength(edge, similarityRange)),
     )
-    .force("charge", forceManyBody().strength(-300))
+    .force("charge", forceManyBody().strength(-170))
+    .force(
+      "collision",
+      forceCollide().radius((datum) => nodeRadius(datum) + 4).iterations(2),
+    )
     .force("center", forceCenter(width / 2, height / 2))
     .on("tick", () => {
       link
@@ -2498,39 +2804,31 @@ function renderGraph() {
     });
 }
 
-// --- Similarity threshold slider ---
+// --- Semantic neighbourhood breadth ---
 
-const slider = document.getElementById("similarity-slider");
-const thresholdLabel = document.getElementById("threshold-value");
+const semanticNeighborsSlider = document.getElementById(
+  "semantic-neighbors-slider",
+);
+const semanticNeighborsValue = document.getElementById(
+  "semantic-neighbors-value",
+);
 
-slider.addEventListener("input", () => {
-  const threshold = parseFloat(slider.value);
-  thresholdLabel.textContent = threshold.toFixed(2);
-  renderGraphFiltered(threshold);
+semanticNeighborsSlider.addEventListener("input", () => {
+  semanticNeighborsValue.textContent = semanticNeighborsSlider.value;
+  applySemanticNeighborhoodBreadth();
 });
 
-function renderGraphFiltered(threshold) {
-  const filteredLinks = rawGraphData.links
-    .filter((l) => l.kind === "explicit" || (l.similarity ?? 0.6) >= threshold)
-    .map((l) => ({
-      source: l.source,
-      target: l.target,
-      kind: l.kind,
-      similarity: l.similarity,
-    }));
-
-  const connectedIds = new Set();
-  for (const l of filteredLinks) {
-    connectedIds.add(l.source);
-    connectedIds.add(l.target);
-  }
-
-  const filteredNodes = rawGraphData.nodes
-    .filter((n) => connectedIds.has(n.id))
-    .map((n) => ({ id: n.id, title: n.title }));
-
-  graphData = { nodes: filteredNodes, links: filteredLinks };
-  renderGraph();
+function applySemanticNeighborhoodBreadth() {
+  const breadth = Number(semanticNeighborsSlider.value);
+  graphData = {
+    nodes: rawGraphData.nodes.map((node) => ({ ...node })),
+    links: semanticNeighborLinks(
+      rawGraphData.nodes,
+      rawGraphData.links,
+      breadth,
+    ).map((link) => ({ ...link })),
+  };
+  if (readerState.view === "connections") renderGraph();
 }
 
 // --- Init ---

@@ -186,10 +186,13 @@ CREATE TABLE links (
 );
 ```
 
-This table stores derived semantic links. `computeLinks()` normalises to
-`min(id), max(id)` ordering and deduplicates via the `UNIQUE` constraint.
-Explicit links are read from canonical page Markdown and are not cached here;
-when both types connect the same pages, the explicit relationship wins.
+This table stores the union of each embedded page's strongest cross-source
+semantic neighbours. `computeLinks()` normalises to `min(id), max(id)` ordering
+and deduplicates via the `UNIQUE` constraint. It stores similarity even when its
+absolute value would be low under another embedding model; rank within the
+current vault determines inclusion. Explicit links are read from canonical page
+Markdown and are not cached here; when both types connect the same pages, the
+explicit relationship wins.
 
 ### `notes_fts` (FTS5 virtual table)
 
@@ -273,18 +276,27 @@ first.
 
 ### Link computation
 
-`db.computeLinksFor(noteIds, threshold, k)`:
+`db.computeLinksFor(noteIds, k)` performs a complete derived-graph rebuild when
+at least one page changed. A changed embedding can enter or leave another page's
+nearest-neighbour set, so a touched-page-only update would leave stale or
+asymmetric results.
 
-1. Deduplicate the supplied touched note IDs
-2. For each touched note, get its embedding via `getEmbedding()`
-3. Find k nearest neighbors via `findNearest()` (sqlite-vec kNN query)
-4. Filter by similarity ≥ threshold
-5. Normalise direction: `source = min(id), target = max(id)`
-6. Deduplicate via a `seen` set + DB `UNIQUE` constraint
-7. Upsert into `links` table
+1. Validate the bounded neighbour count and clear the derived `links` rows.
+2. For every embedded page, compare against every other embedded page with the
+   sqlite-vec kNN query.
+3. Exclude pages that share any source provenance, so pages from one source do
+   not crowd out cross-source relationships.
+4. Retain the strongest `k` remaining neighbours for each page. There is no
+   absolute cosine threshold because score distributions vary by model and
+   corpus.
+5. Normalise direction, deduplicate the undirected union, and store similarity.
 
-Only touched pages are recomputed after approval. `buildWikiGraph()` then merges
-these semantic candidates with authoritative explicit links parsed from files.
+`buildWikiGraph()` overlays authoritative explicit links parsed from files. The
+browser uses similarity to set link force and distance, so connected clusters,
+bridges, and hubs are reproducible and potentially informative. Distances
+between disconnected components, axes, rotation, and overall silhouette carry no
+semantic meaning. Semantic links remain derived suggestions; only reviewed
+discoveries become canonical Markdown links.
 
 ### LLM pipeline stages
 

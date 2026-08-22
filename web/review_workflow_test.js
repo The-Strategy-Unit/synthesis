@@ -1,12 +1,69 @@
 import assert from "node:assert/strict";
 
 import {
+  discoveryBatchConfirmation,
+  discoveryCoverageSummary,
+  discoveryMatchesFilter,
   formatPageRanges,
   ingestProgress,
   REVIEW_DECISIONS,
   reviewDecisionsForEveryChange,
   reviewDecisionSummary,
 } from "./review_workflow.js";
+
+Deno.test("discovery batches require an exact action and count", () => {
+  assert.equal(discoveryBatchConfirmation("confirm", 12), "CONFIRM 12 LINKS");
+  assert.equal(
+    discoveryBatchConfirmation("reject", 12),
+    "REJECT 12 PROPOSALS",
+  );
+  assert.throws(() => discoveryBatchConfirmation("confirm", 0), RangeError);
+  assert.throws(() => discoveryBatchConfirmation("all", 2), TypeError);
+});
+
+Deno.test("discovery filters use relationship, page, and source context", () => {
+  const discovery = {
+    relationshipType: "shared_constraint",
+    explanation: "Both services face limited analytical capacity.",
+    significance: "The shared constraint may support joint planning.",
+    pages: [{ title: "Rural service limits" }],
+    sources: [{ title: "Conference talk B" }],
+  };
+  assert.equal(discoveryMatchesFilter(discovery, "rural", "all"), true);
+  assert.equal(
+    discoveryMatchesFilter(discovery, "conference talk", "shared_constraint"),
+    true,
+  );
+  assert.equal(discoveryMatchesFilter(discovery, "capacity", "supports"), false);
+  assert.equal(discoveryMatchesFilter(discovery, "unrelated", "all"), false);
+});
+
+Deno.test("discovery coverage reports resumable progress without claiming links", () => {
+  assert.equal(
+    discoveryCoverageSummary({
+      candidates: 1694,
+      evaluated: 20,
+      proposed: 6,
+      remaining: 1674,
+      complete: false,
+    }),
+    "Evaluated 20 of 1694 candidate pairs; 1674 remaining; 6 proposals so far.",
+  );
+  assert.equal(
+    discoveryCoverageSummary({
+      candidates: 40,
+      evaluated: 40,
+      proposed: 8,
+      remaining: 0,
+      complete: true,
+    }),
+    "Sweep complete: 40 candidate pairs evaluated; 8 proposals require human review.",
+  );
+  assert.equal(
+    discoveryCoverageSummary(undefined),
+    "No unreviewed cross-source candidate pairs were found.",
+  );
+});
 
 Deno.test("review requires a deliberate decision for every change", () => {
   assert.deepEqual(

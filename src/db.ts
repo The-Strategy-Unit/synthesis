@@ -1060,68 +1060,90 @@ export class DB {
   }
 
   // Shared per-note kNN + upsert logic used by both computeLinks() (full
-  // rebuild) and computeLinksFor() (incremental rebuild for touched notes).
+  // rebuild) and computeLinksFor(). Semantic graph edges deliberately connect
+  // pages with disjoint provenance so the graph surfaces cross-source context
+  // instead of repeating links already likely to exist within one source.
   private linkNotes(
     noteIds: number[],
-    threshold: number,
     k: number,
     seen: Set<string>,
   ): number {
+    const sourceIdsByNote = new Map<number, Set<number>>();
+    for (const note of this.getAllNotes()) {
+      sourceIdsByNote.set(note.id, new Set());
+    }
+    const provenanceRows = this.db.prepare(
+      "SELECT note_id, source_id FROM note_sources ORDER BY note_id, source_id",
+    ).all() as Array<{ note_id: number; source_id: number }>;
+    for (const row of provenanceRows) {
+      sourceIdsByNote.get(row.note_id)?.add(row.source_id);
+    }
+    const candidatePool = Number(
+      (this.db.prepare("SELECT count(*) AS count FROM embeddings").get() as {
+        count: number;
+      }).count,
+    );
     let count = 0;
     for (const noteId of noteIds) {
       const emb = this.getEmbedding(noteId);
       if (!emb) continue;
-      for (const n of this.findNearest(noteId, emb, k)) {
-        if (n.similarity < threshold) continue;
+      const ownSources = sourceIdsByNote.get(noteId) ?? new Set<number>();
+      let selected = 0;
+      for (const n of this.findNearest(noteId, emb, candidatePool)) {
+        const neighborSources = sourceIdsByNote.get(n.id) ?? new Set<number>();
+        if (
+          ownSources.size > 0 &&
+          [...ownSources].some((sourceId) => neighborSources.has(sourceId))
+        ) {
+          continue;
+        }
+        selected++;
         const key = `${Math.min(noteId, n.id)}-${Math.max(noteId, n.id)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        this.upsertLink(
-          Math.min(noteId, n.id),
-          Math.max(noteId, n.id),
-          n.similarity,
-        );
-        count++;
+        if (!seen.has(key)) {
+          seen.add(key);
+          this.upsertLink(
+            Math.min(noteId, n.id),
+            Math.max(noteId, n.id),
+            n.similarity,
+          );
+          count++;
+        }
+        if (selected >= k) break;
       }
     }
     return count;
   }
 
-  // Semantic links for graph — full rebuild over every note in the vault.
-  computeLinks(
-    threshold = config.link.similarityThreshold,
-    k = config.link.k,
-  ): number {
+  // Semantic links for graph — retain each page's nearest cross-source
+  // neighbours. Absolute cosine thresholds are model- and corpus-dependent;
+  // breadth is bounded by rank instead.
+  computeLinks(k = config.link.k): number {
+    if (!Number.isSafeInteger(k) || k < 1) {
+      throw new RangeError(
+        "Semantic neighbour count must be a positive integer",
+      );
+    }
     return this.withTransaction(() => {
       this.clearLinks();
       const notes = this.getAllNotes();
       return this.linkNotes(
         notes.map((n) => n.id),
-        threshold,
         k,
         new Set<string>(),
       );
     });
   }
 
-  // Incremental link recomputation — only runs the kNN search for the given
-  // (newly-created or rewritten) note ids against the rest of the vault,
-  // instead of recomputing links for every note.
+  // Changing one embedding can change another page's nearest-neighbour set.
+  // Recompute the complete derived graph to keep the rank-bounded topology
+  // coherent instead of leaving asymmetric stale edges behind.
   computeLinksFor(
     noteIds: number[],
-    threshold = config.link.similarityThreshold,
     k = config.link.k,
   ): number {
     const uniqueIds = [...new Set(noteIds)];
     if (uniqueIds.length === 0) return 0;
-
-    return this.withTransaction(() => {
-      const deleteLinks = this.db.prepare(
-        "DELETE FROM links WHERE source_note_id = ? OR target_note_id = ?",
-      );
-      for (const noteId of uniqueIds) deleteLinks.run(noteId, noteId);
-      return this.linkNotes(uniqueIds, threshold, k, new Set<string>());
-    });
+    return this.computeLinks(k);
   }
 
   // Combined keyword + semantic search

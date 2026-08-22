@@ -306,8 +306,13 @@ export const config = {
   },
 
   link: {
-    similarityThreshold: envClamped("SYNTHESIS_LINK_THRESHOLD", 0, 1, 0.75),
-    k: Math.max(1, envInt("SYNTHESIS_LINK_K", 50)),
+    k: envIntClamped("SYNTHESIS_LINK_K", 1, 32, 8),
+    visibleNeighbors: envIntClamped(
+      "SYNTHESIS_GRAPH_NEIGHBORS",
+      0,
+      32,
+      3,
+    ),
   },
 
   search: {
@@ -321,9 +326,6 @@ export const config = {
       10,
       1.5,
     ),
-    sliderMin: envClamped("SYNTHESIS_SLIDER_MIN", 0, 1, 0),
-    sliderMax: envClamped("SYNTHESIS_SLIDER_MAX", 0, 1, 1),
-    sliderStep: envClamped("SYNTHESIS_SLIDER_STEP", 0.001, 1, 0.025),
   },
 
   build: {

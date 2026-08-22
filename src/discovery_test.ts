@@ -4,9 +4,13 @@ import { config } from "./config.ts";
 import { DB } from "./db.ts";
 import {
   confirmDiscovery,
+  discoveryBatchConfirmation,
+  DiscoveryBatchInputError,
   DiscoveryStateError,
   generateDiscoveries,
   reviewDiscovery,
+  reviewDiscoveryBatch,
+  validateDiscoveryBatchRequest,
 } from "./discovery.ts";
 import { parseWikiPage, renderWikiPage } from "./wiki.ts";
 import { buildWikiGraph } from "./wiki_graph.ts";
@@ -618,6 +622,117 @@ Deno.test({
       );
     } finally {
       globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
+  name: "discovery batches require exact confirmation and apply atomically",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({
+      prefix: "synthesis-discovery-batch-test-",
+    });
+    const db = new DB(`${dir}/synthesis.db`);
+    try {
+      assert.equal(discoveryBatchConfirmation("confirm", 2), "CONFIRM 2 LINKS");
+      assert.throws(
+        () =>
+          validateDiscoveryBatchRequest({
+            action: "confirm",
+            ids: [1, 2],
+            confirm: "CONFIRM ALL",
+          }),
+        DiscoveryBatchInputError,
+      );
+
+      const pages: Array<{ id: number; path: string; markdown: string }> = [];
+      for (let index = 0; index < 4; index++) {
+        const hash = String(index + 1).repeat(64);
+        const title = `Batch concept ${index + 1}`;
+        const sourceId = db.addSource(
+          hash,
+          `Batch source ${index + 1}`,
+          null,
+          "text",
+          `${dir}/source-${index + 1}.txt`,
+          `Summary ${index + 1}.`,
+        );
+        const path = `${dir}/page-${index + 1}.md`;
+        const markdown = renderWikiPage({
+          title,
+          type: "concept",
+          body: `Evidence for ${title}.`,
+          tags: ["batch"],
+          links: [],
+        }, [{ title: `Batch source ${index + 1}`, contentHash: hash }]);
+        await Deno.writeTextFile(path, markdown);
+        const id = db.addNote(title, path, null, "text");
+        db.attachNoteSource(id, sourceId, "new");
+        pages.push({ id, path, markdown });
+      }
+
+      const addDiscovery = (left: number, right: number, suffix: string) => {
+        const id = db.addDiscovery({
+          fingerprint: `batch-${suffix}`,
+          relationship_type: "supports",
+          explanation: "The supplied pages describe compatible evidence.",
+          significance: "The reviewed relationship can connect the pages.",
+          page_ids_json: JSON.stringify([left, right]),
+          source_ids_json: JSON.stringify([left, right]),
+          production_method: "test",
+          model: "test-model",
+          confidence: 0.7,
+        });
+        assert.ok(id);
+        return id;
+      };
+      const firstId = addDiscovery(pages[0].id, pages[1].id, "first");
+      const secondId = addDiscovery(pages[2].id, pages[3].id, "second");
+      const request = validateDiscoveryBatchRequest({
+        action: "confirm",
+        ids: [firstId, secondId],
+        confirm: "CONFIRM 2 LINKS",
+      });
+
+      await Deno.writeTextFile(pages[2].path, "not a wiki page");
+      await assert.rejects(() => reviewDiscoveryBatch(db, request));
+      assert.equal(await Deno.readTextFile(pages[0].path), pages[0].markdown);
+      assert.equal(db.getDiscovery(firstId)?.status, "pending");
+      assert.equal(db.getDiscovery(secondId)?.status, "pending");
+
+      await Deno.writeTextFile(pages[2].path, pages[2].markdown);
+      const confirmed = await reviewDiscoveryBatch(db, request);
+      assert.equal(confirmed.linksAdded, 2);
+      assert.deepEqual(
+        confirmed.reviewed.map((discovery) => discovery.status),
+        ["confirmed", "confirmed"],
+      );
+      assert.ok(
+        parseWikiPage(await Deno.readTextFile(pages[0].path)).links.includes(
+          "Batch concept 2",
+        ),
+      );
+      assert.ok(
+        parseWikiPage(await Deno.readTextFile(pages[2].path)).links.includes(
+          "Batch concept 4",
+        ),
+      );
+
+      const rejectedId = addDiscovery(pages[0].id, pages[2].id, "rejected");
+      const rejected = await reviewDiscoveryBatch(
+        db,
+        validateDiscoveryBatchRequest({
+          action: "reject",
+          ids: [rejectedId],
+          confirm: "REJECT 1 PROPOSALS",
+        }),
+      );
+      assert.equal(rejected.linksAdded, 0);
+      assert.equal(rejected.reviewed[0].status, "rejected");
+    } finally {
       db.close();
       await Deno.remove(dir, { recursive: true });
     }

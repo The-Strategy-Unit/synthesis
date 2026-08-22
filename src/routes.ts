@@ -8,12 +8,15 @@ import { DB, type DiscoveryStatus } from "./db.ts";
 import { resolveWebAsset } from "./static_files.ts";
 import {
   confirmDiscovery,
+  DiscoveryBatchInputError,
   DiscoveryNotFoundError,
   DiscoveryStateError,
   generateDiscoveries,
   getDiscoveryView,
   listDiscoveryViews,
   reviewDiscovery,
+  reviewDiscoveryBatch,
+  validateDiscoveryBatchRequest,
 } from "./discovery.ts";
 import { LlmServiceError } from "./llm.ts";
 import {
@@ -115,6 +118,9 @@ function asProposalApiError(error: unknown): ApiError | undefined {
 }
 
 function asDiscoveryApiError(error: unknown): ApiError | undefined {
+  if (error instanceof DiscoveryBatchInputError) {
+    return new ApiError(400, error.code, error.message);
+  }
   if (error instanceof DiscoveryNotFoundError) {
     return new ApiError(404, "DISCOVERY_NOT_FOUND", error.message);
   }
@@ -277,10 +283,11 @@ export function createHandler(
         if (path === "/api/config" && method === "GET") {
           return json({
             labelZoomThreshold: config.ui.labelZoomThreshold,
-            sliderMin: config.ui.sliderMin,
-            sliderMax: config.ui.sliderMax,
-            sliderStep: config.ui.sliderStep,
-            defaultSimilarity: config.link.similarityThreshold,
+            semanticNeighbors: Math.min(
+              config.link.visibleNeighbors,
+              config.link.k,
+            ),
+            maxSemanticNeighbors: config.link.k,
           });
         }
         if (path === "/api/status" && method === "GET") {
@@ -419,10 +426,7 @@ export function createHandler(
                 contradict: result.contradictCount,
               });
               send("linking");
-              db.computeLinksFor(
-                result.touchedIds,
-                config.link.similarityThreshold,
-              );
+              db.computeLinksFor(result.touchedIds);
               try {
                 const discoveries = await generateDiscoveries(
                   db,
@@ -510,6 +514,11 @@ export function createHandler(
               },
             ),
           );
+        }
+        if (path === "/api/discoveries/batch" && method === "POST") {
+          requireIngester(identity);
+          const batch = validateDiscoveryBatchRequest(await readJson(req));
+          return json(await reviewDiscoveryBatch(db, batch));
         }
         const discoveryMatch = path.match(
           /^\/api\/discoveries\/(\d+)(?:\/(investigate|confirm|reject))?$/,

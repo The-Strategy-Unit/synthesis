@@ -39,8 +39,9 @@ file-backed vault, while SQLite search and vector state remain rebuildable.
 - Editable `schema.md` defining the vault's purpose and compilation conventions
 - Staged new/merge/contradict proposals with human approval before wiki mutation
 - Deterministic wiki index and machine-readable change log
-- Keyword and semantic search with an explicit-link-first relationship graph
-- Reviewed, source-grounded **Discoveries** for possible cross-page connections
+- Keyword and semantic search with a cross-source semantic map and reviewed wiki
+  links overlaid
+- Resumable cross-source synthesis proposals for relationships and consolidation
 - Wiki-grounded answers with cited pages and reviewed synthesis write-back
 - Deterministic structural/provenance lint plus optional AI health analysis
 - Source review showing which pages each source created or changed
@@ -123,8 +124,9 @@ cross-compilation are provided by
    approve them to mutate the wiki.
 4. Ingest and approve a second source that supports, extends, or contradicts the
    first.
-5. Open **Discoveries**, scan for grounded cross-page connections, and confirm
-   only a useful one. Confirmation promotes it to an explicit wiki link.
+5. Open **Synthesis review**, run or resume the cross-source sweep, and confirm
+   only grounded, useful proposals. Confirmation promotes a proposal to an
+   explicit wiki link.
 6. Open **Sources** to inspect source summaries and derived-page provenance.
 7. Open **Ask wiki**, ask a cross-source question, review its cited pages, and
    optionally save the answer as a new synthesis page.
@@ -136,7 +138,14 @@ cross-compilation are provided by
     the vault and reconstruct SQLite search/catalog state from its files.
 
 The notes list, relationship graph, keyword search, and semantic search update
-as the wiki changes.
+as the wiki changes. The graph compares every embedded page with the whole wiki,
+retains its strongest cross-source semantic neighbours, and initially shows the
+strongest three around each page. Similarity shapes connected clusters, bridges,
+and hubs; distance between disconnected groups, axes, and rotation have no
+meaning. A semantic edge is a suggestion to investigate, not confirmed
+knowledge. Reviewed links from page Markdown are overlaid separately. The
+breadth control chooses how many of each page's strongest semantic suggestions
+are visible; it is not a similarity or confidence score.
 
 ## Compilation pipeline
 
@@ -246,9 +255,10 @@ reference.
 | `/api/proposals/:id`           | GET     | Inspect a proposed wiki change               |
 | `/api/proposals/:id/approve`   | POST    | Approve and apply a proposal                 |
 | `/api/proposals/:id/reject`    | POST    | Reject a proposal                            |
-| `/api/discoveries`             | GET     | List reviewed connection candidates          |
-| `/api/discoveries/generate`    | POST    | Scan for grounded connections                |
-| `/api/discoveries/:id`         | GET     | Inspect one connection candidate             |
+| `/api/discoveries`             | GET     | List cross-source synthesis proposals        |
+| `/api/discoveries/batch`       | POST    | Confirm or reject an exact selected batch    |
+| `/api/discoveries/generate`    | POST    | Run or resume a bounded synthesis sweep      |
+| `/api/discoveries/:id`         | GET     | Inspect one synthesis proposal               |
 | `/api/discoveries/:id/:action` | POST    | Investigate, confirm, or reject              |
 
 ## Development

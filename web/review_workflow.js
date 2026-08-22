@@ -4,6 +4,45 @@ export const REVIEW_DECISIONS = Object.freeze({
   pending: "pending",
 });
 
+export const MAX_DISCOVERY_BATCH_ITEMS = 500;
+
+export function discoveryBatchConfirmation(action, count) {
+  if (action !== "confirm" && action !== "reject") {
+    throw new TypeError("Discovery batch action must be confirm or reject");
+  }
+  if (!Number.isSafeInteger(count) || count < 1) {
+    throw new RangeError("Discovery batch count must be positive");
+  }
+  return action === "confirm"
+    ? `CONFIRM ${count} LINKS`
+    : `REJECT ${count} PROPOSALS`;
+}
+
+export function discoveryMatchesFilter(discovery, query, relationshipType) {
+  if (!discovery || typeof discovery !== "object") return false;
+  if (
+    relationshipType && relationshipType !== "all" &&
+    discovery.relationshipType !== relationshipType
+  ) return false;
+  const normalizedQuery = typeof query === "string"
+    ? query.trim().toLocaleLowerCase("en-US")
+    : "";
+  if (!normalizedQuery) return true;
+  const text = [
+    discovery.relationshipType,
+    discovery.explanation,
+    discovery.significance,
+    ...(Array.isArray(discovery.pages)
+      ? discovery.pages.map((page) => page?.title)
+      : []),
+    ...(Array.isArray(discovery.sources)
+      ? discovery.sources.map((source) => source?.title)
+      : []),
+  ].filter((value) => typeof value === "string").join(" ")
+    .toLocaleLowerCase("en-US");
+  return text.includes(normalizedQuery);
+}
+
 export function reviewDecisionSummary(decisions) {
   const values = Array.isArray(decisions) ? decisions : [];
   const summary = { exclude: 0, include: 0, pending: 0 };
@@ -50,6 +89,28 @@ export function formatPageRanges(pages) {
     .join(", ");
 }
 
+export function discoveryCoverageSummary(coverage) {
+  const value = coverage && typeof coverage === "object" ? coverage : {};
+  const candidates = Number.isSafeInteger(value.candidates)
+    ? Math.max(0, value.candidates)
+    : 0;
+  const evaluated = Number.isSafeInteger(value.evaluated)
+    ? Math.min(candidates, Math.max(0, value.evaluated))
+    : 0;
+  const proposed = Number.isSafeInteger(value.proposed)
+    ? Math.min(evaluated, Math.max(0, value.proposed))
+    : 0;
+  const remaining = Number.isSafeInteger(value.remaining)
+    ? Math.min(candidates, Math.max(0, value.remaining))
+    : Math.max(0, candidates - evaluated);
+  if (value.complete === true || remaining === 0) {
+    return candidates === 0
+      ? "No unreviewed cross-source candidate pairs were found."
+      : `Sweep complete: ${evaluated} candidate pairs evaluated; ${proposed} proposals require human review.`;
+  }
+  return `Evaluated ${evaluated} of ${candidates} candidate pairs; ${remaining} remaining; ${proposed} proposals so far.`;
+}
+
 const INGEST_STAGE_STEP = Object.freeze({
   discoveries: "review",
   distilled: "draft",
@@ -63,6 +124,8 @@ const INGEST_STAGE_STEP = Object.freeze({
   linking: "review",
   proposal: "review",
   rewriting: "draft",
+  synthesizing: "review",
+  synthesis_progress: "review",
 });
 
 export function ingestProgress(stage) {
