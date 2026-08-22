@@ -20,6 +20,7 @@ import {
   validateIngestProposalApproval,
 } from "./ingest_proposal.ts";
 import {
+  type IngestReviewAudit,
   removeWrittenIngestHistory,
   writeIngestHistory,
   type WrittenIngestHistory,
@@ -446,6 +447,7 @@ async function applyPreparedWikiChanges(
   options?: {
     proposalId?: number;
     finalizeTransaction?: () => void;
+    review?: IngestReviewAudit;
   },
 ): Promise<{
   notes: Array<{ id: number; title: string }>;
@@ -496,6 +498,7 @@ async function applyPreparedWikiChanges(
         proposalId: options.proposalId,
         sourceHash: contentHash,
         sourceTitle: ingested.title,
+        review: options.review,
         changes: [
           ...embeddedUpdates.map((update) => ({
             action: update.action,
@@ -1028,6 +1031,7 @@ export async function approveIngestProposal(
   send: (stage: string, data?: unknown) => void,
   providers: ActiveProviders = environmentProviders(),
   approvalValue: IngestProposalApproval = {},
+  review: IngestReviewAudit = { reviewMode: "manual" },
 ): Promise<AppliedIngestResult> {
   const record = db.getIngestProposal(id);
   if (!record) {
@@ -1182,6 +1186,7 @@ export async function approveIngestProposal(
     providers,
     {
       proposalId: id,
+      review,
       finalizeTransaction: () => {
         if (!db.reviewIngestProposal(id, "approved")) {
           throw new IngestProposalStateError(

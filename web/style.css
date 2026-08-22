@@ -2465,9 +2465,36 @@ body {
 }
 
 #ingest-title,
-#ingest-source-type {
+#ingest-source-type,
+#trusted-batch-confirmation {
   width: 100%;
   max-width: none;
+}
+
+.trusted-batch-controls {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.trusted-batch-controls h3 {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.trusted-batch-controls p,
+.trusted-batch-controls label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.trusted-batch-controls code {
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .source-actions {

@@ -15,7 +15,11 @@ import {
   semanticNeighborLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
-import { classifyIngestSource } from "./ingest_source.js";
+import {
+  classifyIngestSource,
+  parseTrustedVideoBatch,
+  trustedBatchConfirmation,
+} from "./ingest_source.js";
 import {
   compactEvidenceText,
   evidenceActionLabel,
@@ -2381,12 +2385,68 @@ async function doSearch(q) {
 const ingestSourceType = document.getElementById("ingest-source-type");
 const ingestInput = document.getElementById("ingest-input");
 const ingestStages = document.getElementById("ingest-stages");
+const ingestFileInput = document.getElementById("ingest-file");
+const ingestTitleInput = document.getElementById("ingest-title");
+const trustedBatchControls = document.getElementById(
+  "trusted-batch-controls",
+);
+const trustedBatchConfirmationInput = document.getElementById(
+  "trusted-batch-confirmation",
+);
 const ingestPlaceholders = {
   auto: "Paste source text, a YouTube ID, or a URL...",
   text: "Paste source text...",
   video: "Paste a YouTube video ID or URL...",
   playlist: "Paste a YouTube playlist ID or URL...",
+  "trusted-batch": "Paste one YouTube video ID or URL per line...",
 };
+
+function isTrustedBatchMode() {
+  return ingestSourceType.value === "trusted-batch";
+}
+
+function renderIngestMode() {
+  const automatic = isTrustedBatchMode();
+  ingestInput.placeholder = ingestPlaceholders[ingestSourceType.value];
+  document.getElementById("ingest-input-label").textContent = automatic
+    ? "Trusted YouTube videos · one ID or URL per line"
+    : "Source text, YouTube link, or URL";
+  document.getElementById("source-file-row").classList.toggle(
+    "hidden",
+    automatic,
+  );
+  document.getElementById("ingest-title-label").classList.toggle(
+    "hidden",
+    automatic,
+  );
+  ingestTitleInput.classList.toggle("hidden", automatic);
+  trustedBatchControls.classList.toggle("hidden", !automatic);
+  document.getElementById("ingest-final-step-title").textContent = automatic
+    ? "Apply validated changes"
+    : "Ready for review";
+  document.getElementById("ingest-final-step-detail").textContent = automatic
+    ? "No proposal-by-proposal review"
+    : "Nothing changes automatically";
+  document.getElementById("ingest-progress-note").textContent = automatic
+    ? "The batch stops on its first failure and reports completed sources."
+    : "Completed proposals remain available in Review.";
+  document.getElementById("ingest-btn").textContent = automatic
+    ? "Start automatic batch"
+    : "Prepare for review";
+
+  if (automatic) {
+    ingestFileInput.value = "";
+    document.getElementById("ingest-file-name").textContent = "";
+    let phrase = "the confirmation shown after adding videos";
+    try {
+      phrase = trustedBatchConfirmation(
+        parseTrustedVideoBatch(ingestInput.value).length,
+      );
+    } catch { /* an empty list has no confirmation yet */ }
+    document.getElementById("trusted-batch-confirmation-phrase").textContent =
+      phrase;
+  }
+}
 
 function renderIngestProgress(stage) {
   const progress = ingestProgress(stage);
@@ -2407,22 +2467,45 @@ addSourceButton.addEventListener("click", () => {
     resetIngestProgress();
   }
 });
-ingestInput.addEventListener("input", resetIngestProgress);
+ingestInput.addEventListener("input", () => {
+  resetIngestProgress();
+  renderIngestMode();
+});
 
 ingestSourceType.addEventListener("change", () => {
-  ingestInput.placeholder = ingestPlaceholders[ingestSourceType.value];
+  trustedBatchConfirmationInput.value = "";
+  renderIngestMode();
+  resetIngestProgress();
 });
+
+renderIngestMode();
 
 document.getElementById("ingest-btn").addEventListener("click", async () => {
   const input = ingestInput;
-  const titleInput = document.getElementById("ingest-title");
-  const fileInput = document.getElementById("ingest-file");
+  const titleInput = ingestTitleInput;
+  const fileInput = ingestFileInput;
   const status = document.getElementById("ingest-status");
   const source = input.value.trim();
   const sourceType = ingestSourceType.value;
+  const automatic = sourceType === "trusted-batch";
   const title = titleInput.value.trim();
   const file = fileInput.files?.[0];
   if (!source && !file) return;
+  let trustedUrls = [];
+  if (automatic) {
+    try {
+      trustedUrls = parseTrustedVideoBatch(source);
+      const expected = trustedBatchConfirmation(trustedUrls.length);
+      if (trustedBatchConfirmationInput.value !== expected) {
+        status.textContent = `Type “${expected}” exactly to start this batch.`;
+        trustedBatchConfirmationInput.focus();
+        return;
+      }
+    } catch (err) {
+      status.textContent = err.message;
+      return;
+    }
+  }
   if (source && file) {
     status.textContent = "Choose a file or paste a source, not both.";
     return;
@@ -2432,24 +2515,38 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   titleInput.disabled = true;
   ingestSourceType.disabled = true;
   fileInput.disabled = true;
+  trustedBatchConfirmationInput.disabled = true;
   document.getElementById("ingest-btn").disabled = true;
   renderIngestProgress("ingesting");
 
   let completed = false;
   let stagedProposalId = null;
   let ingestWarning = null;
+  let batchSummary = null;
 
   try {
-    const classifiedSource = file
+    const classifiedSource = automatic || file
       ? null
       : classifyIngestSource(source, sourceType);
-    const endpoint = file
+    const endpoint = automatic
+      ? "/api/ingest/batch"
+      : file
       ? "/api/ingest/file"
       : classifiedSource.kind === "playlist"
       ? "/api/ingest/playlist"
       : "/api/ingest";
     let request;
-    if (file) {
+    if (automatic) {
+      request = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls: trustedUrls,
+          reviewMode: "automatic",
+          confirm: trustedBatchConfirmationInput.value,
+        }),
+      };
+    } else if (file) {
       const form = new FormData();
       form.set("file", file);
       if (title) form.set("title", title);
@@ -2481,11 +2578,28 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
         rewriting: data.total
           ? `Evolving page ${data.current} of ${data.total}: ${data.title}`
           : "Evolving existing pages...",
+        batch_started:
+          `Automatic batch started · ${data.total} trusted sources · ${data.providerMode} provider`,
+        batch_source: `Reading source ${data.current} of ${data.total}...`,
+        automatic_proposal:
+          `Applying source ${data.current} of ${data.total} (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)...`,
+        automatic_applied:
+          `Applied source ${data.current} of ${data.total} (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)`,
+        batch_skipped:
+          `Skipped source ${data.current} of ${data.total}: already applied`,
+        synthesizing:
+          `Comparing ${data.pageCount} pages across all trusted sources...`,
+        synthesis_progress:
+          `Reviewing cross-source candidate group ${data.current} of ${data.total}...`,
+        batch_complete:
+          `Batch complete · ${data.applied} applied · ${data.skipped} already present`,
         proposal:
           `Ready for review (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)`,
         warning: data.error,
         done: ingestWarning
           ? `Completed with warning: ${ingestWarning}`
+          : batchSummary
+          ? `Batch complete · ${batchSummary.applied} applied · ${batchSummary.skipped} already present`
           : stagedProposalId
           ? "Proposal ready for review. No wiki pages changed yet."
           : `${data.notes?.length ?? 0} existing pages found.`,
@@ -2497,22 +2611,27 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
         updateShell({ type: "close-source" });
         await openReviewWorkspace(stagedProposalId);
       }
+      if (data.stage === "batch_complete") batchSummary = data;
       if (data.stage === "done") {
         completed = true;
         if (!stagedProposalId) {
           await loadNoteList();
           await loadGraph();
         }
+        await refreshShellCounts();
       }
       if (data.stage === "error") throw new Error(data.error);
     });
   } catch (err) {
-    status.textContent = `Could not prepare source: ${err.message}`;
+    status.textContent = automatic
+      ? `Automatic batch stopped: ${err.message}`
+      : `Could not prepare source: ${err.message}`;
   } finally {
     input.disabled = false;
     titleInput.disabled = false;
     ingestSourceType.disabled = false;
     fileInput.disabled = false;
+    trustedBatchConfirmationInput.disabled = false;
     document.getElementById("ingest-btn").disabled = !providerCapabilities(
       providerState.phase,
     ).modelActions;
@@ -2520,8 +2639,10 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       input.value = "";
       titleInput.value = "";
       fileInput.value = "";
+      trustedBatchConfirmationInput.value = "";
       document.getElementById("ingest-file-name").textContent = "";
     }
+    renderIngestMode();
   }
 });
 

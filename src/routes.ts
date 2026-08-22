@@ -28,7 +28,11 @@ import {
   normalizeYouTubeVideoInput,
 } from "./ingest.ts";
 import { ingestLocalFile, LocalFileError } from "./local_file.ts";
-import { validateIngestProposalApproval } from "./ingest_proposal.ts";
+import {
+  type IngestProposalApproval,
+  validateIngestProposalApproval,
+} from "./ingest_proposal.ts";
+import type { IngestReviewAudit } from "./ingest_history.ts";
 import {
   IngestUndoConflictError,
   IngestUndoNotAvailableError,
@@ -37,6 +41,7 @@ import {
 import { exportVault } from "./vault_export.ts";
 import { rebuildVaultCatalog, VaultRebuildError } from "./vault_rebuild.ts";
 import {
+  type AppliedIngestResult,
   approveIngestProposal,
   getIngestProposalReview,
   IngestProposalApprovalError,
@@ -70,6 +75,10 @@ import { analyzeWikiHealth, lintWiki } from "./wiki_lint.ts";
 import { ensureWikiSchema, saveWikiSchema } from "./wiki_schema.ts";
 import { buildWikiGraph, getRelatedWikiPages } from "./wiki_graph.ts";
 import {
+  TrustedBatchInputError,
+  validateTrustedBatchRequest,
+} from "./trusted_batch.ts";
+import {
   findClaimCitations,
   findSourceReferencePages,
   parseWikiPage,
@@ -79,6 +88,9 @@ type ProviderResolver = () => Promise<ActiveProviders>;
 type ProviderSettingsDependencies = {
   profiles: Pick<ProviderProfileStore, "load" | "save">;
   secrets: SecretStore | (() => Promise<SecretStore>);
+};
+type IngestDependencies = {
+  ingestYouTube: typeof ingestYouTube;
 };
 
 type SseData = Record<string, unknown>;
@@ -266,6 +278,7 @@ export function createHandler(
   resolveProviders: ProviderResolver = () =>
     Promise.resolve(environmentProviders()),
   providerSettings?: ProviderSettingsDependencies,
+  ingestDependencies: IngestDependencies = { ingestYouTube },
 ): (req: Request) => Promise<Response> {
   return async function handle(req: Request): Promise<Response> {
     const requestId = crypto.randomUUID();
@@ -413,38 +426,14 @@ export function createHandler(
             const release = await ingestGate.acquire(identity, req.signal);
             return ingestStream(requestId, release, async (send) => {
               const providers = await resolveProviders();
-              const result = await approveIngestProposal(
+              const result = await approveProposalAndRefresh(
                 db,
+                requestId,
                 proposalId,
                 send,
                 providers,
                 approval,
               );
-              send("integrated", {
-                new: result.newCount,
-                merge: result.mergeCount,
-                contradict: result.contradictCount,
-              });
-              send("linking");
-              db.computeLinksFor(result.touchedIds);
-              try {
-                const discoveries = await generateDiscoveries(
-                  db,
-                  result.touchedIds,
-                  providers.llm.apiBase,
-                  providers.llm.apiKey,
-                  providers.llm.consolidateModel,
-                  await ensureWikiSchema(),
-                );
-                send("discoveries", { discoveries });
-              } catch (error) {
-                logFailure(requestId, "Discovery generation", error);
-                send("warning", {
-                  error:
-                    "Approved changes were saved, but discovery generation failed",
-                  requestId,
-                });
-              }
               return result.notes;
             });
           }
@@ -844,7 +833,7 @@ export function createHandler(
           return ingestStream(requestId, release, async (send) => {
             const ingested = textInput
               ? ingestText(title, source.value)
-              : await ingestYouTube(source.value);
+              : await ingestDependencies.ingestYouTube(source.value);
             send("ingested", { title: ingested.title });
             return await processAndStage(
               db,
@@ -877,6 +866,31 @@ export function createHandler(
             }
             throw error;
           }
+        }
+
+        if (path === "/api/ingest/batch" && method === "POST") {
+          requireIngester(identity);
+          let batch;
+          try {
+            batch = validateTrustedBatchRequest(
+              await readJson(req),
+              config.ingest.maxTrustedBatchItems,
+            );
+          } catch (error) {
+            if (error instanceof TrustedBatchInputError) {
+              throw new ApiError(400, error.code, error.message);
+            }
+            throw error;
+          }
+          const release = await ingestGate.acquire(identity, req.signal);
+          return trustedBatchStream(
+            db,
+            requestId,
+            release,
+            batch.urls,
+            resolveProviders,
+            ingestDependencies.ingestYouTube,
+          );
         }
 
         if (path === "/api/ingest/file" && method === "POST") {
@@ -1545,6 +1559,56 @@ async function processAndStage(
   return [];
 }
 
+async function approveProposalAndRefresh(
+  db: DB,
+  requestId: string,
+  proposalId: number,
+  send: (stage: string, data?: unknown) => void,
+  providers: ActiveProviders,
+  approval: IngestProposalApproval = {},
+  review: IngestReviewAudit = { reviewMode: "manual" },
+  generateSynthesis = true,
+  refreshLinks = true,
+): Promise<AppliedIngestResult> {
+  const result = await approveIngestProposal(
+    db,
+    proposalId,
+    send,
+    providers,
+    approval,
+    review,
+  );
+  send("integrated", {
+    new: result.newCount,
+    merge: result.mergeCount,
+    contradict: result.contradictCount,
+  });
+  if (refreshLinks) {
+    send("linking");
+    db.computeLinksFor(result.touchedIds);
+  }
+  if (!generateSynthesis) return result;
+  try {
+    const synthesis = await generateDiscoveries(
+      db,
+      result.touchedIds,
+      providers.llm.apiBase,
+      providers.llm.apiKey,
+      providers.llm.consolidateModel,
+      await ensureWikiSchema(),
+      { scope: "seeded" },
+    );
+    send("discoveries", synthesis);
+  } catch (error) {
+    logFailure(requestId, "Discovery generation", error);
+    send("warning", {
+      error: "Approved changes were saved, but discovery generation failed",
+      requestId,
+    });
+  }
+  return result;
+}
+
 function ingestStream(
   requestId: string,
   release: () => void,
@@ -1637,6 +1701,150 @@ function playlistStream(
         requestId,
       });
     }
+    return notes;
+  });
+}
+
+function trustedBatchStream(
+  db: DB,
+  requestId: string,
+  release: () => void,
+  videoUrls: string[],
+  resolveProviders: ProviderResolver,
+  ingestVideo: typeof ingestYouTube,
+): Response {
+  return ingestStream(requestId, release, async (send) => {
+    const batchId = crypto.randomUUID();
+    const providers = await resolveProviders();
+    send("batch_started", {
+      batchId,
+      total: videoUrls.length,
+      reviewMode: "automatic",
+      providerMode: providerMode(providers),
+    });
+    const notes: Array<{ id: number; title: string }> = [];
+    let applied = 0;
+    let skipped = 0;
+    for (let index = 0; index < videoUrls.length; index++) {
+      const current = index + 1;
+      send("batch_source", {
+        batchId,
+        current,
+        total: videoUrls.length,
+        url: videoUrls[index],
+      });
+      const ingested = await ingestVideo(videoUrls[index]);
+      send("ingested", {
+        batchId,
+        current,
+        total: videoUrls.length,
+        title: ingested.title,
+      });
+      send("extracting", { batchId, current, total: videoUrls.length });
+      const staged = await stageSingleSource(
+        db,
+        ingested,
+        false,
+        send,
+        providers,
+      );
+      if (staged.kind === "already-applied") {
+        skipped++;
+        notes.push(...staged.result.notes);
+        send("batch_skipped", {
+          batchId,
+          current,
+          total: videoUrls.length,
+          title: ingested.title,
+          reason: "already-applied",
+        });
+        continue;
+      }
+
+      const counts = { new: 0, merge: 0, contradict: 0 };
+      for (const change of staged.proposal.changes) counts[change.action]++;
+      send("automatic_proposal", {
+        batchId,
+        current,
+        total: videoUrls.length,
+        proposalId: staged.proposal.id,
+        title: ingested.title,
+        ...counts,
+      });
+      const result = await approveProposalAndRefresh(
+        db,
+        requestId,
+        staged.proposal.id,
+        send,
+        providers,
+        {},
+        { reviewMode: "automatic", batchId },
+        false,
+        false,
+      );
+      applied++;
+      notes.push(...result.notes);
+      send("automatic_applied", {
+        batchId,
+        current,
+        total: videoUrls.length,
+        proposalId: staged.proposal.id,
+        historyId: result.historyId,
+        new: result.newCount,
+        merge: result.mergeCount,
+        contradict: result.contradictCount,
+      });
+    }
+    if (applied > 0) {
+      send("linking", { batchId, scope: "vault" });
+      db.computeLinks(config.link.k);
+    }
+    send("synthesizing", {
+      batchId,
+      scope: "vault",
+      pageCount: db.getAllNotes().length,
+    });
+    try {
+      let generation: string | undefined;
+      while (true) {
+        const synthesis = await generateDiscoveries(
+          db,
+          db.getAllNotes().map((note) => note.id),
+          providers.llm.apiBase,
+          providers.llm.apiKey,
+          providers.llm.consolidateModel,
+          await ensureWikiSchema(),
+          {
+            scope: "vault",
+            generation,
+            onProgress: ({ current, total, candidateCount, coverage }) => {
+              send("synthesis_progress", {
+                batchId,
+                current,
+                total,
+                candidateCount,
+                coverage,
+              });
+            },
+          },
+        );
+        send("discoveries", { ...synthesis, scope: "vault" });
+        if (synthesis.coverage.complete) break;
+        generation = synthesis.coverage.generation ?? undefined;
+      }
+    } catch (error) {
+      logFailure(requestId, "Cross-source synthesis", error);
+      send("warning", {
+        error: "Trusted sources were saved, but cross-source synthesis failed",
+        requestId,
+      });
+    }
+    send("batch_complete", {
+      batchId,
+      total: videoUrls.length,
+      applied,
+      skipped,
+    });
     return notes;
   });
 }

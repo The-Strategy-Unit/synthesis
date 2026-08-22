@@ -13,7 +13,8 @@ main.ts                     # Composition root and loopback HTTP server
 ├── src/ingest.ts           # YouTube transcript fetching (yt-dlp), text wrapping, playlist expansion
 ├── src/local_file.ts       # Bounded PDF/Markdown/text parsing and validation
 ├── src/ingest_proposal.ts  # Persisted, validated review-proposal format
-├── src/ingest_history.ts   # Durable before-images and approval manifests
+├── src/trusted_batch.ts    # Exact-list automatic-ingest validation and confirmation
+├── src/ingest_history.ts   # Durable before-images and accepted-apply manifests
 ├── src/ingest_undo.ts      # Hash-guarded last-ingest recovery
 ├── src/orchestrate.ts      # Source staging, approval, rollback, and note integration
 ├── src/vault_manifest.ts   # Stable vault identity and format version
@@ -72,8 +73,9 @@ Prepare and validate every proposed Markdown page without mutating the wiki
   ↓
 Persist one pending ingest proposal with new/merge/contradict changes
   ↓
-Human reviews the exact Markdown and approves or rejects it
-  ↓ approve
+Manual default: a human reviews the exact Markdown and approves or rejects it
+Trusted batch: an exact confirmed source list automatically selects all changes
+  ↓ approve or automatic apply
 Revalidate target-page hashes → embed every change before mutation
   ↓
 Write a durable history manifest and before-images
@@ -81,10 +83,14 @@ Write a durable history manifest and before-images
 Apply files, catalogue, FTS, embeddings, provenance, index, and log
   as one recoverable operation; restore files if the DB transaction fails
   ↓
-Recompute semantic links for touched pages and derive explicit links from Markdown
+Manual ingest: recompute the rank-bounded semantic graph after apply
+Trusted batch: defer one graph rebuild until the final source has applied
   ↓
-Run a bounded, source-grounded discovery scan; failure here does not roll back
-  approved knowledge
+Manual ingest: compare touched pages with cross-source candidates across the vault
+Trusted batch: compare the whole vault once after the final source
+  → model reviews only preselected pairs
+  → relationship and consolidation candidates enter Synthesis review
+  → failure here does not roll back accepted knowledge
 ```
 
 Rejected proposals never mutate wiki pages. Immutable source archives remain
@@ -93,6 +99,19 @@ available for audit and retry. Production routes use `stageSingleSource()`;
 parsing is in-process and performs no network requests. It is bounded by upload
 bytes, extracted characters, page count, and elapsed time. Encrypted and
 image-only PDFs are rejected rather than producing ungrounded knowledge.
+Automatic trusted batches do not bypass staging, Markdown validation, stale-hash
+checks, embedding, history, or recoverable apply; they bypass only the repeated
+human selection step after an explicit count-specific batch confirmation. They
+never auto-confirm cross-source synthesis proposals.
+
+Cross-source proposals may be reviewed individually or as an explicitly selected
+batch of at most 500 IDs. Nothing is preselected. Batch confirmation requires
+the exact phrase `CONFIRM N LINKS`; rejection requires `REJECT N PROPOSALS`. The
+compiler preflights every selected discovery and its current page files before
+mutation. Confirmed links are prepared in memory, written with original-file
+rollback, and paired with one SQLite status transaction; any stale or invalid
+item aborts the whole batch. Batch rejection changes only discovery review state
+in one transaction.
 
 ### Search
 
@@ -146,6 +165,23 @@ POST /api/ingest/playlist
   → creates a separate review proposal per source
   → SSE streams per-video progress
 ```
+
+### Trusted video batch
+
+```
+POST /api/ingest/batch
+  → validates a bounded, unique, exact list of YouTube video URLs
+  → requires AUTO APPLY N TRUSTED SOURCES for that exact count
+  → resolves one provider configuration for the whole batch
+  → sequentially stages and automatically applies every validated change
+  → stops on the first pre-commit failure; already applied sources are skipped
+  → records reviewMode=automatic and one shared batch UUID in ingest history
+```
+
+This mode accepts exact video URLs rather than expanding a playlist. It applies
+`new`, `merge`, and `contradict` alike and makes no claim that trusted input
+produces correct model output. The ordinary single-source and playlist routes
+continue to require review.
 
 ## Database schema
 
@@ -214,9 +250,10 @@ rebuildable derived data.
 
 Approved ingest history is stored under `history/` with source/proposal
 identity, per-page before/after hashes, before-images, retained after-images
-when undone, and an undo receipt. This filesystem state is authoritative for
-last-ingest recovery; SQLite proposal and discovery queues remain derived MVP
-state.
+when undone, review mode, an automatic batch ID where applicable, and an undo
+receipt. Legacy manifests without a review mode are read as manual. This
+filesystem state is authoritative for last-ingest recovery; SQLite proposal and
+discovery queues remain derived MVP state.
 
 ### `ingest_proposals`
 
@@ -226,11 +263,32 @@ their base content hashes so approval refuses stale rewrites.
 
 ### `discoveries`
 
-Stores deduplicated, source-grounded candidate connections with relationship
-type, explanation, significance, evidence page/source IDs, model metadata, and a
-guarded `pending|investigating → confirmed|rejected` lifecycle. Confirming a
-discovery promotes a missing relationship into canonical Markdown as an explicit
-wiki link.
+Stores deduplicated cross-source synthesis proposals with relationship type,
+explanation, significance, evidence page/source IDs, model metadata, and a
+guarded `pending|investigating → confirmed|rejected` lifecycle. The model can
+only judge a supplied pair; it cannot invent page or source IDs.
+
+### `discovery_candidates`
+
+Stores rebuildable progress for systematic cross-source review. A generation
+contains the current lexical and embedding candidate frontier after excluding
+shared provenance, existing explicit links, and previously proposed pairs. Each
+candidate is keyed by the exact evidence-bearing page content hashes, model, and
+prompt version, and moves from `queued` to either `reviewed` (no proposal) or
+`proposed`. Re-running a sweep reuses unchanged decisions, while changed pages,
+models, or prompts receive new candidate identities. Failed model calls leave
+their batch queued. The browser and trusted-batch workflow process bounded
+chunks until the generation is complete, so provider interruption is resumable.
+
+Candidate retrieval is a recall mechanism, not evidence. The model sees only the
+exact supplied pair and its source metadata; every proposal remains pending
+until human confirmation.
+
+`consolidation_candidate` identifies pages that may cover the same durable
+concept. Confirmation promotes the reviewed overlap into canonical Markdown as
+an explicit wiki link, but does not merge or delete either page. Other confirmed
+proposal types likewise become explicit links. Post-ingest page merging needs a
+separate exact-Markdown, hash-guarded, recoverable mutation workflow.
 
 ## Key algorithms
 

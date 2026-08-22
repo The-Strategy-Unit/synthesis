@@ -7,7 +7,13 @@ const YOUTUBE_HOSTS = new Set([
   "m.youtube.com",
   "music.youtube.com",
 ]);
-const SOURCE_TYPES = new Set(["auto", "text", "video", "playlist"]);
+const SOURCE_TYPES = new Set([
+  "auto",
+  "text",
+  "video",
+  "playlist",
+  "trusted-batch",
+]);
 
 function httpUrl(value) {
   try {
@@ -46,4 +52,21 @@ export function classifyIngestSource(value, sourceType) {
     kind: isCanonicalYouTubePlaylist(url) ? "playlist" : "video",
     value: url.href,
   };
+}
+
+export function parseTrustedVideoBatch(value) {
+  const urls = String(value).split(/\r?\n/u).map((line) => line.trim()).filter(
+    Boolean,
+  );
+  if (urls.length === 0) {
+    throw new Error("Add at least one YouTube video URL or ID");
+  }
+  return urls;
+}
+
+export function trustedBatchConfirmation(sourceCount) {
+  if (!Number.isSafeInteger(sourceCount) || sourceCount < 1) {
+    throw new RangeError("Trusted batch source count must be positive");
+  }
+  return `AUTO APPLY ${sourceCount} TRUSTED SOURCES`;
 }

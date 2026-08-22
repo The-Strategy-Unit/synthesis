@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
-import { classifyIngestSource } from "./ingest_source.js";
+import {
+  classifyIngestSource,
+  parseTrustedVideoBatch,
+  trustedBatchConfirmation,
+} from "./ingest_source.js";
 
 Deno.test("ingest source classification is explicit and playlist-safe", () => {
   const videoId = "dQw4w9WgXcQ";
@@ -69,4 +73,17 @@ Deno.test("ingest source classification is explicit and playlist-safe", () => {
     () => classifyIngestSource("Source", "unknown"),
     /Invalid ingest source type/,
   );
+});
+
+Deno.test("trusted video batches preserve the exact non-empty line list", () => {
+  assert.deepEqual(
+    parseTrustedVideoBatch(" dQw4w9WgXcQ\n\nhttps://youtu.be/9bZkp7q19f0 \n"),
+    ["dQw4w9WgXcQ", "https://youtu.be/9bZkp7q19f0"],
+  );
+  assert.equal(
+    trustedBatchConfirmation(2),
+    "AUTO APPLY 2 TRUSTED SOURCES",
+  );
+  assert.throws(() => parseTrustedVideoBatch("\n \n"), /at least one/);
+  assert.throws(() => trustedBatchConfirmation(0), RangeError);
 });
