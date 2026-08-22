@@ -423,6 +423,110 @@ dbTest(
   },
 );
 
+dbTest("discovery candidate progress is resumable and guarded", async () => {
+  await withTempDb((db, dir) => {
+    const first = db.addNote("First", `${dir}/first.md`, null, "text");
+    const second = db.addNote("Second", `${dir}/second.md`, null, "text");
+    const base = {
+      generation: "generation-one",
+      left_note_id: first,
+      right_note_id: second,
+      left_hash: "a".repeat(64),
+      right_hash: "b".repeat(64),
+      prompt_version: "cross-source-v2",
+      model: "local-model",
+      score: 0.72,
+      lexical_similarity: 0.2,
+      semantic_similarity: 0.72,
+    };
+    db.stageDiscoveryCandidates("generation-one", [{
+      ...base,
+      fingerprint: "candidate-one",
+    }]);
+    assert.deepEqual(db.getDiscoveryCandidateCoverage("generation-one"), {
+      total: 1,
+      queued: 1,
+      reviewed: 0,
+      proposed: 0,
+    });
+    assert.equal(
+      db.reviewDiscoveryCandidate(
+        "generation-one",
+        "candidate-one",
+        "reviewed",
+        null,
+      ),
+      true,
+    );
+    assert.equal(
+      db.reviewDiscoveryCandidate(
+        "generation-one",
+        "candidate-one",
+        "reviewed",
+        null,
+      ),
+      false,
+    );
+
+    db.stageDiscoveryCandidates("generation-two", [{
+      ...base,
+      generation: "generation-two",
+      fingerprint: "candidate-one",
+    }]);
+    assert.deepEqual(db.getDiscoveryCandidateCoverage("generation-two"), {
+      total: 1,
+      queued: 0,
+      reviewed: 1,
+      proposed: 0,
+    });
+    assert.equal(
+      db.getDiscoveryCandidates("generation-two", "reviewed", 1)[0]
+        .fingerprint,
+      "candidate-one",
+    );
+
+    db.stageDiscoveryCandidates("generation-two", [{
+      ...base,
+      generation: "generation-two",
+      fingerprint: "candidate-two",
+    }]);
+    const discoveryId = db.addDiscovery({
+      fingerprint: "supports|1,2|1,2",
+      relationship_type: "supports",
+      explanation: "Evidence supports a connection.",
+      significance: "The connection may matter.",
+      page_ids_json: JSON.stringify([first, second]),
+      source_ids_json: "[1,2]",
+      production_method: "test",
+      model: "local-model",
+      confidence: 0.7,
+    });
+    assert.ok(discoveryId);
+    assert.equal(
+      db.reviewDiscoveryCandidate(
+        "generation-two",
+        "candidate-two",
+        "proposed",
+        discoveryId,
+      ),
+      true,
+    );
+    assert.throws(
+      () =>
+        db.reviewDiscoveryCandidate(
+          "generation-two",
+          "candidate-one",
+          "proposed",
+          null,
+        ),
+      /require a discovery ID/,
+    );
+
+    db.deleteNote(first);
+    assert.deepEqual(db.getDiscoveryCandidates("generation-two"), []);
+  });
+});
+
 dbTest(
   "incremental and full link recomputation maintain the expected graph",
   async () => {

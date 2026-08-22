@@ -24,7 +24,13 @@ export interface VaultRebuildResult {
   sourceCount: number;
   noteCount: number;
   provenanceCount: number;
-  reset: ["embeddings", "semantic_links", "proposals", "discoveries"];
+  reset: [
+    "embeddings",
+    "semantic_links",
+    "proposals",
+    "discovery_candidates",
+    "discoveries",
+  ];
 }
 
 export class VaultRebuildError extends Error {}
@@ -341,6 +347,12 @@ export async function rebuildVaultCatalog(db: DB): Promise<VaultRebuildResult> {
       (count, note) => count + note.sourceHashes.length,
       0,
     ),
-    reset: ["embeddings", "semantic_links", "proposals", "discoveries"],
+    reset: [
+      "embeddings",
+      "semantic_links",
+      "proposals",
+      "discovery_candidates",
+      "discoveries",
+    ],
   };
 }

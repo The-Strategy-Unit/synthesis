@@ -142,6 +142,7 @@ Deno.test({
         reset: [
           "affected_embeddings",
           "affected_semantic_links",
+          "discovery_candidates",
           "discoveries",
         ],
       });

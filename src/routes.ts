@@ -476,20 +476,40 @@ export function createHandler(
         if (path === "/api/discoveries/generate" && method === "POST") {
           requireIngester(identity);
           const body = await readJson(req);
+          const generation = optionalString(
+            body.generation,
+            "generation",
+            100,
+          );
+          if (
+            generation !== undefined &&
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+              .test(generation)
+          ) {
+            throw new ApiError(
+              400,
+              "INVALID_INPUT",
+              "Invalid synthesis generation",
+            );
+          }
           const pageIds = body.pageIds === undefined
             ? db.getAllNotes().map((note) => note.id)
             : positiveIdArray(body.pageIds, "pageIds", 12);
           const providers = await resolveProviders();
-          return json({
-            discoveries: await generateDiscoveries(
+          return json(
+            await generateDiscoveries(
               db,
               pageIds,
               providers.llm.apiBase,
               providers.llm.apiKey,
               providers.llm.consolidateModel,
               await ensureWikiSchema(),
+              {
+                scope: body.pageIds === undefined ? "vault" : "seeded",
+                generation,
+              },
             ),
-          });
+          );
         }
         const discoveryMatch = path.match(
           /^\/api\/discoveries\/(\d+)(?:\/(investigate|confirm|reject))?$/,

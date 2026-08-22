@@ -132,7 +132,13 @@ Deno.test({
         sourceCount: 2,
         noteCount: 2,
         provenanceCount: 3,
-        reset: ["embeddings", "semantic_links", "proposals", "discoveries"],
+        reset: [
+          "embeddings",
+          "semantic_links",
+          "proposals",
+          "discovery_candidates",
+          "discoveries",
+        ],
       });
       assert.equal(db.getSourceByHash("stale-source"), undefined);
       assert.equal(db.getNoteByExactTitle("Stale note"), undefined);

@@ -21,7 +21,7 @@ main.ts                     # Composition root and loopback HTTP server
 ├── src/vault_rebuild.ts    # Provider-free catalog reconstruction
 ├── src/wiki_schema.ts      # Editable vault policy supplied to model workflows
 ├── src/wiki_graph.ts       # Explicit-link-first graph and related-page views
-├── src/discovery.ts        # Grounded connection candidates and review lifecycle
+├── src/discovery.ts        # Cross-source synthesis candidates and review lifecycle
 ├── src/query.ts            # Context-bounded answers and reviewed write-back
 ├── src/wiki_lint.ts        # Provider-free checks and optional AI analysis
 ├── src/routes.ts           # Authenticated API, limits, queue, SSE, static files
@@ -127,8 +127,9 @@ explicit-link hop.
 compiler-managed pages, unique titles, exact wiki-link targets, and provenance
 before any database mutation. It regenerates `index.md`, then atomically
 replaces the SQLite source/note/provenance/FTS catalog. Embeddings and semantic
-links are empty after rebuild. Proposals and discoveries are cleared because
-their numeric-ID review state is not yet represented as durable vault files.
+links are empty after rebuild. Proposals, discovery candidate coverage, and
+discoveries are cleared because their numeric-ID review state is not yet
+represented as durable vault files.
 
 `POST /api/ingest/undo` selects the newest not-yet-undone history manifest. All
 current affected pages must match their recorded approved hashes. The operation

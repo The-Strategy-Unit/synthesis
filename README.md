@@ -150,7 +150,10 @@ as the wiki changes.
 5. **Rewrite** — update affected pages while preserving links and provenance.
 6. **Index** — update SQLite FTS, embeddings, graph links, `index.md`, and
    `log.md`.
-7. **Query** — answer from compiled pages, cite them, and optionally compile a
+7. **Synthesize across sources** — shortlist cross-source page pairs across the
+   vault, then propose evidence-grounded relationships or possible
+   consolidations for review.
+8. **Query** — answer from compiled pages, cite them, and optionally compile a
    reviewed answer back into the wiki.
 
 ## Storage
@@ -180,8 +183,8 @@ credentials. **Rebuild** strictly validates source hashes, wiki pages, links,
 and provenance before replacing the derived SQLite catalog. Rebuild restores
 keyword search and explicit wiki links immediately; embeddings and semantic
 links remain empty until later model-backed work. It also clears pending
-proposals and discovery-review state because those queues are not yet durable
-vault artifacts.
+proposals, discovery candidate coverage, and discovery-review state because
+those queues are not yet durable vault artifacts.
 
 **Undo ingest** applies only to the newest accepted, not-yet-undone ingest. It
 refuses to overwrite a page changed since approval, retains immutable sources,

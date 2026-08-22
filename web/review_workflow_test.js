@@ -4,6 +4,7 @@ import {
   formatPageRanges,
   ingestProgress,
   REVIEW_DECISIONS,
+  reviewDecisionsForEveryChange,
   reviewDecisionSummary,
 } from "./review_workflow.js";
 
@@ -45,6 +46,31 @@ Deno.test("excluding every change cannot apply an empty approval", () => {
   assert.equal(reviewDecisionSummary([]).canApprove, false);
 });
 
+Deno.test("trusted-source review can include every staged change at once", () => {
+  const decisions = reviewDecisionsForEveryChange(
+    4,
+    REVIEW_DECISIONS.include,
+  );
+  assert.deepEqual(decisions, ["include", "include", "include", "include"]);
+  assert.deepEqual(reviewDecisionSummary(decisions), {
+    canApprove: true,
+    exclude: 0,
+    include: 4,
+    pending: 0,
+  });
+});
+
+Deno.test("bulk review refuses an incomplete or invalid decision", () => {
+  assert.throws(
+    () => reviewDecisionsForEveryChange(2, REVIEW_DECISIONS.pending),
+    TypeError,
+  );
+  assert.throws(
+    () => reviewDecisionsForEveryChange(-1, REVIEW_DECISIONS.include),
+    RangeError,
+  );
+});
+
 Deno.test("ingestion progress exposes the source-to-review handoff", () => {
   assert.deepEqual(ingestProgress("ingesting"), {
     draft: "pending",
@@ -79,6 +105,7 @@ Deno.test("review is an application workspace, not a modal", async () => {
   );
   assert.match(html, /id="review-workspace" class="hidden"/);
   assert.match(html, /id="proposal-decision-summary" role="status"/);
+  assert.match(html, /id="proposal-include-all"/);
   assert.match(html, /id="ingest-stages"/);
   assert.doesNotMatch(html, /id="review-modal"/);
   assert.doesNotMatch(html, /class="proposal-change-select"/);
