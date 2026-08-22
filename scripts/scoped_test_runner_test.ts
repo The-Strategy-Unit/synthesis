@@ -37,6 +37,11 @@ Deno.test("scoped test permissions include the resolved temp directory", () => {
       "scripts/ui_shell_e2e_test.ts",
     ],
   );
+  assert.ok(
+    scopedTestArguments("browser", "D:\\runner\\temp").includes(
+      "--allow-write=D:\\runner\\temp,web/app.bundle.js",
+    ),
+  );
   assert.equal(
     scopedTestArguments("compiled", "/tmp", ["dist/synthesis"])
       .at(-1),

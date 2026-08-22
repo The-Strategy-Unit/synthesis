@@ -348,14 +348,19 @@ deno task check
 deno task test:unit
 deno task test:integration
 deno task test:e2e
+deno task test:browser -- /path/to/chromium
 deno task compile
 deno task compile:windows
 deno task build
 ```
 
 `test:e2e` is automated and provider-independent. It starts a temporary local
-server, verifies the HTTP workflow and served UI assets, and cleans up its
-temporary vault. The `build` task creates Deno source distributions with
+server and verifies the HTTP workflow and served UI assets. `test:browser`
+launches Chromium against another temporary vault and exercises search
+relevance, graph maximisation, fit, keyboard restoration, and restore in the
+real DOM. Windows CI uses its preinstalled Edge; pass an explicit Chromium
+executable locally when it is not on `PATH`. Both tests clean up their temporary
+vaults. The `build` task creates Deno source distributions with
 platform-specific `yt-dlp`; the `compile` tasks create standalone
 self-extracting QuickJS executables.
 

@@ -6,7 +6,7 @@ type TempEnvironment = Readonly<{
   TMPDIR?: string;
 }>;
 
-export type ScopedTestMode = "e2e" | "compiled";
+export type ScopedTestMode = "e2e" | "browser" | "compiled";
 
 export function testTempDirectory(
   os: OperatingSystem,
@@ -29,22 +29,31 @@ export function scopedTestArguments(
 ): string[] {
   const script = mode === "e2e"
     ? "scripts/ui_shell_e2e_test.ts"
+    : mode === "browser"
+    ? "scripts/browser_interaction_smoke.ts"
     : "scripts/compiled_smoke.ts";
+  const writable = mode === "browser"
+    ? `${permissionPath(tempDirectory)},web/app.bundle.js`
+    : permissionPath(tempDirectory);
   return [
     mode === "e2e" ? "test" : "run",
     "--no-prompt",
     "--allow-run",
     "--allow-net=127.0.0.1",
     `--allow-read=.,${permissionPath(tempDirectory)}`,
-    `--allow-write=${permissionPath(tempDirectory)}`,
+    `--allow-write=${writable}`,
     script,
     ...forwarded,
   ];
 }
 
 function readMode(value: string | undefined): ScopedTestMode {
-  if (value === "e2e" || value === "compiled") return value;
-  throw new Error("Usage: scoped_test_runner.ts <e2e|compiled> [arguments]");
+  if (value === "e2e" || value === "browser" || value === "compiled") {
+    return value;
+  }
+  throw new Error(
+    "Usage: scoped_test_runner.ts <e2e|browser|compiled> [arguments]",
+  );
 }
 
 if (import.meta.main) {
