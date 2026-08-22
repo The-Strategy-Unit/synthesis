@@ -707,12 +707,47 @@ body {
   padding: 1rem;
 }
 
+#graph-panel.is-maximized {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  grid-column: auto;
+  border: 0;
+  background: var(--panel);
+  box-shadow: 0 0 2rem var(--shadow);
+}
+
 .graph-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+.graph-heading-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.85rem;
+}
+
+#graph-maximize,
+#graph-fit {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+#graph-maximize:hover,
+#graph-maximize:focus-visible,
+#graph-fit:hover,
+#graph-fit:focus-visible {
+  border-color: var(--accent);
 }
 
 #connections-title {
@@ -764,6 +799,14 @@ body {
   opacity: 0.65;
 }
 
+.graph-legend .legend-search-match {
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 2px solid var(--accent-strong);
+  border-radius: 50%;
+  background: var(--text);
+}
+
 #semantic-neighbors-slider {
   margin-left: 0.5rem;
   vertical-align: middle;
@@ -774,6 +817,45 @@ body {
   color: var(--text-faint);
   font-size: 0.72rem;
   line-height: 1.4;
+}
+
+.graph-search-context,
+.graph-focus-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--accent-strong);
+  border-radius: 6px;
+  background: rgba(54, 143, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.graph-search-context button,
+.graph-focus-context button {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.graph-focus-context {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+}
+
+.graph-focus-context > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
 }
 
 #graph {
@@ -808,6 +890,12 @@ body {
 
 #graph circle:hover {
   fill: var(--accent-soft);
+}
+
+#graph circle.is-search-match {
+  fill: var(--text);
+  stroke: var(--accent-strong);
+  stroke-width: 3px;
 }
 
 #graph circle:focus-visible {
@@ -845,6 +933,11 @@ body {
 #graph text.is-highlighted {
   fill: var(--text);
   opacity: 1;
+}
+
+#graph text.is-search-match {
+  fill: var(--text);
+  font-weight: 700;
 }
 
 #graph-tooltip {
@@ -2772,6 +2865,11 @@ body {
   .graph-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .graph-heading-actions {
+    align-items: stretch;
+    justify-content: space-between;
   }
 }
 

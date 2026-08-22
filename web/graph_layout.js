@@ -53,6 +53,87 @@ export function semanticNeighborLinks(nodes, links, neighborsPerPage) {
   ];
 }
 
+export function searchContextGraph(nodes, links, resultIds) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const matches = new Set(
+    [...resultIds].filter((id) => nodeIds.has(id)),
+  );
+  const included = new Set(matches);
+
+  for (const link of links) {
+    const source = endpointId(link.source);
+    const target = endpointId(link.target);
+    if (matches.has(source) || matches.has(target)) {
+      included.add(source);
+      included.add(target);
+    }
+  }
+
+  return {
+    nodes: nodes.filter((node) => included.has(node.id)),
+    links: links.filter((link) =>
+      included.has(endpointId(link.source)) &&
+      included.has(endpointId(link.target))
+    ),
+    matchedIds: matches,
+  };
+}
+
+export function graphFocusNodeIds(nodes, links, focusId) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  if (!nodeIds.has(focusId)) return new Set();
+  const focused = new Set([focusId]);
+  for (const link of links) {
+    const source = endpointId(link.source);
+    const target = endpointId(link.target);
+    if (source === focusId && nodeIds.has(target)) focused.add(target);
+    if (target === focusId && nodeIds.has(source)) focused.add(source);
+  }
+  return focused;
+}
+
+export function graphFitTransform(
+  nodes,
+  width,
+  height,
+  { padding = 48, nodePadding = 20, minScale = 0.01, maxScale = 1 } = {},
+) {
+  if (!Number.isFinite(width) || width <= 0) {
+    throw new RangeError("Graph viewport width must be positive");
+  }
+  if (!Number.isFinite(height) || height <= 0) {
+    throw new RangeError("Graph viewport height must be positive");
+  }
+
+  const positioned = nodes.filter((node) =>
+    Number.isFinite(node.x) && Number.isFinite(node.y)
+  );
+  if (positioned.length === 0) return { x: 0, y: 0, k: 1 };
+
+  const minX = Math.min(...positioned.map((node) => node.x)) - nodePadding;
+  const maxX = Math.max(...positioned.map((node) => node.x)) + nodePadding;
+  const minY = Math.min(...positioned.map((node) => node.y)) - nodePadding;
+  const maxY = Math.max(...positioned.map((node) => node.y)) + nodePadding;
+  const safePadding = Math.max(
+    0,
+    Math.min(padding, width * 0.2, height * 0.2),
+  );
+  const availableWidth = Math.max(1, width - safePadding * 2);
+  const availableHeight = Math.max(1, height - safePadding * 2);
+  const boundsWidth = Math.max(1, maxX - minX);
+  const boundsHeight = Math.max(1, maxY - minY);
+  const k = Math.max(
+    minScale,
+    Math.min(maxScale, availableWidth / boundsWidth, availableHeight / boundsHeight),
+  );
+
+  return {
+    x: width / 2 - k * ((minX + maxX) / 2),
+    y: height / 2 - k * ((minY + maxY) / 2),
+    k,
+  };
+}
+
 export function semanticSimilarityRange(links) {
   const similarities = links
     .filter((link) => link.kind === "semantic")

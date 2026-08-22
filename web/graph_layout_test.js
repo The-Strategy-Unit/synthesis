@@ -1,12 +1,40 @@
 import assert from "node:assert/strict";
 
 import {
+  graphFitTransform,
   graphLinkDistance,
   graphLinkStrength,
+  graphFocusNodeIds,
+  searchContextGraph,
   seededGraphRandom,
   semanticNeighborLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
+
+Deno.test("graph fit transform centres every positioned node with padding", () => {
+  const transform = graphFitTransform(
+    [{ x: -100, y: -50 }, { x: 100, y: 50 }],
+    1000,
+    600,
+  );
+
+  assert.deepEqual(transform, { x: 500, y: 300, k: 1 });
+
+  const wide = graphFitTransform(
+    [{ x: -1000, y: 0 }, { x: 1000, y: 0 }],
+    1000,
+    600,
+  );
+  assert.ok(wide.k < 0.5);
+  assert.equal(wide.x, 500);
+  assert.equal(wide.y, 300);
+});
+
+Deno.test("graph fit transform handles missing positions and invalid viewports", () => {
+  assert.deepEqual(graphFitTransform([{}], 800, 600), { x: 0, y: 0, k: 1 });
+  assert.throws(() => graphFitTransform([], 0, 600), /width must be positive/);
+  assert.throws(() => graphFitTransform([], 800, -1), /height must be positive/);
+});
 
 Deno.test("semantic neighbour breadth is local, deterministic, and keeps explicit links", () => {
   const nodes = [1, 2, 3, 4].map((id) => ({ id }));
@@ -29,6 +57,40 @@ Deno.test("semantic neighbour breadth is local, deterministic, and keeps explici
     () => semanticNeighborLinks(nodes, links, -1),
     /must be non-negative/,
   );
+});
+
+Deno.test("search context keeps matches, one-hop neighbours, and their induced edges", () => {
+  const nodes = [1, 2, 3, 4, 5, 6].map((id) => ({ id }));
+  const links = [
+    { source: 1, target: 2, kind: "semantic" },
+    { source: 1, target: 3, kind: "explicit" },
+    { source: 2, target: 3, kind: "semantic" },
+    { source: 3, target: 4, kind: "semantic" },
+    { source: 5, target: 6, kind: "explicit" },
+  ];
+
+  const context = searchContextGraph(nodes, links, new Set([1, 99]));
+  assert.deepEqual(context.nodes, nodes.slice(0, 3));
+  assert.deepEqual(context.links, links.slice(0, 3));
+  assert.deepEqual(context.matchedIds, new Set([1]));
+
+  assert.deepEqual(searchContextGraph(nodes, links, new Set()), {
+    nodes: [],
+    links: [],
+    matchedIds: new Set(),
+  });
+});
+
+Deno.test("graph focus contains only the selected node and its visible neighbours", () => {
+  const nodes = [1, 2, 3, 4].map((id) => ({ id }));
+  const links = [
+    { source: 1, target: 2 },
+    { source: { id: 3 }, target: { id: 1 } },
+    { source: 3, target: 4 },
+  ];
+
+  assert.deepEqual(graphFocusNodeIds(nodes, links, 1), new Set([1, 2, 3]));
+  assert.deepEqual(graphFocusNodeIds(nodes, links, 99), new Set());
 });
 
 Deno.test("stronger semantic links pull closer and more strongly", () => {

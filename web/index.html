@@ -153,24 +153,59 @@
                     <p class="workspace-eyebrow">Explore</p>
                     <h2 id="connections-title">Knowledge connections</h2>
                   </div>
-                  <div class="graph-breadth-control">
-                    <label for="semantic-neighbors-slider">
-                      Semantic suggestions per page
-                      <span id="semantic-neighbors-value">3</span>
-                    </label>
-                    <input type="range" id="semantic-neighbors-slider"
-                      min="0" max="8" step="1" value="3" />
+                  <div class="graph-heading-actions">
+                    <div class="graph-breadth-control">
+                      <label for="semantic-neighbors-slider">
+                        Semantic suggestions per page
+                        <span id="semantic-neighbors-value">3</span>
+                      </label>
+                      <input type="range" id="semantic-neighbors-slider"
+                        min="0" max="8" step="1" value="3" />
+                    </div>
+                    <button id="graph-maximize" type="button"
+                      aria-controls="graph-panel" aria-pressed="false">
+                      Maximise graph
+                    </button>
+                    <button id="graph-fit" type="button"
+                      aria-controls="graph" title="Fit every visible node">
+                      Fit graph
+                    </button>
                   </div>
                 </div>
                 <div class="graph-legend" aria-label="Connection types">
                   <span><i class="legend-explicit"></i>Reviewed wiki link</span>
                   <span><i class="legend-semantic"></i>Semantic suggestion</span>
+                  <span id="legend-search-match" class="hidden">
+                    <i class="legend-search-match"></i>Direct search result
+                  </span>
+                </div>
+                <div id="graph-search-context"
+                  class="graph-search-context hidden">
+                  <span id="graph-search-summary" role="status"
+                    aria-live="polite"></span>
+                  <button id="graph-search-clear" type="button">
+                    Clear search
+                  </button>
+                </div>
+                <div id="graph-focus-context"
+                  class="graph-focus-context hidden">
+                  <span id="graph-focus-summary" role="status"
+                    aria-live="polite"></span>
+                  <div>
+                    <button id="graph-focus-open" type="button">
+                      Open page
+                    </button>
+                    <button id="graph-focus-clear" type="button">
+                      Clear focus
+                    </button>
+                  </div>
                 </div>
                 <p class="graph-method-note">
-                  Semantic similarity draws related pages together. Clusters,
-                  bridges, and hubs can reveal patterns worth investigating.
-                  Distances between disconnected groups, axes, and rotation
-                  have no meaning.
+                  Select a node to pin its visible connections. Semantic
+                  similarity draws related pages together. Clusters, bridges,
+                  and hubs can reveal patterns worth investigating. Distances
+                  between disconnected groups, axes, and rotation have no
+                  meaning.
                 </p>
                 <svg id="graph" aria-label="Knowledge connection map"></svg>
               </section>

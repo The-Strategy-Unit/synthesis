@@ -349,12 +349,25 @@ asymmetric results.
    corpus.
 5. Normalise direction, deduplicate the undirected union, and store similarity.
 
-`buildWikiGraph()` overlays authoritative explicit links parsed from files. The
-browser uses similarity to set link force and distance, so connected clusters,
-bridges, and hubs are reproducible and potentially informative. Distances
-between disconnected components, axes, rotation, and overall silhouette carry no
-semantic meaning. Semantic links remain derived suggestions; only reviewed
-discoveries become canonical Markdown links.
+`buildWikiGraph()` then overlays authoritative explicit links parsed from files.
+The browser initially keeps the strongest configured number of incident semantic
+neighbours around each page and uses similarity to set link force and distance.
+This makes connected clusters, bridges, and hubs reproducible and potentially
+informative. Distances between disconnected components, the axes, rotation, and
+the overall silhouette carry no semantic meaning.
+
+An active wiki search filters only the browser presentation. Search result IDs
+become seed pages; the graph retains their direct reviewed and currently visible
+semantic neighbours, then includes existing edges among that bounded node set.
+It does not expand to second-hop pages or alter the stored graph. Clearing the
+search restores the complete graph. A pinned node focus is also presentation
+state: it keeps positions fixed, fades unrelated nodes and edges, and offers an
+explicit transition to the page reader. Clearing the search clears the pin. The
+maximised graph is the same live SVG and force simulation in a fixed viewport,
+not a second graph instance; resizing preserves zoom and presentation state.
+
+Semantic links remain derived suggestions. Only a separately reviewed discovery
+can promote a relationship into canonical Markdown.
 
 ### LLM pipeline stages
 
