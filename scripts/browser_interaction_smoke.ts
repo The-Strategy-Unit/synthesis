@@ -6,6 +6,8 @@ import { renderWikiPage } from "../src/wiki.ts";
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 const ATTEMPT_TIMEOUT_MS = 2_000;
+const BROWSER_CONNECT_TIMEOUT_MS = 5_000;
+const CDP_COMMAND_TIMEOUT_MS = 10_000;
 const PROCESS_STOP_TIMEOUT_MS = 5_000;
 
 export async function withTimeout<T>(
@@ -217,7 +219,7 @@ class CdpClient {
             { once: true },
           );
         }),
-        ATTEMPT_TIMEOUT_MS,
+        BROWSER_CONNECT_TIMEOUT_MS,
         "Browser debugging connection timed out",
       );
     } catch (error) {
@@ -242,7 +244,7 @@ class CdpClient {
     });
     return withTimeout(
       response,
-      ATTEMPT_TIMEOUT_MS,
+      CDP_COMMAND_TIMEOUT_MS,
       `Browser command ${method} timed out`,
     ).finally(() => this.#pending.delete(id));
   }
