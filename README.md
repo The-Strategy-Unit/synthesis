@@ -1,4 +1,4 @@
-# Synthesis
+# Synthesis ⚗️
 
 Synthesis compiles scattered source material into a persistent, linked, local
 wiki. It follows
@@ -503,12 +503,6 @@ provider is available. Ingestion, semantic-index building, AI-assisted analysis,
 query answers, and discovery generation require Ollama or a configured remote
 provider; semantic search additionally requires complete compatible index
 coverage.
-
-For network deployment, authentication, quotas, backups, and recovery guidance,
-see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not expose the server directly
-to the internet. The current SQLite/FFI, subprocess, OS-keychain,
-writable-filesystem, and long-lived-SSE design is not directly deployable to a
-serverless runtime such as Deno Deploy.
 
 ## License
 
