@@ -1713,6 +1713,8 @@ const llmKeyInput = document.getElementById("provider-llm-key");
 const embeddingKeyInput = document.getElementById("provider-embed-key");
 const askOpenButton = document.getElementById("ask-open-btn");
 const ingestButton = document.getElementById("ingest-btn");
+const ingestCancelButton = document.getElementById("ingest-cancel-btn");
+let activeIngestController = null;
 let providerState = { phase: "checking", mode: "unknown" };
 
 function setProviderBusy(busy) {
@@ -1741,7 +1743,8 @@ function renderProviderState(nextState) {
   askOpenButton.disabled = !capabilities.modelActions;
   discoveriesScan.disabled = !capabilities.modelActions;
   lintAnalyze.disabled = !capabilities.modelActions;
-  ingestButton.disabled = !capabilities.modelActions;
+  ingestButton.disabled = !capabilities.modelActions ||
+    activeIngestController !== null;
   rebuildSemanticButton.disabled = !capabilities.modelActions;
   rebuildSemanticButton.textContent = providerState.semanticIndex?.complete
     ? "Semantic index ready"
@@ -2687,7 +2690,7 @@ function renderIngestMode() {
     ? "No proposal-by-proposal review"
     : "Nothing changes automatically";
   document.getElementById("ingest-progress-note").textContent = automatic
-    ? "The batch stops on its first failure and reports completed sources."
+    ? "Stop safely and submit the same list to resume; completed sources are skipped."
     : "Completed proposals remain available in Review.";
   document.getElementById("ingest-btn").textContent = automatic
     ? "Start automatic batch"
@@ -2776,6 +2779,10 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   fileInput.disabled = true;
   trustedBatchConfirmationInput.disabled = true;
   document.getElementById("ingest-btn").disabled = true;
+  const requestController = new AbortController();
+  activeIngestController = requestController;
+  ingestCancelButton.disabled = false;
+  ingestCancelButton.classList.remove("hidden");
   renderIngestProgress("ingesting");
 
   let completed = false;
@@ -2820,6 +2827,7 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
         body: JSON.stringify(body),
       };
     }
+    request.signal = requestController.signal;
     const res = await fetch(endpoint, request);
 
     await consumeSse(res, async (data) => {
@@ -2882,10 +2890,17 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       if (data.stage === "error") throw new Error(data.error);
     });
   } catch (err) {
-    status.textContent = automatic
+    status.textContent = requestController.signal.aborted
+      ? "Stop requested. Completed sources and proposals are preserved; submit the same input to resume."
+      : automatic
       ? `Automatic batch stopped: ${err.message}`
       : `Could not prepare source: ${err.message}`;
   } finally {
+    if (activeIngestController === requestController) {
+      activeIngestController = null;
+    }
+    ingestCancelButton.classList.add("hidden");
+    ingestCancelButton.disabled = false;
     input.disabled = false;
     titleInput.disabled = false;
     ingestSourceType.disabled = false;
@@ -2903,6 +2918,14 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
     }
     renderIngestMode();
   }
+});
+
+ingestCancelButton.addEventListener("click", () => {
+  if (!activeIngestController) return;
+  ingestCancelButton.disabled = true;
+  document.getElementById("ingest-status").textContent =
+    "Stopping after the current source or model step...";
+  activeIngestController.abort();
 });
 
 document.getElementById("ingest-file").addEventListener("change", (event) => {

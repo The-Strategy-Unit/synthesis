@@ -112,6 +112,7 @@ export interface DiscoveryView {
 export interface DiscoveryGenerationOptions {
   scope?: "seeded" | "vault";
   generation?: string;
+  signal?: AbortSignal;
   onProgress?: (progress: {
     current: number;
     total: number;
@@ -958,6 +959,7 @@ export async function generateDiscoveries(
         temperature: 0.1,
         maxTokens: Math.max(config.llm.maxTokens, 2_000),
         jsonMode: true,
+        signal: options.signal,
       },
       (content) => {
         const parsed = asRecord(

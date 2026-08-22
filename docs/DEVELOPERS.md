@@ -91,7 +91,7 @@ override with validation (clamping, enum checks, minimum bounds).
 | `SYNTHESIS_MAX_TRANSCRIPT_CHARS`         | 500000  | clamped 1000–2,000,000                 |
 | `SYNTHESIS_MAX_SUBTITLE_BYTES`           | 10 MiB  | clamped 1–100 MiB                      |
 | `SYNTHESIS_YT_DLP_TIMEOUT_MS`            | 120000  | clamped 5 seconds–30 minutes           |
-| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 180000  | clamped 5 seconds–30 minutes           |
+| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 600000  | clamped 5 seconds–30 minutes           |
 | `SYNTHESIS_INGEST_QUEUE_SIZE`            | 4       | clamped 0–100                          |
 | `SYNTHESIS_PER_USER_DAILY_JOBS`          | 5       | clamped 1–10000                        |
 | `SYNTHESIS_GLOBAL_DAILY_JOBS`            | 20      | clamped 1–100000                       |
@@ -107,13 +107,13 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Model roles
 
-| Variable                      | Default      | Used by                             |
-| ----------------------------- | ------------ | ----------------------------------- |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b` | Per-chunk extraction                |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:9b` | Source-level consolidation          |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:9b` | new/merge/contradict decisions      |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:9b` | Rewriting existing notes            |
-| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:9b` | Backward-compat / API response only |
+| Variable                      | Default        | Used by                             |
+| ----------------------------- | -------------- | ----------------------------------- |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`   | Per-chunk extraction                |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:122b` | Source-level consolidation          |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:122b` | new/merge/contradict decisions      |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:122b` | Rewriting existing notes            |
+| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:122b` | Backward-compat / API response only |
 
 ### LLM tuning
 
@@ -268,7 +268,10 @@ The batch stops at the first source or apply failure. Cross-source synthesis
 failures after committed sources remain warnings. Re-submit the same list to
 resume; applied source identities are skipped, while a pending proposal is
 staged again and automatically applied. Automatic history records contain
-`reviewMode` and the shared `batchId`. Clients must keep the SSE request open.
+`reviewMode` and the shared `batchId`. Cancelling the response stream requests a
+cooperative stop before the next source or discovery batch; an in-flight
+download, provider request, or atomic apply may finish first. Clients resume by
+opening a new SSE request with the same exact input.
 
 ### Export, rebuild, and undo
 

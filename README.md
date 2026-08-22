@@ -19,14 +19,15 @@ exploration. It is not an official product of, or maintained by, the originating
 organisation.
 
 The current `main` line is a single-user MVP for local use and controlled
-private beta evaluation. It is stateful software: one process owns one writable,
-file-backed vault, while SQLite search and vector state remain rebuildable.
+private beta evaluation. It is stateful software: one process owns one
+writeable, file-backed vault, while SQLite search and vector state remain
+rebuildable.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — runtime, persistence, and compiler flow
-- [Developer guide](docs/DEVELOPERS.md) — setup, configuration, testing, and API
-- [Private beta deployment](docs/DEPLOYMENT.md) — protected stateful hosting,
+- [Architecture](docs/ARCHITECTURE.md) - runtime, persistence, and compiler flow
+- [Developer guide](docs/DEVELOPERS.md) - setup, configuration, testing, and API
+- [Private beta deployment](docs/DEPLOYMENT.md) - protected stateful hosting,
   backups, and rollout
 
 ## MVP capabilities
@@ -76,7 +77,7 @@ experimental QuickJS executables requires Deno 2.9.5 or later.
 Install and start [Ollama](https://ollama.com/), then run:
 
 ```bash
-git clone https://github.com/The-Strategy-Unit/synthesis.git
+git clone https://github.com/ai-mindset/synthesis.git
 cd synthesis
 deno task setup
 deno task app
@@ -86,12 +87,39 @@ The setup task checks Ollama and reports any models that still need to be
 pulled. The start task creates the local vault if necessary and opens
 `http://localhost:8000`.
 
+### Model sizing
+
+The quality-first default keeps high-volume extraction on `qwen3.5:9b` and
+assigns harder editorial judgements to `qwen3.5:122b`:
+
+```bash
+SYNTHESIS_EXTRACT_MODEL=qwen3.5:9b \
+SYNTHESIS_CONSOLIDATE_MODEL=qwen3.5:122b \
+SYNTHESIS_INTEGRATE_MODEL=qwen3.5:122b \
+SYNTHESIS_REWRITE_MODEL=qwen3.5:122b \
+deno task app
+```
+
+The larger model handles source consolidation, `new|merge|contradict` decisions,
+page-body rewriting, and cross-source discovery; the configured embedding model
+remains responsible for retrieval and candidate similarity. Synthesis reports a
+missing 122B model instead of silently substituting a smaller model. On hosts
+where 122B is not practical, explicitly override the three decision roles with a
+smaller evaluated model. Saved Provider profiles take precedence over
+environment defaults and currently use one selected chat model for every role.
+
+This profile trades speed for capacity. It should be evaluated on representative
+sources and does not remove evidence checking or human review. In particular,
+trusting a source does not guarantee that an automatically generated summary or
+relationship preserves every qualification in that source. Provider calls have a
+ten-minute default timeout so slower local 122B decisions can complete.
+
 ### Remote OpenAI-compatible provider
 
 Skip the Ollama-specific setup and start directly:
 
 ```bash
-git clone https://github.com/The-Strategy-Unit/synthesis.git
+git clone https://github.com/ai-mindset/synthesis.git
 cd synthesis
 deno task app
 ```
@@ -122,12 +150,48 @@ sign it before distributing it beyond a controlled internal demo. QuickJS and
 cross-compilation are provided by
 [Deno compile](https://docs.deno.com/runtime/reference/cli/compile/).
 
+## Create, open, export, and restore a vault
+
+A vault is an ordinary directory containing the authoritative Markdown, sources,
+schema, and history. One running Synthesis process owns one writeable vault.
+
+Create or open the default vault at `~/Synthesis`:
+
+```bash
+deno task app
+```
+
+Create a vault at a chosen location - or reopen it later with the same command:
+
+```bash
+SYNTHESIS_VAULT="$PWD/my-vault" deno task app
+```
+
+To make a portable backup, choose **Vault tools → Export vault**. The downloaded
+tar archive contains the authoritative vault and excludes the rebuildable SQLite
+catalogue and provider credentials.
+
+To restore it, extract the archive into a new empty directory and open that
+directory as the vault:
+
+```bash
+mkdir restored-vault
+tar -xf synthesis-vault-YYYY-MM-DD.tar -C restored-vault
+SYNTHESIS_VAULT="$PWD/restored-vault" deno task app
+```
+
+Then choose **Vault tools → Rebuild catalogue** to restore keyword search and
+explicit links. Choose **Build semantic index** - or **Resume semantic index**
+until complete - to restore model-bound semantic search and proximity
+suggestions. Provider settings and credentials remain separate and must be
+configured on the restored installation.
+
 ## Demo workflow
 
 1. Configure a provider, if not using the default Ollama configuration, and use
    **Diagnose active provider** to verify that its required models are present.
-2. Choose a representative PDF, Markdown, or text file—or paste source text—then
-   choose **Ingest**. Image-only PDFs need OCR before ingestion.
+2. Choose a representative PDF, Markdown, or text file - or paste source text -
+   then choose **Ingest**. Image-only PDFs need OCR before ingestion.
 3. Open **Review**, inspect the proposed page changes and provenance, then
    approve them to mutate the wiki.
 4. Ingest and approve a second source that supports, extends, or contradicts the
@@ -142,7 +206,7 @@ cross-compilation are provided by
    contradictions, orphan pages, and optional AI findings.
 9. Choose **Export** to download the authoritative Markdown, sources, schema,
    manifest, and revision history as a portable tar archive.
-10. Demonstrate recovery with **Undo ingest**, or use **Rebuild catalog** to
+10. Demonstrate recovery with **Undo ingest**, or use **Rebuild catalogue** to
     reconstruct provider-independent state, followed by **Build semantic index**
     to restore model-bound search and proximity suggestions.
 
@@ -192,29 +256,33 @@ or consolidation candidates appear in **Synthesis review** and are never
 confirmed automatically.
 
 The batch stops on the first download, provider, validation, stale-proposal, or
-apply failure. Keep the page open while it runs. Re-submit the same exact list
-to resume: sources already applied to the current vault are detected by content
-identity and skipped. Each applied source retains its proposal and writes a
+apply failure. **Stop safely** cancels the stream cooperatively; the current
+download, model call, or atomic source apply may finish first. Re-submit the
+same exact list to resume: pending proposals are reused, sources already applied
+to the current vault are detected by content identity and skipped, and completed
+cross-source candidate decisions are checkpointed. Ordinary playlists use the
+same stop-and-resubmit behaviour but leave every source proposal for manual
+review. Each automatically applied source retains its proposal and writes a
 history manifest with `reviewMode: automatic` and the shared batch ID. This is
 an efficiency option, not a quality check; curate the source list and audit the
 resulting wiki.
 
 ## Compilation pipeline
 
-1. **Archive** — preserve the raw source or original uploaded file, extracted
+1. **Archive** - preserve the raw source or original uploaded file, extracted
    page-aware text, metadata, hash, and source summary.
-2. **Extract** — identify durable concepts, entities, findings, procedures, and
+2. **Extract** - identify durable concepts, entities, findings, procedures, and
    cautions from bounded chunks.
-3. **Consolidate** — deduplicate candidate pages within the source.
-4. **Integrate** — classify each page as `new`, `merge`, or `contradict` against
+3. **Consolidate** - deduplicate candidate pages within the source.
+4. **Integrate** - classify each page as `new`, `merge`, or `contradict` against
    the existing wiki.
-5. **Rewrite** — update affected pages while preserving links and provenance.
-6. **Index** — update SQLite FTS, embeddings, graph links, `index.md`, and
+5. **Rewrite** - update affected pages while preserving links and provenance.
+6. **Index** - update SQLite FTS, embeddings, graph links, `index.md`, and
    `log.md`.
-7. **Synthesize across sources** — shortlist cross-source page pairs across the
+7. **Synthesize across sources** - shortlist cross-source page pairs across the
    vault without excluding highly consolidated pages, then propose grounded
    relationships or possible consolidations for review.
-8. **Query** — answer from compiled pages, cite them, and optionally compile a
+8. **Query** - answer from compiled pages, cite them, and optionally compile a
    reviewed answer back into the wiki.
 
 Manual ingest runs the cross-source pass around newly accepted pages. Trusted
@@ -284,9 +352,9 @@ environment variables. Common settings are:
 | `SYNTHESIS_PORT`                    | `8000`                           | HTTP port                    |
 | `SYNTHESIS_API_BASE`                | `http://localhost:11434/v1`      | Default chat API             |
 | `SYNTHESIS_EXTRACT_MODEL`           | `qwen3.5:9b`                     | Chunk extraction             |
-| `SYNTHESIS_CONSOLIDATE_MODEL`       | `qwen3.5:9b`                     | Source synthesis             |
-| `SYNTHESIS_INTEGRATE_MODEL`         | `qwen3.5:9b`                     | Integration decisions        |
-| `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:9b`                     | Page rewriting               |
+| `SYNTHESIS_CONSOLIDATE_MODEL`       | `qwen3.5:122b`                   | Source synthesis             |
+| `SYNTHESIS_INTEGRATE_MODEL`         | `qwen3.5:122b`                   | Integration decisions        |
+| `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:122b`                   | Page rewriting               |
 | `SYNTHESIS_EMBED_MODEL`             | `nomic-embed-text-v2-moe:latest` | Embeddings                   |
 | `SYNTHESIS_EMBED_DIMENSIONS`        | `768`                            | Required embedding width     |
 | `SYNTHESIS_LINK_K`                  | `8`                              | Mutual-neighbour breadth     |
@@ -294,6 +362,7 @@ environment variables. Common settings are:
 | `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                       | Multipart upload limit       |
 | `SYNTHESIS_MAX_PDF_PAGES`           | `500`                            | PDF page limit               |
 | `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                          | PDF extraction timeout       |
+| `SYNTHESIS_MODEL_TIMEOUT_MS`        | `600000`                         | Provider request timeout     |
 | `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS` | `100`                            | Automatic video limit        |
 
 See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the complete configuration

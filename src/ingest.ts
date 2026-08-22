@@ -29,12 +29,29 @@ export interface IngestResult {
   pageCount?: number;
 }
 
-async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
+function abortError(): DOMException {
+  return new DOMException("The operation was aborted", "AbortError");
+}
+
+async function runYtDlp(
+  args: string[],
+  signal?: AbortSignal,
+): Promise<Deno.CommandOutput> {
+  if (signal?.aborted) throw abortError();
   const child = new Deno.Command(config.ingest.ytDlpPath, {
     args: ["--no-config", ...args],
     stdout: "piped",
     stderr: "piped",
   }).spawn();
+
+  const abort = () => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // The process may have exited before cancellation reached it.
+    }
+  };
+  signal?.addEventListener("abort", abort, { once: true });
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
@@ -49,18 +66,24 @@ async function runYtDlp(args: string[]): Promise<Deno.CommandOutput> {
   });
 
   try {
-    return await Promise.race([child.output(), timeout]);
+    const output = await Promise.race([child.output(), timeout]);
+    if (signal?.aborted) throw abortError();
+    return output;
   } finally {
+    signal?.removeEventListener("abort", abort);
     if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 
-export async function ingestYouTube(url: string): Promise<IngestResult> {
+export async function ingestYouTube(
+  url: string,
+  signal?: AbortSignal,
+): Promise<IngestResult> {
   const validatedUrl = normalizeYouTubeVideoInput(url);
   const tmpDir = await Deno.makeTempDir();
 
   try {
-    const title = await fetchVideoTitle(validatedUrl);
+    const title = await fetchVideoTitle(validatedUrl, signal);
 
     const { success, code } = await runYtDlp([
       "--write-auto-sub",
@@ -73,7 +96,7 @@ export async function ingestYouTube(url: string): Promise<IngestResult> {
       "-o",
       `${tmpDir}/%(id)s`,
       validatedUrl,
-    ]);
+    ], signal);
     if (!success) {
       console.error(`yt-dlp subtitle request failed with exit code ${code}`);
       throw new Error("Unable to download YouTube subtitles");
@@ -121,12 +144,15 @@ export function ingestText(title: string, text: string): IngestResult {
   return { transcript: text, sourceUrl: "", title, sourceType: "text" };
 }
 
-async function fetchVideoTitle(url: string): Promise<string> {
+async function fetchVideoTitle(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const validatedUrl = normalizeYouTubeVideoInput(url);
   const { success, code, stdout } = await runYtDlp([
     "--get-title",
     validatedUrl,
-  ]);
+  ], signal);
   if (!success) {
     console.error(`yt-dlp title request failed with exit code ${code}`);
     throw new Error("Unable to fetch the YouTube video title");
@@ -165,6 +191,7 @@ export function parseVtt(vtt: string): string {
 
 export async function getPlaylistVideos(
   playlistUrl: string,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const validatedUrl = normalizeYouTubePlaylistInput(playlistUrl);
   const { success, code, stdout } = await runYtDlp([
@@ -174,7 +201,7 @@ export async function getPlaylistVideos(
     "--print",
     "webpage_url",
     validatedUrl,
-  ]);
+  ], signal);
   if (!success) {
     console.error(`yt-dlp playlist request failed with exit code ${code}`);
     throw new Error("Unable to fetch the YouTube playlist");

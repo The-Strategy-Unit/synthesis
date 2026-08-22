@@ -176,6 +176,8 @@ POST /api/ingest/playlist
   → iterates each video URL through the same staging path
   → creates a separate review proposal per source
   → SSE streams per-video progress
+  → stream cancellation stops before the next source; resubmission reuses
+    staged proposals and already applied source identities
 ```
 
 ### Trusted video batch
@@ -194,6 +196,13 @@ This mode accepts exact video URLs rather than expanding a playlist. It applies
 `new`, `merge`, and `contradict` alike and makes no claim that trusted input
 produces correct model output. The ordinary single-source and playlist routes
 continue to require review.
+
+Long ingest streams are cooperatively cancellable. Cancellation never interrupts
+an atomic file/catalogue apply, and an in-flight download or provider call may
+finish before the stream releases the ingest gate. Repeating the same playlist
+or exact trusted list resumes from durable source identities and pending
+proposals. Cross-source review checkpoints every completed candidate batch, so a
+restarted sweep does not repeat unchanged model decisions.
 
 ## Database schema
 
@@ -397,12 +406,12 @@ can promote a relationship into canonical Markdown.
 
 ### LLM pipeline stages
 
-| Stage       | Model role         | Default model | Temperature | Max tokens | JSON mode |
-| ----------- | ------------------ | ------------- | ----------- | ---------- | --------- |
-| Extract     | `extractModel`     | `qwen3.5:9b`  | 0           | 2000       | yes       |
-| Consolidate | `consolidateModel` | `qwen3.5:9b`  | 0.1         | 4000       | yes       |
-| Integrate   | `integrateModel`   | `qwen3.5:9b`  | 0.1         | 2000       | yes       |
-| Rewrite     | `rewriteModel`     | `qwen3.5:9b`  | -           | 2000       | no        |
+| Stage       | Model role         | Default model  | Temperature | Max tokens | JSON mode |
+| ----------- | ------------------ | -------------- | ----------- | ---------- | --------- |
+| Extract     | `extractModel`     | `qwen3.5:9b`   | 0           | 2000       | yes       |
+| Consolidate | `consolidateModel` | `qwen3.5:122b` | 0.1         | 4000       | yes       |
+| Integrate   | `integrateModel`   | `qwen3.5:122b` | 0.1         | 2000       | yes       |
+| Rewrite     | `rewriteModel`     | `qwen3.5:122b` | -           | 2000       | no        |
 
 All LLM calls go through `src/llm.ts`, which constructs OpenAI-compatible
 `/chat/completions` requests and validates provider envelopes. Local Ollama

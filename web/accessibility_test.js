@@ -36,6 +36,16 @@ Deno.test("changing workflow messages are polite live regions", async () => {
   }
 });
 
+Deno.test("long ingest exposes an explicit non-submitting stop control", async () => {
+  const html = await Deno.readTextFile(
+    new URL("./index.html", import.meta.url),
+  );
+  assert.match(
+    html,
+    /<button id="ingest-cancel-btn"[^>]*type="button">Stop safely<\/button>/,
+  );
+});
+
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((value) =>
     Number.parseInt(value, 16) / 255

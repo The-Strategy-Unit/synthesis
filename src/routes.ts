@@ -99,6 +99,21 @@ type IngestDependencies = {
 };
 
 type SseData = Record<string, unknown>;
+type IngestSend = (stage: string, data?: unknown) => void;
+type IngestRun = (
+  send: IngestSend,
+  signal: AbortSignal,
+) => Promise<Array<{ id: number; title: string }>>;
+
+class IngestCancelledError extends Error {
+  constructor() {
+    super("Ingest stopped");
+  }
+}
+
+function ensureIngestActive(signal: AbortSignal): void {
+  if (signal.aborted) throw new IngestCancelledError();
+}
 
 class ApiError extends Error {
   constructor(
@@ -499,18 +514,23 @@ export function createHandler(
               }
             }
             const release = await ingestGate.acquire(identity, req.signal);
-            return ingestStream(requestId, release, async (send) => {
-              const providers = await resolveProviders();
-              const result = await approveProposalAndRefresh(
-                db,
-                requestId,
-                proposalId,
-                send,
-                providers,
-                approval,
-              );
-              return result.notes;
-            });
+            return ingestStream(
+              requestId,
+              release,
+              req.signal,
+              async (send, signal) => {
+                const providers = await resolveProviders();
+                const result = await approveProposalAndRefresh(
+                  db,
+                  requestId,
+                  proposalId,
+                  send,
+                  providers,
+                  { approval, signal },
+                );
+                return result.notes;
+              },
+            );
           }
         }
         if (path === "/api/discoveries" && method === "GET") {
@@ -943,19 +963,25 @@ export function createHandler(
             config.security.maxTitleChars,
           ) ?? "Pasted text";
           const release = await ingestGate.acquire(identity, req.signal);
-          return ingestStream(requestId, release, async (send) => {
-            const ingested = textInput
-              ? ingestText(title, source.value)
-              : await ingestDependencies.ingestYouTube(source.value);
-            send("ingested", { title: ingested.title });
-            return await processAndStage(
-              db,
-              ingested,
-              textInput,
-              send,
-              resolveProviders,
-            );
-          });
+          return ingestStream(
+            requestId,
+            release,
+            req.signal,
+            async (send, signal) => {
+              const ingested = textInput
+                ? ingestText(title, source.value)
+                : await ingestDependencies.ingestYouTube(source.value, signal);
+              send("ingested", { title: ingested.title });
+              return await processAndStage(
+                db,
+                ingested,
+                textInput,
+                send,
+                resolveProviders,
+                signal,
+              );
+            },
+          );
         }
 
         if (path === "/api/ingest/undo" && method === "POST") {
@@ -1000,6 +1026,7 @@ export function createHandler(
             db,
             requestId,
             release,
+            req.signal,
             batch.urls,
             resolveProviders,
             ingestDependencies.ingestYouTube,
@@ -1010,23 +1037,29 @@ export function createHandler(
           requireIngester(identity);
           validateDeclaredSize(req, config.security.maxUploadBytes);
           const release = await ingestGate.acquire(identity, req.signal);
-          return ingestStream(requestId, release, async (send) => {
-            const ingested = await readLocalFile(req);
-            send("ingested", {
-              title: ingested.title,
-              sourceType: ingested.sourceType,
-              ...(ingested.pageCount === undefined
-                ? {}
-                : { pageCount: ingested.pageCount }),
-            });
-            return await processAndStage(
-              db,
-              ingested,
-              true,
-              send,
-              resolveProviders,
-            );
-          });
+          return ingestStream(
+            requestId,
+            release,
+            req.signal,
+            async (send, signal) => {
+              const ingested = await readLocalFile(req);
+              send("ingested", {
+                title: ingested.title,
+                sourceType: ingested.sourceType,
+                ...(ingested.pageCount === undefined
+                  ? {}
+                  : { pageCount: ingested.pageCount }),
+              });
+              return await processAndStage(
+                db,
+                ingested,
+                true,
+                send,
+                resolveProviders,
+                signal,
+              );
+            },
+          );
         }
 
         if (path === "/api/ingest/playlist" && method === "POST") {
@@ -1043,6 +1076,7 @@ export function createHandler(
             db,
             requestId,
             release,
+            req.signal,
             playlistUrl,
             resolveProviders,
           );
@@ -1704,6 +1738,7 @@ async function processAndStage(
   textInput: boolean,
   send: (stage: string, data?: unknown) => void,
   resolveProviders: ProviderResolver,
+  signal?: AbortSignal,
 ) {
   send("extracting");
   const result = await stageSingleSource(
@@ -1712,6 +1747,7 @@ async function processAndStage(
     textInput,
     send,
     await resolveProviders(),
+    signal,
   );
   if (result.kind === "already-applied") return result.result.notes;
   const counts = { new: 0, merge: 0, contradict: 0 };
@@ -1726,25 +1762,29 @@ async function approveProposalAndRefresh(
   proposalId: number,
   send: (stage: string, data?: unknown) => void,
   providers: ActiveProviders,
-  approval: IngestProposalApproval = {},
-  review: IngestReviewAudit = { reviewMode: "manual" },
-  generateSynthesis = true,
-  refreshLinks = true,
+  options: {
+    approval?: IngestProposalApproval;
+    review?: IngestReviewAudit;
+    generateSynthesis?: boolean;
+    refreshLinks?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<AppliedIngestResult> {
   const result = await approveIngestProposal(
     db,
     proposalId,
     send,
     providers,
-    approval,
-    review,
+    options.approval ?? {},
+    options.review ?? { reviewMode: "manual" },
+    options.signal,
   );
   send("integrated", {
     new: result.newCount,
     merge: result.mergeCount,
     contradict: result.contradictCount,
   });
-  if (refreshLinks) {
+  if (options.refreshLinks !== false) {
     send("linking");
     const semanticIndex = db.semanticIndexStatus();
     if (semanticIndex.complete) db.computeLinksFor(result.touchedIds);
@@ -1757,7 +1797,7 @@ async function approveProposalAndRefresh(
       });
     }
   }
-  if (!generateSynthesis) return result;
+  if (options.generateSynthesis === false) return result;
   try {
     const synthesis = await generateDiscoveries(
       db,
@@ -1766,10 +1806,13 @@ async function approveProposalAndRefresh(
       providers.llm.apiKey,
       providers.llm.consolidateModel,
       await ensureWikiSchema(),
-      { scope: "seeded" },
+      { scope: "seeded", signal: options.signal },
     );
     send("discoveries", synthesis);
   } catch (error) {
+    if (options.signal?.aborted || error instanceof IngestCancelledError) {
+      throw error;
+    }
     logFailure(requestId, "Discovery generation", error);
     send("warning", {
       error: "Approved changes were saved, but discovery generation failed",
@@ -1782,46 +1825,69 @@ async function approveProposalAndRefresh(
 function ingestStream(
   requestId: string,
   release: () => void,
-  run: (
-    send: (stage: string, data?: unknown) => void,
-  ) => Promise<Array<{ id: number; title: string }>>,
+  requestSignal: AbortSignal,
+  run: IngestRun,
 ): Response {
   const encoder = new TextEncoder();
+  const abortController = new AbortController();
+  const abort = () => abortController.abort();
+  requestSignal.addEventListener("abort", abort, { once: true });
+  if (requestSignal.aborted) abort();
   const stream = new ReadableStream({
-    async start(controller) {
-      const send = (stage: string, data?: unknown) =>
+    start(controller) {
+      void runStream(controller);
+    },
+    cancel() {
+      abort();
+    },
+  });
+
+  async function runStream(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+  ): Promise<void> {
+    const signal = abortController.signal;
+    const send = (stage: string, data?: unknown) => {
+      ensureIngestActive(signal);
+      try {
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ stage, ...asSseData(data) })}\n\n`,
           ),
         );
-      try {
-        send("ingesting", { title: "Processing source..." });
-        send("done", { notes: await run(send) });
-      } catch (err) {
-        const proposalError = asProposalApiError(err);
-        const llmError = err instanceof LlmServiceError;
-        const apiError = err instanceof ApiError
-          ? err
-          : proposalError ?? (llmError
-            ? new ApiError(502, "LLM_SERVICE_ERROR", err.message)
-            : undefined);
-        if (llmError || !apiError) logFailure(requestId, "Ingest", err);
-        try {
-          send("error", {
-            error: apiError?.message ?? "Ingest failed",
-            code: apiError?.code ?? "INGEST_FAILED",
-            requestId,
-          });
-        } catch { /* disconnected */ }
-      } finally {
-        release();
-        try {
-          controller.close();
-        } catch { /* disconnected */ }
+      } catch {
+        abort();
+        throw new IngestCancelledError();
       }
-    },
-  });
+    };
+    try {
+      send("ingesting", { title: "Processing source..." });
+      send("done", { notes: await run(send, signal) });
+    } catch (err) {
+      if (signal.aborted || err instanceof IngestCancelledError) return;
+      const proposalError = asProposalApiError(err);
+      const llmError = err instanceof LlmServiceError;
+      const apiError = err instanceof ApiError
+        ? err
+        : proposalError ?? (llmError
+          ? new ApiError(502, "LLM_SERVICE_ERROR", err.message)
+          : undefined);
+      if (llmError || !apiError) logFailure(requestId, "Ingest", err);
+      try {
+        send("error", {
+          error: apiError?.message ?? "Ingest failed",
+          code: apiError?.code ?? "INGEST_FAILED",
+          requestId,
+        });
+      } catch { /* disconnected */ }
+    } finally {
+      requestSignal.removeEventListener("abort", abort);
+      release();
+      try {
+        controller.close();
+      } catch { /* disconnected */ }
+    }
+  }
+
   return new Response(stream, {
     headers: responseHeaders("text/event-stream"),
   });
@@ -1831,29 +1897,33 @@ function playlistStream(
   db: DB,
   requestId: string,
   release: () => void,
+  requestSignal: AbortSignal,
   playlistUrl: string,
   resolveProviders: ProviderResolver,
 ): Response {
-  return ingestStream(requestId, release, async (send) => {
-    const videoUrls = await getPlaylistVideos(playlistUrl);
+  const run: IngestRun = async (send, signal) => {
+    const videoUrls = await getPlaylistVideos(playlistUrl, signal);
     send("ingested", { title: `${videoUrls.length} videos found` });
     const notes: Array<{ id: number; title: string }> = [];
     let failures = 0;
     let successes = 0;
     for (let i = 0; i < videoUrls.length; i++) {
       try {
+        ensureIngestActive(signal);
         send("distilling", { title: `Video ${i + 1}/${videoUrls.length}` });
         notes.push(
           ...await processAndStage(
             db,
-            await ingestYouTube(videoUrls[i]),
+            await ingestYouTube(videoUrls[i], signal),
             false,
             send,
             resolveProviders,
+            signal,
           ),
         );
         successes++;
       } catch (err) {
+        if (signal.aborted || err instanceof IngestCancelledError) throw err;
         failures++;
         logFailure(requestId, `Playlist video ${i + 1}`, err);
       }
@@ -1872,18 +1942,20 @@ function playlistStream(
       });
     }
     return notes;
-  });
+  };
+  return ingestStream(requestId, release, requestSignal, run);
 }
 
 function trustedBatchStream(
   db: DB,
   requestId: string,
   release: () => void,
+  requestSignal: AbortSignal,
   videoUrls: string[],
   resolveProviders: ProviderResolver,
   ingestVideo: typeof ingestYouTube,
 ): Response {
-  return ingestStream(requestId, release, async (send) => {
+  const run: IngestRun = async (send, signal) => {
     const batchId = crypto.randomUUID();
     const providers = await resolveProviders();
     send("batch_started", {
@@ -1896,6 +1968,7 @@ function trustedBatchStream(
     let applied = 0;
     let skipped = 0;
     for (let index = 0; index < videoUrls.length; index++) {
+      ensureIngestActive(signal);
       const current = index + 1;
       send("batch_source", {
         batchId,
@@ -1903,7 +1976,7 @@ function trustedBatchStream(
         total: videoUrls.length,
         url: videoUrls[index],
       });
-      const ingested = await ingestVideo(videoUrls[index]);
+      const ingested = await ingestVideo(videoUrls[index], signal);
       send("ingested", {
         batchId,
         current,
@@ -1917,6 +1990,7 @@ function trustedBatchStream(
         false,
         send,
         providers,
+        signal,
       );
       if (staged.kind === "already-applied") {
         skipped++;
@@ -1947,10 +2021,12 @@ function trustedBatchStream(
         staged.proposal.id,
         send,
         providers,
-        {},
-        { reviewMode: "automatic", batchId },
-        false,
-        false,
+        {
+          review: { reviewMode: "automatic", batchId },
+          generateSynthesis: false,
+          refreshLinks: false,
+          signal,
+        },
       );
       applied++;
       notes.push(...result.notes);
@@ -1966,6 +2042,7 @@ function trustedBatchStream(
       });
     }
     if (applied > 0) {
+      ensureIngestActive(signal);
       send("linking", { batchId, scope: "vault" });
       const semanticIndex = db.semanticIndexStatus();
       if (semanticIndex.complete) db.computeLinks(config.link.k);
@@ -1979,6 +2056,7 @@ function trustedBatchStream(
     try {
       let generation: string | undefined;
       while (true) {
+        ensureIngestActive(signal);
         const synthesis = await generateDiscoveries(
           db,
           db.getAllNotes().map((note) => note.id),
@@ -1998,6 +2076,7 @@ function trustedBatchStream(
                 coverage,
               });
             },
+            signal,
           },
         );
         send("discoveries", { ...synthesis, scope: "vault" });
@@ -2005,6 +2084,9 @@ function trustedBatchStream(
         generation = synthesis.coverage.generation ?? undefined;
       }
     } catch (error) {
+      if (
+        signal.aborted || error instanceof IngestCancelledError
+      ) throw error;
       logFailure(requestId, "Cross-source synthesis", error);
       send("warning", {
         error: "Trusted sources were saved, but cross-source synthesis failed",
@@ -2018,7 +2100,8 @@ function trustedBatchStream(
       skipped,
     });
     return notes;
-  });
+  };
+  return ingestStream(requestId, release, requestSignal, run);
 }
 
 function logFailure(requestId: string, operation: string, err: unknown): void {
