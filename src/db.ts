@@ -37,6 +37,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
   vector FLOAT[${EMBEDDING_DIM}] distance_metric=cosine
 );
 
+CREATE TABLE IF NOT EXISTS catalog_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS links (
   source_note_id INTEGER NOT NULL,
   target_note_id INTEGER NOT NULL,
@@ -88,12 +93,23 @@ CREATE TABLE IF NOT EXISTS discoveries (
   explanation TEXT NOT NULL,
   significance TEXT NOT NULL,
   page_ids_json TEXT NOT NULL,
+  page_hashes_json TEXT NOT NULL,
   source_ids_json TEXT NOT NULL,
   production_method TEXT NOT NULL,
   model TEXT NOT NULL,
   confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
   created_at TEXT DEFAULT (datetime('now')),
   reviewed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS discovery_generations (
+  generation TEXT PRIMARY KEY,
+  scope TEXT NOT NULL CHECK (scope IN ('seeded', 'vault')),
+  seed_ids_json TEXT NOT NULL,
+  page_snapshot_hash TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  model TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS discovery_candidates (
@@ -160,12 +176,23 @@ export interface DiscoveryRecord {
   explanation: string;
   significance: string;
   page_ids_json: string;
+  page_hashes_json: string;
   source_ids_json: string;
   production_method: string;
   model: string;
   confidence: number;
   created_at: string;
   reviewed_at: string | null;
+}
+
+export interface DiscoveryGenerationRecord {
+  generation: string;
+  scope: "seeded" | "vault";
+  seed_ids_json: string;
+  page_snapshot_hash: string;
+  prompt_version: string;
+  model: string;
+  created_at: string;
 }
 
 export type DiscoveryCandidateStatus = "queued" | "reviewed" | "proposed";
@@ -220,6 +247,16 @@ export interface IngestUndoChange {
   title: string;
   filePath: string;
   restoredBody?: string;
+}
+
+export interface SemanticIndexStatus {
+  identity: string | null;
+  expectedIdentity: string | null;
+  compatible: boolean;
+  embedded: number;
+  total: number;
+  remaining: number;
+  complete: boolean;
 }
 
 const SEARCH_STOP_WORDS = new Set([
@@ -284,6 +321,27 @@ export function initDatabase(db: DatabaseSync): void {
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  const discoveryColumns = db.prepare("PRAGMA table_info(discoveries)")
+    .all() as Array<{ name: string }>;
+  if (!discoveryColumns.some((column) => column.name === "page_hashes_json")) {
+    db.exec(
+      "ALTER TABLE discoveries ADD COLUMN page_hashes_json TEXT NOT NULL DEFAULT '[]'",
+    );
+  }
+
+  // Vectors created before model identity was recorded cannot be compared
+  // safely with future query vectors. Fail closed once during migration.
+  const semanticIdentity = db.prepare(
+    "SELECT value FROM catalog_metadata WHERE key = 'embedding_identity'",
+  ).get() as { value: string } | undefined;
+  const embeddingCount = Number(
+    (db.prepare("SELECT count(*) AS count FROM embeddings").get() as {
+      count: number;
+    }).count,
+  );
+  if (!semanticIdentity && embeddingCount > 0) {
+    db.exec("DELETE FROM links; DELETE FROM embeddings;");
+  }
 }
 
 export class DB {
@@ -419,14 +477,16 @@ export class DB {
     const info = this.db.prepare(
       `INSERT OR IGNORE INTO discoveries
        (fingerprint, relationship_type, explanation, significance,
-        page_ids_json, source_ids_json, production_method, model, confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        page_ids_json, page_hashes_json, source_ids_json, production_method,
+        model, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       discovery.fingerprint,
       discovery.relationship_type,
       discovery.explanation,
       discovery.significance,
       discovery.page_ids_json,
+      discovery.page_hashes_json,
       discovery.source_ids_json,
       discovery.production_method,
       discovery.model,
@@ -435,6 +495,32 @@ export class DB {
     return Number(info.changes) === 1
       ? Number(info.lastInsertRowid)
       : undefined;
+  }
+
+  addDiscoveryGeneration(
+    generation: Omit<DiscoveryGenerationRecord, "created_at">,
+  ): void {
+    this.db.prepare(
+      `INSERT INTO discovery_generations
+       (generation, scope, seed_ids_json, page_snapshot_hash, prompt_version,
+        model)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      generation.generation,
+      generation.scope,
+      generation.seed_ids_json,
+      generation.page_snapshot_hash,
+      generation.prompt_version,
+      generation.model,
+    );
+  }
+
+  getDiscoveryGeneration(
+    generation: string,
+  ): DiscoveryGenerationRecord | undefined {
+    return this.db.prepare(
+      "SELECT * FROM discovery_generations WHERE generation = ?",
+    ).get(generation) as DiscoveryGenerationRecord | undefined;
   }
 
   getDiscovery(id: number): DiscoveryRecord | undefined {
@@ -661,6 +747,83 @@ export class DB {
     } | undefined;
   }
 
+  semanticIndexStatus(
+    expectedIdentity: string | null = null,
+  ): SemanticIndexStatus {
+    const row = this.db.prepare(
+      "SELECT value FROM catalog_metadata WHERE key = 'embedding_identity'",
+    ).get() as { value: string } | undefined;
+    const identity = row?.value ?? null;
+    const embedded = Number(
+      (this.db.prepare("SELECT count(*) AS count FROM embeddings").get() as {
+        count: number;
+      }).count,
+    );
+    const total = Number(
+      (this.db.prepare("SELECT count(*) AS count FROM notes").get() as {
+        count: number;
+      }).count,
+    );
+    const compatible = identity !== null &&
+      (expectedIdentity === null || identity === expectedIdentity);
+    return {
+      identity,
+      expectedIdentity,
+      compatible,
+      embedded,
+      total,
+      remaining: Math.max(0, total - embedded),
+      complete: compatible && identity !== null && embedded === total,
+    };
+  }
+
+  activateSemanticIndex(identity: string): SemanticIndexStatus {
+    const normalized = identity.normalize("NFKC").trim();
+    if (
+      !normalized || normalized.length > 1_000 || /\p{Cc}/u.test(normalized)
+    ) {
+      throw new Error("Embedding identity is invalid");
+    }
+    const current = this.semanticIndexStatus();
+    if (current.identity !== normalized) {
+      this.withTransaction(() => {
+        this.db.exec("DELETE FROM links; DELETE FROM embeddings;");
+        this.db.prepare(
+          `INSERT INTO catalog_metadata (key, value)
+           VALUES ('embedding_identity', ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        ).run(normalized);
+      });
+    }
+    return this.semanticIndexStatus(normalized);
+  }
+
+  clearSemanticIndex(): void {
+    this.withTransaction(() => {
+      this.db.exec(`
+        DELETE FROM links;
+        DELETE FROM embeddings;
+        DELETE FROM catalog_metadata WHERE key = 'embedding_identity';
+      `);
+    });
+  }
+
+  getNotesWithoutEmbeddings(
+    limit: number,
+  ): Array<{ id: number; title: string; file_path: string }> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new RangeError("Semantic rebuild limit must be between 1 and 100");
+    }
+    return this.db.prepare(
+      `SELECT n.id, n.title, n.file_path
+       FROM notes n
+       LEFT JOIN embeddings e ON e.note_id = n.id
+       WHERE e.note_id IS NULL
+       ORDER BY n.id
+       LIMIT ?`,
+    ).all(limit) as Array<{ id: number; title: string; file_path: string }>;
+  }
+
   upsertEmbedding(noteId: number, embedding: number[]): void {
     this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(noteId);
     this.db.prepare(
@@ -866,11 +1029,13 @@ export class DB {
     this.withTransaction(() => {
       this.db.exec(`
         DELETE FROM discovery_candidates;
+        DELETE FROM discovery_generations;
         DELETE FROM discoveries;
         DELETE FROM ingest_proposals;
         DELETE FROM note_sources;
         DELETE FROM links;
         DELETE FROM embeddings;
+        DELETE FROM catalog_metadata;
         DELETE FROM notes_fts;
         DELETE FROM notes;
         DELETE FROM sources;
@@ -961,6 +1126,7 @@ export class DB {
         source.id,
       );
       this.db.exec("DELETE FROM discovery_candidates");
+      this.db.exec("DELETE FROM discovery_generations");
       this.db.exec("DELETE FROM discoveries");
     });
   }
@@ -1059,10 +1225,11 @@ export class DB {
     return embedding;
   }
 
-  // Shared per-note kNN + upsert logic used by both computeLinks() (full
-  // rebuild) and computeLinksFor(). Semantic graph edges deliberately connect
-  // pages with disjoint provenance so the graph surfaces cross-source context
-  // instead of repeating links already likely to exist within one source.
+  // Shared mutual-kNN logic used by complete semantic graph rebuilds. A page
+  // pair is retained only when each page ranks the other among its nearest
+  // positive-similarity cross-source neighbours. This avoids presenting an
+  // arbitrary final neighbour as a semantic relationship merely because k
+  // slots were requested.
   private linkNotes(
     noteIds: number[],
     k: number,
@@ -1083,12 +1250,15 @@ export class DB {
         count: number;
       }).count,
     );
-    let count = 0;
+    const rankings = new Map<
+      number,
+      Array<{ id: number; similarity: number }>
+    >();
     for (const noteId of noteIds) {
       const emb = this.getEmbedding(noteId);
       if (!emb) continue;
       const ownSources = sourceIdsByNote.get(noteId) ?? new Set<number>();
-      let selected = 0;
+      const selected: Array<{ id: number; similarity: number }> = [];
       for (const n of this.findNearest(noteId, emb, candidatePool)) {
         const neighborSources = sourceIdsByNote.get(n.id) ?? new Set<number>();
         if (
@@ -1097,26 +1267,39 @@ export class DB {
         ) {
           continue;
         }
-        selected++;
-        const key = `${Math.min(noteId, n.id)}-${Math.max(noteId, n.id)}`;
+        if (!Number.isFinite(n.similarity) || n.similarity <= 0) continue;
+        selected.push({ id: n.id, similarity: n.similarity });
+        if (selected.length >= k) break;
+      }
+      rankings.set(noteId, selected);
+    }
+
+    let count = 0;
+    for (const [noteId, candidates] of rankings) {
+      for (const candidate of candidates) {
+        const reciprocal = rankings.get(candidate.id)?.find((neighbor) =>
+          neighbor.id === noteId
+        );
+        if (!reciprocal) continue;
+        const key = `${Math.min(noteId, candidate.id)}-${
+          Math.max(noteId, candidate.id)
+        }`;
         if (!seen.has(key)) {
           seen.add(key);
           this.upsertLink(
-            Math.min(noteId, n.id),
-            Math.max(noteId, n.id),
-            n.similarity,
+            Math.min(noteId, candidate.id),
+            Math.max(noteId, candidate.id),
+            Math.min(candidate.similarity, reciprocal.similarity),
           );
           count++;
         }
-        if (selected >= k) break;
       }
     }
     return count;
   }
 
-  // Semantic links for graph — retain each page's nearest cross-source
-  // neighbours. Absolute cosine thresholds are model- and corpus-dependent;
-  // breadth is bounded by rank instead.
+  // Semantic links for graph use positive mutual nearest-neighbour evidence.
+  // Absolute model-specific score thresholds are deliberately avoided.
   computeLinks(k = config.link.k): number {
     if (!Number.isSafeInteger(k) || k < 1) {
       throw new RangeError(

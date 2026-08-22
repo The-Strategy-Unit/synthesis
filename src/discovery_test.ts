@@ -6,6 +6,7 @@ import {
   confirmDiscovery,
   discoveryBatchConfirmation,
   DiscoveryBatchInputError,
+  discoveryEvidenceHash,
   DiscoveryStateError,
   generateDiscoveries,
   reviewDiscovery,
@@ -171,7 +172,7 @@ Deno.test({
       assert.equal(discoveries[0].model, "discovery-model");
 
       assert.equal(
-        reviewDiscovery(db, discoveries[0].id, "investigating").status,
+        (await reviewDiscovery(db, discoveries[0].id, "investigating")).status,
         "investigating",
       );
       const confirmed = await confirmDiscovery(db, discoveries[0].id);
@@ -179,8 +180,15 @@ Deno.test({
       const confirmedSource = db.getNote(confirmed.pages[0].id);
       assert.ok(confirmedSource);
       const updated = await Deno.readTextFile(confirmedSource.file_path);
-      assert.ok(
-        parseWikiPage(updated).links.includes(confirmed.pages[1].title),
+      const updatedPage = parseWikiPage(updated);
+      assert.ok(updatedPage.links.includes(confirmed.pages[1].title));
+      assert.equal(
+        updatedPage.relationships?.[0].type,
+        confirmed.relationshipType,
+      );
+      assert.deepEqual(
+        updatedPage.relationships?.[0].pageHashes,
+        confirmed.pageHashes,
       );
       const graph = await buildWikiGraph(db);
       assert.ok(
@@ -196,7 +204,7 @@ Deno.test({
       );
 
       assert.equal(
-        reviewDiscovery(db, discoveries[1].id, "rejected").status,
+        (await reviewDiscovery(db, discoveries[1].id, "rejected")).status,
         "rejected",
       );
       const repeated = await generateDiscoveries(
@@ -553,6 +561,22 @@ Deno.test({
       assert.equal(first.coverage.complete, false);
       assert.ok(first.coverage.generation);
 
+      await assert.rejects(
+        generateDiscoveries(
+          db,
+          pageIds,
+          "https://llm.example.test/v1",
+          "secret",
+          "discovery-model",
+          undefined,
+          {
+            scope: "vault",
+            generation: first.coverage.generation ?? undefined,
+          },
+        ),
+        /scope or wiki evidence changed/,
+      );
+
       const resumed = await generateDiscoveries(
         db,
         pageIds,
@@ -629,6 +653,175 @@ Deno.test({
 });
 
 Deno.test({
+  name: "stale discovery evidence cannot be confirmed and is reconsidered",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({
+      prefix: "synthesis-discovery-stale-",
+    });
+    const db = new DB(`${dir}/synthesis.db`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const pageIds: number[] = [];
+      const pagePaths: string[] = [];
+      for (let index = 0; index < 2; index++) {
+        const sourceHash = String(index + 7).repeat(64);
+        const sourceId = db.addSource(
+          sourceHash,
+          `Stale source ${index + 1}`,
+          null,
+          "text",
+          `${dir}/source-${index + 1}.txt`,
+          `Stale summary ${index + 1}`,
+        );
+        const path = `${dir}/stale-${index + 1}.md`;
+        await Deno.writeTextFile(
+          path,
+          renderWikiPage({
+            title: `Stale concept ${index + 1}`,
+            type: "concept",
+            body: `Evidence before revision ${index + 1}.`,
+            tags: ["stale"],
+            links: [],
+          }, [{ title: `Stale source ${index + 1}`, contentHash: sourceHash }]),
+        );
+        const noteId = db.addNote(
+          `Stale concept ${index + 1}`,
+          path,
+          null,
+          "text",
+        );
+        db.attachNoteSource(noteId, sourceId, "new");
+        pageIds.push(noteId);
+        pagePaths.push(path);
+      }
+
+      let calls = 0;
+      globalThis.fetch = () => {
+        calls++;
+        return Promise.resolve(modelResponse([{
+          candidate_index: 0,
+          relationship_type: "supports",
+          explanation: "The supplied pages may report compatible evidence.",
+          significance: "The possible support should be checked by a person.",
+          confidence: 0.7,
+        }]));
+      };
+      const initial = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(initial.discoveries.length, 1);
+
+      await Deno.writeTextFile(
+        pagePaths[0],
+        renderWikiPage({
+          title: "Stale concept 1",
+          type: "concept",
+          body: "Materially revised evidence that changes the comparison.",
+          tags: ["stale"],
+          links: [],
+        }, [{ title: "Stale source 1", contentHash: "7".repeat(64) }]),
+      );
+      await assert.rejects(
+        confirmDiscovery(db, initial.discoveries[0].id),
+        /stale because its wiki evidence changed/,
+      );
+
+      const refreshed = await generateDiscoveries(
+        db,
+        pageIds,
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(refreshed.discoveries.length, 1);
+      assert.notEqual(
+        refreshed.discoveries[0].id,
+        initial.discoveries[0].id,
+      );
+      assert.equal(calls, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
+  name: "highly consolidated pages remain eligible for cross-source synthesis",
+  permissions: "inherit",
+  fn: async () => {
+    const dir = await Deno.makeTempDir({ prefix: "synthesis-discovery-wide-" });
+    const db = new DB(`${dir}/synthesis.db`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const sourceIds: number[] = [];
+      for (let index = 0; index < 10; index++) {
+        sourceIds.push(db.addSource(
+          `${index.toString(16)}`.repeat(64),
+          `Conference talk ${index + 1}`,
+          null,
+          "youtube",
+          `${dir}/source-${index + 1}.txt`,
+          `Talk summary ${index + 1}`,
+        ));
+      }
+      const addPage = async (title: string, attachedSources: number[]) => {
+        const path = `${dir}/${title.toLowerCase().replaceAll(" ", "-")}.md`;
+        await Deno.writeTextFile(
+          path,
+          renderWikiPage({
+            title,
+            type: "synthesis",
+            body: "A connected conference-wide theme is described.",
+            tags: ["conference"],
+            links: [],
+          }, []),
+        );
+        const id = db.addNote(title, path, null, "youtube");
+        for (const sourceId of attachedSources) {
+          db.attachNoteSource(id, sourceId, "merge");
+        }
+        return id;
+      };
+      const consolidated = await addPage(
+        "Consolidated theme",
+        sourceIds.slice(0, 9),
+      );
+      const independent = await addPage("Independent theme", [sourceIds[9]]);
+
+      globalThis.fetch = () =>
+        Promise.resolve(modelResponse([{
+          candidate_index: 0,
+          relationship_type: "shared_constraint",
+          explanation: "The pages may describe a shared conference constraint.",
+          significance: "The possible connection warrants review.",
+          confidence: 0.65,
+        }]));
+      const generated = await generateDiscoveries(
+        db,
+        [consolidated, independent],
+        "https://llm.example.test/v1",
+        "secret",
+        "discovery-model",
+      );
+      assert.equal(generated.coverage.eligiblePages, 2);
+      assert.equal(generated.coverage.candidates, 1);
+      assert.equal(generated.discoveries[0].sources.length, 10);
+    } finally {
+      globalThis.fetch = originalFetch;
+      db.close();
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
   name: "discovery batches require exact confirmation and apply atomically",
   permissions: "inherit",
   fn: async () => {
@@ -648,7 +841,12 @@ Deno.test({
         DiscoveryBatchInputError,
       );
 
-      const pages: Array<{ id: number; path: string; markdown: string }> = [];
+      const pages: Array<{
+        id: number;
+        path: string;
+        markdown: string;
+        evidenceHash: string;
+      }> = [];
       for (let index = 0; index < 4; index++) {
         const hash = String(index + 1).repeat(64);
         const title = `Batch concept ${index + 1}`;
@@ -661,17 +859,26 @@ Deno.test({
           `Summary ${index + 1}.`,
         );
         const path = `${dir}/page-${index + 1}.md`;
-        const markdown = renderWikiPage({
+        const page = {
           title,
-          type: "concept",
+          type: "concept" as const,
           body: `Evidence for ${title}.`,
           tags: ["batch"],
           links: [],
-        }, [{ title: `Batch source ${index + 1}`, contentHash: hash }]);
+        };
+        const markdown = renderWikiPage(page, [{
+          title: `Batch source ${index + 1}`,
+          contentHash: hash,
+        }]);
         await Deno.writeTextFile(path, markdown);
         const id = db.addNote(title, path, null, "text");
         db.attachNoteSource(id, sourceId, "new");
-        pages.push({ id, path, markdown });
+        pages.push({
+          id,
+          path,
+          markdown,
+          evidenceHash: await discoveryEvidenceHash(page, [sourceId]),
+        });
       }
 
       const addDiscovery = (left: number, right: number, suffix: string) => {
@@ -681,6 +888,10 @@ Deno.test({
           explanation: "The supplied pages describe compatible evidence.",
           significance: "The reviewed relationship can connect the pages.",
           page_ids_json: JSON.stringify([left, right]),
+          page_hashes_json: JSON.stringify([
+            pages.find((page) => page.id === left)!.evidenceHash,
+            pages.find((page) => page.id === right)!.evidenceHash,
+          ]),
           source_ids_json: JSON.stringify([left, right]),
           production_method: "test",
           model: "test-model",

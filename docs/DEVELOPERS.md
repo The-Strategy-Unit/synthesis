@@ -200,9 +200,12 @@ Edit the prompt constants in `src/distil.ts`:
 ### Changing the embedding model
 
 Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` matches the
-model's output. The vector width is part of the vault database schema; do not
-change it for an existing vault until a supported rebuild workflow is available.
-Use a new vault when evaluating a model with a different width.
+model's output. Provider URL, model, and dimensions form the derived semantic
+index identity. Selecting a different identity invalidates embeddings and links
+instead of mixing incompatible vector spaces. Use **Build semantic index** or
+`POST /api/semantic-index/rebuild` to repopulate the vault in bounded resumable
+batches. A different vector width still requires a new database because the
+sqlite-vec virtual-table width is fixed.
 
 ## API reference
 
@@ -226,11 +229,15 @@ Response is a `text/event-stream` with `data:` events:
 
 Staging archives the source but does not mutate wiki pages. A reviewer inspects
 the proposal through `GET /api/proposals/:id` and applies it with
-`POST /api/proposals/:id/approve`. Approval streams `embedding`, `integrating`,
-`integrated`, `linking`, optional cross-source `discoveries` or `warning`, and
-`done` events. The synthesis pass treats accepted pages as seeds but compares
-them with candidates from other sources across the vault. Reject a pending
-proposal with `POST /api/proposals/:id/reject`.
+`POST /api/proposals/:id/approve`. Manual approval must contain a non-empty
+`changes` array with exact reviewed proposal indexes and optional edited body
+text; `{}` is rejected. The separately confirmed trusted-batch path is the only
+flow that selects every staged change automatically. Approval streams
+`embedding`, `integrating`, `integrated`, `linking`, optional cross-source
+`discoveries` or `warning`, and `done` events. The synthesis pass treats
+accepted pages as seeds but compares them with candidates from other sources
+across the vault. Reject a pending proposal with
+`POST /api/proposals/:id/reject`.
 
 ### `POST /api/ingest/batch` (SSE)
 
@@ -274,6 +281,16 @@ preflighted before `DB.replaceCatalog()` transactionally replaces derived rows.
 Rebuild clears embeddings, semantic links, proposals, discovery candidate
 coverage, and discoveries. Do not add a provider call to this path.
 
+`GET /api/semantic-index` reports whether the index has a recorded model
+identity and its page coverage, without disclosing that identity or requiring a
+provider. `POST /api/semantic-index/rebuild` requires
+`{ "confirm": "REBUILD SEMANTIC INDEX", "limit": 20 }`, resolves the explicitly
+configured embedding provider, and processes 1-100 missing pages. Each vector is
+committed only if its page stayed unchanged. Repeating the request resumes from
+missing pages; semantic search remains unavailable and links remain empty until
+coverage is complete. Completion rebuilds positive mutual cross-source
+nearest-neighbour links.
+
 ### `POST /api/discoveries/generate`
 
 An empty JSON object stages the current cross-source candidate frontier and
@@ -287,11 +304,14 @@ frontier:
 { "generation": "<returned UUID>" }
 ```
 
-Model omissions are checkpointed as reviewed candidate pairs for the exact page
-content, model, and prompt version. Provider or validation failure leaves the
-current chunk queued. A new empty request refreshes the frontier and reuses
-unchanged decisions. No candidate or model response becomes a wiki link until a
-person confirms its discovery proposal.
+Model omissions are checkpointed for the exact page content, model, prompt
+version, sweep scope, seed set, and eligible-page snapshot. A resume token
+cannot be reused for another scope or a changed wiki. Provider or validation
+failure leaves the current chunk queued. A new empty request refreshes the
+frontier and reuses unchanged decisions. Prompt source metadata is bounded, but
+complete provenance remains part of candidate identity; highly consolidated
+pages are not excluded merely because many sources contributed. No model
+response becomes a wiki link until a person confirms its proposal.
 
 ### `POST /api/discoveries/batch`
 
@@ -308,11 +328,14 @@ Review an exact selection of 1-500 open synthesis proposals without a provider:
 Use `"action": "reject"` with `"REJECT 3 PROPOSALS"` to reject the same
 selection. IDs must be unique positive integers and every item must still be
 pending or investigating. Confirmation also requires every proposal to retain an
-unlinked page pair. The server preflights all selected pages, prepares the final
-Markdown for every affected file, and pairs recoverable file replacement with
-one SQLite status transaction. Any invalid or stale item aborts the entire
-batch. The browser never preselects proposals; filtering and selection only
-define the exact user-confirmed batch.
+unlinked pair and the exact page hashes seen by the proposing model. The server
+preflights all selected pages, prepares the final Markdown for every affected
+file, and pairs recoverable file replacement with one SQLite status transaction.
+Confirmation stores type, explanation, significance, evidence page hashes, and
+confirmation time in portable frontmatter while retaining a normal `links`
+entry. Any invalid or stale item aborts the entire batch. The browser never
+preselects proposals; filtering and selection only define the exact
+user-confirmed batch.
 
 `POST /api/ingest/undo` requires `{ "confirm": "UNDO" }`. Undo accepts only the
 newest not-yet-undone history record and refuses any affected page whose current
@@ -343,6 +366,11 @@ Same SSE stages, but with `distilling` events per video
 Query parameters:
 
 - `q` - search query (required)
-- `mode` - `semantic` (default) or `keyword`
+- `mode` - `hybrid` (default), `semantic`, or `keyword`
 
-Returns `{ results: [{ id, title, score, matchType }], query }`.
+Returns `{ results: [{ id, title, score, matchType }], query }`, ordered by
+descending score. Semantic scores are cosine similarities; keyword scores are
+negated SQLite FTS ranks. Higher means more relevant within that query, not a
+confidence probability. Semantic mode returns `409 SEMANTIC_INDEX_INCOMPLETE`
+until every current page has a compatible embedding. Rate limits retain their
+structured `429 RATE_LIMITED` response.

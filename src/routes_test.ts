@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 
 import { config } from "./config.ts";
 import { DB } from "./db.ts";
+import { discoveryEvidenceHash } from "./discovery.ts";
 import { readIngestHistoryManifest } from "./ingest_history.ts";
+import { embeddingIdentity } from "./provider_runtime.ts";
 import { createHandler } from "./routes.ts";
 import { parseWikiPage, renderWikiPage } from "./wiki.ts";
 
@@ -398,6 +400,7 @@ routeTest(
           "/api/graph",
           "/api/search?q=mechanism",
           "/api/search?q=What%20is%20mechanism%3F&mode=keyword",
+          "/api/search?q=local&mode=keyword",
           "/api/lint",
         ];
         const responses = await Promise.all(
@@ -415,12 +418,27 @@ routeTest(
           target: secondId,
           kind: "explicit",
         }]);
-        for (const response of responses.slice(5, 7)) {
-          const search = await response.json();
+        const searches = await Promise.all(
+          responses.slice(5, 8).map((response) => response.json()),
+        ) as Array<{
+          results: Array<{
+            id: number;
+            matchType: string;
+            score: number;
+          }>;
+        }>;
+        for (const search of searches.slice(0, 2)) {
           assert.equal(search.results[0].id, firstId);
           assert.equal(search.results[0].matchType, "keyword");
         }
-        const lint = await responses[7].json();
+        assert.equal(searches[2].results[0].matchType, "keyword");
+        assert.ok(searches[2].results.length >= 2);
+        assert.ok(
+          searches[2].results.every((result, index, results) =>
+            index === 0 || results[index - 1].score >= result.score
+          ),
+        );
+        const lint = await responses[8].json();
         assert.equal(lint.pageCount, 2);
       });
     } finally {
@@ -477,6 +495,13 @@ routeTest(
         const availableBody = await available.json();
         assert.equal(availableBody.readiness.ready, true);
         assert.equal(availableBody.readiness.mode, "local");
+        assert.equal(availableBody.semanticIndex.complete, false);
+        assert.equal(availableBody.semanticIndex.compatible, false);
+        assert.equal("identity" in availableBody.semanticIndex, false);
+        assert.doesNotMatch(
+          JSON.stringify(availableBody.semanticIndex),
+          /apiBase|embedModel|embedding_identity/,
+        );
         assert.equal(calls, 1);
 
         globalThis.fetch = () =>
@@ -762,10 +787,17 @@ routeTest(
   "semantic search uses the resolved provider without exposing its key",
   async () => {
     const originalFetch = globalThis.fetch;
+    const originalSearchLimit = config.security.semanticSearchesPerMinute;
     try {
+      config.security.semanticSearchesPerMinute = 1;
       await withTempHandler(async (_defaultHandler, db) => {
+        const embeddingProvider = {
+          apiBase: "https://embed.example.test/v1",
+          model: "embed",
+        };
         const noteId = db.addNote("Stored note", "note.md", null, "text");
         db.indexNote(noteId, "Stored note", "Searchable content");
+        db.activateSemanticIndex(embeddingIdentity(embeddingProvider));
         db.upsertEmbedding(
           noteId,
           Array.from(
@@ -773,6 +805,18 @@ routeTest(
             (_, index) => index === 0 ? 1 : 0,
           ),
         );
+        const relatedId = db.addNote(
+          "Related note",
+          "related.md",
+          null,
+          "text",
+        );
+        db.indexNote(relatedId, "Related note", "Related searchable content");
+        db.upsertEmbedding(relatedId, [
+          0.5,
+          Math.sqrt(0.75),
+          ...Array<number>(config.embed.dimensions - 2).fill(0),
+        ]);
         let resolveCalls = 0;
         globalThis.fetch = (input, init) => {
           assert.equal(input, "https://embed.example.test/v1/embeddings");
@@ -802,9 +846,9 @@ routeTest(
               rewriteModel: "chat",
             },
             embedding: {
-              apiBase: "https://embed.example.test/v1",
+              apiBase: embeddingProvider.apiBase,
               apiKey: "embedding-secret",
-              model: "embed",
+              model: embeddingProvider.model,
             },
           });
         });
@@ -813,13 +857,23 @@ routeTest(
         );
         assert.equal(response.status, 200);
         assert.equal(resolveCalls, 1);
-        assert.doesNotMatch(
-          await response.text(),
-          /embedding-secret|llm-secret/,
+        const text = await response.text();
+        assert.doesNotMatch(text, /embedding-secret|llm-secret/);
+        const body = JSON.parse(text);
+        assert.deepEqual(
+          body.results.map((result: { id: number }) => result.id),
+          [noteId, relatedId],
         );
+        assert.ok(body.results[0].score > body.results[1].score);
+        const limited = await handle(
+          new Request("http://localhost/api/search?q=stored&mode=semantic"),
+        );
+        assert.equal(limited.status, 429);
+        assert.equal((await limited.json()).code, "RATE_LIMITED");
       });
     } finally {
       globalThis.fetch = originalFetch;
+      config.security.semanticSearchesPerMinute = originalSearchLimit;
     }
   },
 );
@@ -859,6 +913,10 @@ routeTest(
           { length: config.embed.dimensions },
           (_, index) => index === 0 ? 1 : 0,
         );
+        db.activateSemanticIndex(embeddingIdentity({
+          apiBase: "https://embed.example.test/v1",
+          model: "embed",
+        }));
         db.upsertEmbedding(noteId, embedding);
 
         const requests: Array<{ url: string; body: Record<string, unknown> }> =
@@ -1011,7 +1069,7 @@ routeTest(
 );
 
 routeTest(
-  "wiki query falls back to keywords and expands explicit links",
+  "wiki query uses keywords and explicit links when semantic index is incomplete",
   async () => {
     const originalFetch = globalThis.fetch;
     try {
@@ -1055,11 +1113,7 @@ routeTest(
         let fetchCalls = 0;
         let suppliedPages: Array<{ id: number }> = [];
         globalThis.fetch = (_input, init) => {
-          if (fetchCalls++ === 0) {
-            return Promise.resolve(
-              new Response("unavailable", { status: 503 }),
-            );
-          }
+          fetchCalls++;
           const body = JSON.parse(String(init?.body)) as {
             messages: Array<{ content: string }>;
           };
@@ -1105,7 +1159,7 @@ routeTest(
           seedId,
           neighborId,
         ]);
-        assert.equal(fetchCalls, 2);
+        assert.equal(fetchCalls, 1);
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -1681,28 +1735,41 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
     );
     const addPage = async (title: string) => {
       const path = `${dir}/${title.toLowerCase()}.md`;
+      const page = {
+        title,
+        type: "concept" as const,
+        body: `Evidence for ${title}.`,
+        tags: ["discovery"],
+        links: [],
+      };
       await Deno.writeTextFile(
         path,
-        renderWikiPage({
-          title,
-          type: "concept",
-          body: `Evidence for ${title}.`,
-          tags: ["discovery"],
-          links: [],
-        }, [{ title: "Discovery evidence", contentHash: sourceHash }]),
+        renderWikiPage(page, [{
+          title: "Discovery evidence",
+          contentHash: sourceHash,
+        }]),
       );
       const id = db.addNote(title, path, null, "text");
       db.attachNoteSource(id, sourceId, "new");
-      return id;
+      return {
+        id,
+        evidenceHash: await discoveryEvidenceHash(page, [sourceId]),
+      };
     };
-    const first = await addPage("Discovery alpha");
-    const second = await addPage("Discovery beta");
+    const firstPage = await addPage("Discovery alpha");
+    const secondPage = await addPage("Discovery beta");
+    const first = firstPage.id;
+    const second = secondPage.id;
     const discoveryId = db.addDiscovery({
       fingerprint: `mechanistic|${first},${second}|${sourceId}`,
       relationship_type: "mechanistic",
       explanation: "The pages may describe connected mechanisms.",
       significance: "The connection may focus further evidence review.",
       page_ids_json: JSON.stringify([first, second]),
+      page_hashes_json: JSON.stringify([
+        firstPage.evidenceHash,
+        secondPage.evidenceHash,
+      ]),
       source_ids_json: JSON.stringify([sourceId]),
       production_method: "llm_graph_review",
       model: "review-model",
@@ -1741,11 +1808,11 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
     const graph = await handle(
       new Request("http://localhost/api/graph"),
     ).then((response) => response.json());
-    assert.deepEqual(graph.links, [{
-      source: first,
-      target: second,
-      kind: "explicit",
-    }]);
+    assert.equal(graph.links.length, 1);
+    assert.equal(graph.links[0].source, first);
+    assert.equal(graph.links[0].target, second);
+    assert.equal(graph.links[0].kind, "explicit");
+    assert.equal(graph.links[0].relationships[0].type, "mechanistic");
 
     const terminal = await handle(
       new Request(
@@ -1899,6 +1966,10 @@ routeTest("discoveries are reviewed and confirmed as wiki links", async () => {
         explanation: "The supplied pages leave an open research question.",
         significance: "The gap may guide further evidence collection.",
         page_ids_json: JSON.stringify([first, otherPageId]),
+        page_hashes_json: JSON.stringify([
+          firstPage.evidenceHash,
+          "f".repeat(64),
+        ]),
         source_ids_json: JSON.stringify([sourceId, otherSourceId]),
         production_method: "test",
         model: "test-model",
@@ -2124,6 +2195,25 @@ routeTest(
           detail.proposal.changes[0].page.title,
           "Approved proposal page",
         );
+
+        for (const body of [undefined, JSON.stringify({})]) {
+          const unreviewedApproval = await handle(
+            new Request(
+              `http://localhost/api/proposals/${approvedId}/approve`,
+              {
+                method: "POST",
+                headers: mutationHeaders(),
+                ...(body === undefined ? {} : { body }),
+              },
+            ),
+          );
+          assert.equal(unreviewedApproval.status, 400);
+          assert.equal(
+            (await unreviewedApproval.json()).code,
+            "INVALID_PROPOSAL_APPROVAL",
+          );
+          assert.equal(db.getIngestProposal(approvedId)?.status, "pending");
+        }
 
         const invalidApproval = await handle(
           new Request(
@@ -2498,6 +2588,103 @@ routeTest(
       config.security.ingestQueueSize = original.ingestQueueSize;
       config.security.perUserDailyJobs = original.perUserDailyJobs;
       config.security.globalDailyJobs = original.globalDailyJobs;
+    }
+  },
+);
+
+routeTest(
+  "semantic index rebuild requires confirmation and resumes bounded work",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandler, db, dir) => {
+        for (let index = 0; index < 2; index++) {
+          const path = `${dir}/semantic-${index + 1}.md`;
+          await Deno.writeTextFile(
+            path,
+            renderWikiPage({
+              title: `Semantic page ${index + 1}`,
+              type: "concept",
+              body: `Semantically related evidence ${index + 1}.`,
+              tags: ["semantic"],
+              links: [],
+            }, []),
+          );
+          db.addNote(`Semantic page ${index + 1}`, path, null, "text");
+        }
+        const providers = {
+          source: "profile" as const,
+          llm: {
+            apiBase: "https://llm.example.test/v1",
+            apiKey: "llm-secret",
+            extractModel: "chat",
+            consolidateModel: "chat",
+            integrateModel: "chat",
+            rewriteModel: "chat",
+          },
+          embedding: {
+            apiBase: "https://embed.example.test/v1",
+            apiKey: "embedding-secret",
+            model: "embed",
+          },
+        };
+        globalThis.fetch = () =>
+          Promise.resolve(Response.json({
+            data: [{
+              embedding: [
+                1,
+                0.25,
+                ...Array<number>(config.embed.dimensions - 2).fill(0),
+              ],
+            }],
+          }));
+        const handle = createHandler(db, () => Promise.resolve(providers));
+
+        const unconfirmed = await handle(
+          new Request("http://localhost/api/semantic-index/rebuild", {
+            method: "POST",
+            headers: mutationHeaders(),
+            body: JSON.stringify({ confirm: "REBUILD", limit: 1 }),
+          }),
+        );
+        assert.equal(unconfirmed.status, 400);
+        assert.equal((await unconfirmed.json()).code, "CONFIRMATION_REQUIRED");
+
+        const run = async () => {
+          const response = await handle(
+            new Request("http://localhost/api/semantic-index/rebuild", {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify({
+                confirm: "REBUILD SEMANTIC INDEX",
+                limit: 1,
+              }),
+            }),
+          );
+          assert.equal(response.status, 200);
+          return (await response.json()).semanticIndex;
+        };
+        const first = await run();
+        assert.equal(first.processed, 1);
+        assert.equal(first.complete, false);
+        assert.equal(first.remaining, 1);
+        const second = await run();
+        assert.equal(second.complete, true);
+        assert.equal(second.links, 1);
+
+        const status = await handle(
+          new Request("http://localhost/api/semantic-index"),
+        ).then((response) => response.json());
+        assert.equal(status.semanticIndex.complete, true);
+        assert.equal("identity" in status.semanticIndex, false);
+        assert.equal("expectedIdentity" in status.semanticIndex, false);
+        assert.doesNotMatch(
+          JSON.stringify(status),
+          /embedding-secret|llm-secret|embed\.example\.test/,
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   },
 );

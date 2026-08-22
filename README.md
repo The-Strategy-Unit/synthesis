@@ -41,8 +41,8 @@ file-backed vault, while SQLite search and vector state remain rebuildable.
 - Explicitly confirmed trusted-video batches that sequentially apply every
   validated change with portable automatic-review audit records
 - Deterministic wiki index and machine-readable change log
-- Keyword and semantic search with a cross-source semantic map and reviewed wiki
-  links overlaid
+- Keyword and model-bound semantic search with mutual cross-source proximity
+  suggestions and reviewed wiki links overlaid
 - Resumable cross-source candidate coverage with reviewed proposals for
   relationships and possible page consolidation
 - Wiki-grounded answers with cited pages and reviewed synthesis write-back
@@ -52,8 +52,8 @@ file-backed vault, while SQLite search and vector state remain rebuildable.
   store
 - Provider-independent browsing, source review, graph navigation, keyword
   search, and deterministic health checks
-- Streamed portable vault export, provider-free catalog rebuild, and
-  hash-guarded last-ingest undo with retained revisions
+- Streamed portable vault export, provider-free catalog rebuild, resumable
+  provider-backed semantic rebuild, and hash-guarded last-ingest undo
 
 Synthesis is intended for research and knowledge-management workflows. It is not
 validated clinical decision-support software. Do not use it for patient care or
@@ -133,8 +133,8 @@ cross-compilation are provided by
 4. Ingest and approve a second source that supports, extends, or contradicts the
    first.
 5. Open **Synthesis review**, run or resume the cross-source sweep, and confirm
-   only grounded, useful proposals. Confirmation promotes a proposal to an
-   explicit wiki link.
+   only grounded, useful proposals. Confirmation records a typed reviewed
+   relationship alongside its ordinary explicit wiki link.
 6. Open **Sources** to inspect source summaries and derived-page provenance.
 7. Open **Ask wiki**, ask a cross-source question, review its cited pages, and
    optionally save the answer as a new synthesis page.
@@ -142,27 +142,40 @@ cross-compilation are provided by
    contradictions, orphan pages, and optional AI findings.
 9. Choose **Export** to download the authoritative Markdown, sources, schema,
    manifest, and revision history as a portable tar archive.
-10. Demonstrate recovery with **Undo ingest**, or use **Rebuild** to validate
-    the vault and reconstruct SQLite search/catalog state from its files.
+10. Demonstrate recovery with **Undo ingest**, or use **Rebuild catalog** to
+    reconstruct provider-independent state, followed by **Build semantic index**
+    to restore model-bound search and proximity suggestions.
 
-The notes list, relationship graph, keyword search, and semantic search update
-as the wiki changes. The graph compares every embedded page with the whole wiki,
-retains its strongest cross-source semantic neighbours, and initially shows the
-strongest three around each page. Similarity shapes connected clusters, bridges,
-and hubs; distance between disconnected groups, axes, and rotation have no
-meaning. A semantic edge is a suggestion to investigate, not confirmed
-knowledge. Reviewed links from page Markdown are overlaid separately. The
-breadth control chooses how many of each page's strongest semantic suggestions
-are visible; it is not a similarity or confidence score. While a search is
-active, matching pages seed a one-hop contextual subgraph: their visible
-neighbours and the connections among those pages remain, while the unrelated
-remainder is hidden until the search is cleared. Direct matches are shown as
-white nodes. Selecting a graph node pins its visible neighbourhood without
-moving or removing the surrounding graph; the user can then open its page or
-clear the focus. Clearing the search also clears this focus and restores the
-complete graph. **Maximise graph** expands the same live graph to the browser
-viewport without discarding its search, semantic breadth, zoom, or pinned focus;
-**Restore graph** or Escape returns to the workspace.
+The notes list, explicit-link graph, and keyword search update as the wiki
+changes. A page change makes the semantic index incomplete; semantic search and
+proximity suggestions remain unavailable until **Build semantic index** resumes
+and finishes. With an AI provider and a complete compatible index, the search
+box ranks pages by cosine similarity and shows that raw score. Otherwise it uses
+full-text relevance order. A failed semantic request offers an explicit keyword
+retry rather than silently relabelling results. The result list states the
+active method and puts the strongest match first. Semantic similarity is not a
+confidence probability.
+
+With complete semantic coverage, the graph compares every embedded page with the
+whole wiki. It retains positive cross-source neighbours only when each page
+ranks the other within its bounded nearest-neighbour set. Similarity shapes
+connected clusters, bridges, and hubs; distance between disconnected groups,
+axes, and rotation have no meaning. A semantic proximity edge is a suggestion to
+investigate, not confirmed knowledge. Reviewed links from page Markdown are
+overlaid separately. The breadth control chooses how many stored proximity
+suggestions are visible; it is not a similarity or confidence score.
+
+While a search is active, matching pages seed a one-hop contextual subgraph:
+their visible neighbours and the connections among those pages remain, while the
+unrelated remainder is hidden until the search is cleared. Direct matches are
+shown as white nodes. Selecting a graph node pins its visible neighbourhood
+without moving or removing the surrounding graph; the user can then open its
+page or clear the focus. Clearing the search also clears this focus and restores
+the complete graph. Choosing **Connections** expands the same live graph to the
+browser viewport, lets its force layout settle, and then fits every positioned
+node once. Manual zooming, panning, dragging, or focusing cancels that automatic
+fit; **Fit graph** remains available at any time. **Restore graph** or Escape
+returns to the workspace without discarding search, breadth, or pinned focus.
 
 ### Automatic trusted-video batches
 
@@ -199,16 +212,16 @@ resulting wiki.
 6. **Index** — update SQLite FTS, embeddings, graph links, `index.md`, and
    `log.md`.
 7. **Synthesize across sources** — shortlist cross-source page pairs across the
-   vault, then propose evidence-grounded relationships or possible
-   consolidations for review.
+   vault without excluding highly consolidated pages, then propose grounded
+   relationships or possible consolidations for review.
 8. **Query** — answer from compiled pages, cite them, and optionally compile a
    reviewed answer back into the wiki.
 
 Manual ingest runs the cross-source pass around newly accepted pages. Trusted
 batches defer it until the complete batch has been applied, avoiding a partial
-scan after every video. A confirmed relationship becomes an explicit wiki link.
-Confirming a consolidation candidate records its reviewed overlap as a link; it
-does not yet merge or delete either page.
+scan after every video. A confirmed relationship becomes an explicit wiki link
+and portable typed relationship metadata. Confirming a consolidation candidate
+records its reviewed overlap; it does not yet merge or delete either page.
 
 Open synthesis proposals can also be filtered and selected for an exact batch
 decision. Nothing is selected automatically. Confirming a batch requires typing
@@ -216,8 +229,10 @@ decision. Nothing is selected automatically. Confirming a batch requires typing
 revalidates every selected proposal before changing anything, limits one batch
 to 500 proposals, and applies confirmation as one recoverable operation. A
 stale, missing, already reviewed, or already linked item stops the whole batch
-instead of partially accepting it. Model confidence remains informational, not
-evidence.
+instead of partially accepting it. Confirmation revalidates the exact evidence
+page hashes and stores relationship type, explanation, significance, evidence
+versions, and review time in page frontmatter. Model confidence remains
+informational, not evidence.
 
 ## Storage
 
@@ -244,15 +259,19 @@ in the vault or profile file.
 `sources/`, and `history/`. It deliberately excludes SQLite and provider
 credentials. **Rebuild** strictly validates source hashes, wiki pages, links,
 and provenance before replacing the derived SQLite catalog. Rebuild restores
-keyword search and explicit wiki links immediately; embeddings and semantic
-links remain empty until later model-backed work. It also clears pending
-proposals, discovery candidate coverage, and discovery-review state because
-those queues are not yet durable vault artifacts.
+keyword search, typed reviewed relationships, and explicit wiki links
+immediately. **Build semantic index** sends bounded page batches to the
+explicitly configured embedding provider; completed pages are checkpointed so
+the operation can resume until semantic search and mutual proximity links are
+complete. Rebuild also clears pending proposals, discovery candidate coverage,
+and discovery-review state because those queues are not yet durable vault
+artifacts.
 
 **Undo ingest** applies only to the newest accepted, not-yet-undone ingest. It
 refuses to overwrite a page changed since approval, retains immutable sources,
 archives the removed after-version in `history/`, restores prior page revisions,
-and clears affected semantic state. Export before material recovery operations.
+and clears affected semantic state. Semantic search stays unavailable until the
+index is complete again. Export before material recovery operations.
 
 ## Configuration
 
@@ -270,7 +289,7 @@ environment variables. Common settings are:
 | `SYNTHESIS_REWRITE_MODEL`           | `qwen3.5:9b`                     | Page rewriting               |
 | `SYNTHESIS_EMBED_MODEL`             | `nomic-embed-text-v2-moe:latest` | Embeddings                   |
 | `SYNTHESIS_EMBED_DIMENSIONS`        | `768`                            | Required embedding width     |
-| `SYNTHESIS_LINK_K`                  | `8`                              | Stored semantic neighbours   |
+| `SYNTHESIS_LINK_K`                  | `8`                              | Mutual-neighbour breadth     |
 | `SYNTHESIS_GRAPH_NEIGHBORS`         | `3`                              | Initially visible neighbours |
 | `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                       | Multipart upload limit       |
 | `SYNTHESIS_MAX_PDF_PAGES`           | `500`                            | PDF page limit               |
@@ -293,6 +312,8 @@ reference.
 | `/api/schema`                  | GET/PUT | Read or update the vault schema              |
 | `/api/export`                  | GET     | Stream the portable authoritative vault      |
 | `/api/rebuild`                 | POST    | Rebuild derived catalog state from files     |
+| `/api/semantic-index`          | GET     | Inspect semantic index coverage              |
+| `/api/semantic-index/rebuild`  | POST    | Build or resume bounded semantic state       |
 | `/api/notes`                   | GET     | List wiki pages                              |
 | `/api/notes/:id`               | GET     | Page content and related pages               |
 | `/api/sources`                 | GET     | List source provenance                       |
@@ -310,7 +331,7 @@ reference.
 | `/api/ingest/playlist`         | POST    | Stage videos from a bounded YouTube playlist |
 | `/api/proposals`               | GET     | List staged ingestion proposals              |
 | `/api/proposals/:id`           | GET     | Inspect a proposed wiki change               |
-| `/api/proposals/:id/approve`   | POST    | Approve and apply a proposal                 |
+| `/api/proposals/:id/approve`   | POST    | Apply an explicit reviewed change selection  |
 | `/api/proposals/:id/reject`    | POST    | Reject a proposal                            |
 | `/api/discoveries`             | GET     | List cross-source synthesis proposals        |
 | `/api/discoveries/batch`       | POST    | Confirm or reject an exact selected batch    |
@@ -333,9 +354,10 @@ deno task build
 ```
 
 `test:e2e` is automated and provider-independent. It starts a temporary local
-server, exercises the task-based UI, and cleans up its temporary vault. The
-`build` task creates Deno source distributions with platform-specific `yt-dlp`;
-the `compile` tasks create standalone self-extracting QuickJS executables.
+server, verifies the HTTP workflow and served UI assets, and cleans up its
+temporary vault. The `build` task creates Deno source distributions with
+platform-specific `yt-dlp`; the `compile` tasks create standalone
+self-extracting QuickJS executables.
 
 ### Manual local-provider acceptance
 
@@ -403,9 +425,10 @@ source and wiki text is sent to that provider, so its data handling and
 retention terms apply. Synthesis does not send API keys to browser responses.
 Browsing pages and sources, following the graph, keyword search, deterministic
 health checks, export, rebuild, and undo continue to work when no inference
-provider is available. Ingestion, semantic search, AI-assisted analysis, query
-answers, and discovery generation require Ollama or a configured remote
-provider.
+provider is available. Ingestion, semantic-index building, AI-assisted analysis,
+query answers, and discovery generation require Ollama or a configured remote
+provider; semantic search additionally requires complete compatible index
+coverage.
 
 For network deployment, authentication, quotas, backups, and recovery guidance,
 see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not expose the server directly

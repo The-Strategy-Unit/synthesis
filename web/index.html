@@ -45,6 +45,11 @@
                 title="Rebuild search and catalog state from vault files">
                 Rebuild catalog
               </button>
+              <button id="rebuild-semantic-btn" type="button"
+                aria-describedby="provider-mode"
+                title="Build or resume semantic search and connection state">
+                Build semantic index
+              </button>
               <button id="undo-ingest-btn" type="button"
                 title="Undo the latest accepted ingest">Undo latest ingest</button>
             </div>
@@ -110,9 +115,11 @@
             <div id="knowledge-layout">
               <aside id="sidebar">
                 <div class="sidebar-heading">
-                  <h2>Wiki pages</h2>
+                  <h2 id="note-list-heading">Wiki pages</h2>
                   <span id="page-count" aria-label="0 wiki pages">0</span>
                 </div>
+                <p id="search-method" class="search-method hidden"
+                  role="status" aria-live="polite"></p>
                 <ul id="note-list"></ul>
               </aside>
 
@@ -174,7 +181,7 @@
                 </div>
                 <div class="graph-legend" aria-label="Connection types">
                   <span><i class="legend-explicit"></i>Reviewed wiki link</span>
-                  <span><i class="legend-semantic"></i>Semantic suggestion</span>
+                  <span><i class="legend-semantic"></i>Mutual semantic proximity</span>
                   <span id="legend-search-match" class="hidden">
                     <i class="legend-search-match"></i>Direct search result
                   </span>
@@ -202,8 +209,8 @@
                 </div>
                 <p class="graph-method-note">
                   Select a node to pin its visible connections. Semantic
-                  similarity draws related pages together. Clusters, bridges,
-                  and hubs can reveal patterns worth investigating. Distances
+                  proximity draws mutually close pages together. Clusters,
+                  bridges, and hubs can reveal patterns worth investigating. Distances
                   between disconnected groups, axes, and rotation have no
                   meaning.
                 </p>
@@ -528,6 +535,8 @@
         <p class="modal-intro">
           Configure OpenAI-compatible chat and embedding endpoints. API keys are
           stored in your operating system credential store, never in the vault.
+          When an endpoint is remote, relevant source and wiki text is sent to
+          that service. Synthesis never switches providers automatically.
         </p>
         <div class="provider-presets">
           <button id="provider-ollama" type="button">Use local Ollama</button>

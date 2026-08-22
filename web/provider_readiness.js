@@ -11,11 +11,13 @@ export function providerPresentation(state = {}) {
     : "AI provider";
 
   if (phase === "ready") {
+    const semanticReady = state.semanticIndex?.complete === true;
     return {
       badgeMode: mode,
       text: `${location} · ready`,
-      description:
-        "AI synthesis and semantic search are available. Wiki answers still require review.",
+      description: semanticReady
+        ? "AI synthesis and semantic search are available. Wiki answers still require review."
+        : "AI synthesis is available. Semantic search needs the local semantic index to be rebuilt or resumed.",
     };
   }
   if (phase === "unavailable") {
@@ -41,11 +43,13 @@ export function providerPresentation(state = {}) {
   };
 }
 
-export function providerCapabilities(phase) {
+export function providerCapabilities(phase, semanticIndex) {
   const modelActions = phase === "ready";
+  const semanticSearch = modelActions && semanticIndex?.complete === true;
   return {
     modelActions,
-    searchMode: modelActions ? "hybrid" : "keyword",
+    semanticSearch,
+    searchMode: semanticSearch ? "semantic" : "keyword",
   };
 }
 

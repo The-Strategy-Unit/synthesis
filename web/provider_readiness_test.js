@@ -35,13 +35,33 @@ Deno.test("offline provider state selects deterministic keyword search", () => {
   for (const phase of ["configured", "checking", "unavailable"]) {
     assert.deepEqual(providerCapabilities(phase), {
       modelActions: false,
+      semanticSearch: false,
       searchMode: "keyword",
     });
   }
   assert.deepEqual(providerCapabilities("ready"), {
     modelActions: true,
-    searchMode: "hybrid",
+    semanticSearch: false,
+    searchMode: "keyword",
   });
+  assert.deepEqual(providerCapabilities("ready", { complete: true }), {
+    modelActions: true,
+    semanticSearch: true,
+    searchMode: "semantic",
+  });
+  assert.deepEqual(providerCapabilities("ready", { complete: false }), {
+    modelActions: true,
+    semanticSearch: false,
+    searchMode: "keyword",
+  });
+  assert.match(
+    providerPresentation({
+      phase: "ready",
+      mode: "local",
+      semanticIndex: { complete: false },
+    }).description,
+    /needs the local semantic index/i,
+  );
   assert.deepEqual(providerEmptyState("unavailable"), {
     action: "configure-provider",
     label: "Configure AI provider",
@@ -69,6 +89,7 @@ Deno.test("model-dependent controls expose the shared provider status", async ()
       "ingest-btn",
       "discoveries-scan",
       "lint-analyze",
+      "rebuild-semantic-btn",
     ]
   ) {
     const control = html.match(new RegExp(`<button id="${id}"[^>]*>`))?.[0];

@@ -145,6 +145,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="proposal-include-all"/);
     assert.match(index, /id="ingest-stages"/);
     assert.match(index, /id="trusted-batch-controls"/);
+    assert.match(index, /id="rebuild-semantic-btn"/);
     assert.match(index, /value="trusted-batch"/);
     assert.doesNotMatch(index, /id="review-modal"/);
     assert.match(index, /<dialog id="ask-modal" class="modal"/);
@@ -162,6 +163,9 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /searchContextGraph/);
     assert.match(bundle, /graphFocusNodeIds/);
     assert.match(bundle, /setGraphMaximized/);
+    assert.match(bundle, /fitGraphToViewport/);
+    assert.match(bundle, /Retry with keyword search/);
+    assert.match(bundle, /Semantic similarity/);
     assert.match(bundle, /\/api\/ingest\/batch/);
     assert.equal(status.status, "ok");
 

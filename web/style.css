@@ -486,6 +486,14 @@ body {
   list-style: none;
 }
 
+.search-method {
+  margin: -0.1rem 0 0.55rem;
+  padding: 0 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 #note-list li {
   min-width: 0;
 }
@@ -517,6 +525,31 @@ body {
   background: rgba(74, 158, 255, 0.14);
   color: var(--text);
   font-weight: 650;
+}
+
+.note-list-button.search-result {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.search-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-relevance {
+  display: inline-flex;
+  width: max-content;
+  padding: 0.16rem 0.38rem;
+  border: 1px solid rgba(123, 184, 255, 0.38);
+  border-radius: 999px;
+  background: rgba(74, 158, 255, 0.12);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 #note-list .note-list-empty,
@@ -748,6 +781,16 @@ body {
 #graph-fit:hover,
 #graph-fit:focus-visible {
   border-color: var(--accent);
+}
+
+.search-error {
+  display: grid;
+  gap: 0.55rem;
+  color: var(--danger);
+}
+
+.search-error button {
+  width: fit-content;
 }
 
 #connections-title {

@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 
 import { notesDir } from "./config.ts";
 import { DB } from "./db.ts";
-import type { ActiveProviders } from "./provider_runtime.ts";
+import { type ActiveProviders, embeddingIdentity } from "./provider_runtime.ts";
 import { slugify } from "./utils.ts";
 import {
   parseWikiPage,
@@ -180,6 +180,7 @@ export async function saveWikiSynthesis(
       contentHash: source.content_hash,
     })),
   );
+  db.activateSemanticIndex(embeddingIdentity(providers.embedding));
   const embedding = await DB.embedText(
     `${page.title}\n${page.body}`,
     providers.embedding.apiBase,
@@ -201,7 +202,8 @@ export async function saveWikiSynthesis(
     throw error;
   }
 
-  db.computeLinksFor([noteId]);
+  if (db.semanticIndexStatus().complete) db.computeLinksFor([noteId]);
+  else db.clearLinks();
   await updateWikiCatalog(db, {
     operation: "query",
     subject: question,

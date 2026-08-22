@@ -107,7 +107,10 @@ Deno.test("reader workspace replaces the note modal and demotes the graph", asyn
     html,
     /id="graph-maximize" type="button"\s+aria-controls="graph-panel" aria-pressed="false"/,
   );
+  assert.match(html, /id="graph-fit" type="button"/);
   assert.match(html, /id="graph-search-summary" role="status"/);
+  assert.match(html, /id="note-list-heading">Wiki pages<\/h2>/);
+  assert.match(html, /id="search-method" class="search-method hidden"/);
   assert.match(html, /id="graph-search-clear" type="button"/);
   assert.match(html, /id="legend-search-match" class="hidden"/);
   assert.match(html, /id="graph-focus-summary" role="status"/);

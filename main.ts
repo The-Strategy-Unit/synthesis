@@ -10,7 +10,10 @@ import {
   DenoProfileFileStore,
   ProviderProfileStore,
 } from "./src/provider_profile_store.ts";
-import { resolveActiveProviders } from "./src/provider_runtime.ts";
+import {
+  embeddingIdentity,
+  resolveActiveProviders,
+} from "./src/provider_runtime.ts";
 import { createHandler } from "./src/routes.ts";
 import { KeyringSecretStore } from "./src/secret_store.ts";
 import { ensureWikiSchema } from "./src/wiki_schema.ts";
@@ -32,6 +35,14 @@ const profileStore = new ProviderProfileStore(
 );
 const resolveProviders = () =>
   resolveActiveProviders(profileStore, KeyringSecretStore.create);
+
+try {
+  const providers = await resolveProviders();
+  db.activateSemanticIndex(embeddingIdentity(providers.embedding));
+} catch {
+  // Provider-free reading remains available. Existing identified semantic
+  // state is retained and will be revalidated when a provider is configured.
+}
 
 Deno.serve(
   { hostname: config.host, port: config.port },
