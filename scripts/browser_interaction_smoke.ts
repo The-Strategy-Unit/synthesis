@@ -5,6 +5,27 @@ import { fileURLToPath } from "node:url";
 import { renderWikiPage } from "../src/wiki.ts";
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
+const ATTEMPT_TIMEOUT_MS = 2_000;
+const PROCESS_STOP_TIMEOUT_MS = 5_000;
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${message} after ${timeoutMs} ms`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
 
 function availablePort(): number {
   const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
@@ -23,7 +44,12 @@ async function waitFor<T>(
   let lastError: unknown;
   while (Date.now() < deadline) {
     try {
-      const value = await action();
+      const remainingMs = Math.max(1, deadline - Date.now());
+      const value = await withTimeout(
+        action(),
+        Math.min(ATTEMPT_TIMEOUT_MS, remainingMs),
+        message,
+      );
       if (accept(value)) return value;
     } catch (error) {
       lastError = error;
@@ -117,15 +143,24 @@ async function browserCommand(): Promise<string> {
     ];
   for (const candidate of candidates) {
     try {
-      const output = await new Deno.Command(candidate, {
+      await new Deno.Command(candidate, {
         args: ["--version"],
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
         stdin: "null",
         stdout: "null",
         stderr: "null",
       }).output();
-      if (output.success) return candidate;
-    } catch {
-      // Try the next known Chromium-family executable.
+      return candidate;
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) continue;
+      if (
+        error instanceof DOMException &&
+        (error.name === "AbortError" || error.name === "TimeoutError")
+      ) {
+        // The executable launched but did not treat --version as a short command.
+        return candidate;
+      }
+      // Try the next known Chromium-family executable after another launch error.
     }
   }
   throw new Error(
@@ -172,14 +207,27 @@ class CdpClient {
 
   static async connect(url: string): Promise<CdpClient> {
     const socket = new WebSocket(url);
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener(
-        "error",
-        () => reject(new Error("Could not connect to browser debugging")),
-        { once: true },
+    try {
+      await withTimeout(
+        new Promise<void>((resolve, reject) => {
+          socket.addEventListener("open", () => resolve(), { once: true });
+          socket.addEventListener(
+            "error",
+            () => reject(new Error("Could not connect to browser debugging")),
+            { once: true },
+          );
+        }),
+        ATTEMPT_TIMEOUT_MS,
+        "Browser debugging connection timed out",
       );
-    });
+    } catch (error) {
+      try {
+        socket.close();
+      } catch {
+        // A socket that never opened may already be closed by the runtime.
+      }
+      throw error;
+    }
     return new CdpClient(socket);
   }
 
@@ -188,10 +236,15 @@ class CdpClient {
     params: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     const id = this.#nextId++;
-    return new Promise((resolve, reject) => {
+    const response = new Promise<Record<string, unknown>>((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
+    return withTimeout(
+      response,
+      ATTEMPT_TIMEOUT_MS,
+      `Browser command ${method} timed out`,
+    ).finally(() => this.#pending.delete(id));
   }
 
   async evaluate<T>(expression: string): Promise<T> {
@@ -231,7 +284,38 @@ async function browserTarget(debugPort: number): Promise<string> {
   )!.webSocketDebuggerUrl!;
 }
 
+async function stopProcess(
+  process: Deno.ChildProcess,
+  name: string,
+): Promise<void> {
+  try {
+    process.kill("SIGTERM");
+  } catch {
+    // The process may already have exited.
+  }
+  try {
+    await withTimeout(
+      process.status,
+      PROCESS_STOP_TIMEOUT_MS,
+      `${name} did not stop`,
+    );
+    return;
+  } catch {
+    try {
+      process.kill("SIGKILL");
+    } catch {
+      // The process may have exited between the deadline and forced stop.
+    }
+  }
+  await withTimeout(
+    process.status,
+    PROCESS_STOP_TIMEOUT_MS,
+    `${name} did not stop after forced termination`,
+  );
+}
+
 async function run(): Promise<void> {
+  console.log("Browser smoke: locating a Chromium-family browser.");
   const executable = await browserCommand();
   const appPort = availablePort();
   const providerPort = availablePort();
@@ -265,6 +349,7 @@ async function run(): Promise<void> {
   let browser: Deno.ChildProcess | undefined;
   let client: CdpClient | undefined;
   try {
+    console.log("Browser smoke: starting Synthesis with a temporary vault.");
     await waitFor(
       () => fetch(`${origin}/api/status`).then((response) => response.ok),
       Boolean,
@@ -278,6 +363,7 @@ async function run(): Promise<void> {
     assert.equal(rebuild.status, 200);
     await rebuild.body?.cancel();
 
+    console.log("Browser smoke: launching the headless browser.");
     browser = new Deno.Command(executable, {
       args: [
         "--headless=new",
@@ -299,6 +385,7 @@ async function run(): Promise<void> {
     await client.send("Page.enable");
     await client.send("Page.navigate", { url: origin });
 
+    console.log("Browser smoke: checking search relevance and graph controls.");
     await waitFor(
       () =>
         client!.evaluate<number>(
@@ -385,20 +472,8 @@ async function run(): Promise<void> {
     );
   } finally {
     client?.close();
-    if (browser) {
-      try {
-        browser.kill("SIGTERM");
-      } catch {
-        // The browser may already have exited.
-      }
-      await browser.status;
-    }
-    try {
-      app.kill("SIGTERM");
-    } catch {
-      // The app may already have exited after a startup failure.
-    }
-    await app.status;
+    if (browser) await stopProcess(browser, "Browser");
+    await stopProcess(app, "Synthesis");
     await Deno.remove(browserProfile, { recursive: true });
     await Deno.remove(vault, { recursive: true });
   }
