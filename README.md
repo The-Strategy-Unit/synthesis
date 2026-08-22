@@ -152,12 +152,12 @@ proximity suggestions remain unavailable until **Build semantic index** resumes
 and finishes. With an AI provider and a complete compatible index, the search
 box ranks pages by cosine similarity and shows that raw score. Otherwise it uses
 full-text relevance order. A failed semantic request offers an explicit keyword
-retry rather than silently relabelling results. The result list states the active
-method and puts the strongest match first. Semantic similarity is not a
+retry rather than silently relabelling results. The result list states the
+active method and puts the strongest match first. Semantic similarity is not a
 confidence probability.
 
-With complete semantic coverage, the graph compares every embedded page with
-the whole wiki. It retains positive cross-source neighbours only when each page
+With complete semantic coverage, the graph compares every embedded page with the
+whole wiki. It retains positive cross-source neighbours only when each page
 ranks the other within its bounded nearest-neighbour set. Similarity shapes
 connected clusters, bridges, and hubs; distance between disconnected groups,
 axes, and rotation have no meaning. A semantic proximity edge is a suggestion to
