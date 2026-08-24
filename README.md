@@ -11,13 +11,6 @@ integrates them into the existing wiki. New evidence can create a page, merge
 into one, or record a contradiction. The result is ordinary Markdown backed by
 explicit provenance, semantic search, and a query interface with citations.
 
-## Project provenance
-
-Synthesis is an independently maintained continuation and substantial rewrite of
-the original MIT-licensed project developed during an initial public-sector
-exploration. It is not an official product of, or maintained by, the originating
-organisation.
-
 The current `main` line is a single-user MVP for local use and controlled
 private beta evaluation. It is stateful software: one process owns one
 writeable, file-backed vault, while SQLite search and vector state remain
@@ -77,7 +70,7 @@ experimental QuickJS executables requires Deno 2.9.5 or later.
 Install and start [Ollama](https://ollama.com/), then run:
 
 ```bash
-git clone https://github.com/ai-mindset/synthesis.git
+git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
 deno task setup
 deno task app
@@ -119,7 +112,7 @@ ten-minute default timeout so slower local 122B decisions can complete.
 Skip the Ollama-specific setup and start directly:
 
 ```bash
-git clone https://github.com/ai-mindset/synthesis.git
+git clone https://github.com/The-Strategy-Unit/synthesis.git
 cd synthesis
 deno task app
 ```
