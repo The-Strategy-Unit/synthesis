@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
 
 import {
+  ollamaPreset,
   providerCapabilities,
   providerEmptyState,
   providerPresentation,
 } from "./provider_readiness.js";
+
+Deno.test("local Ollama preset matches the vault embedding configuration", () => {
+  assert.deepEqual(ollamaPreset(768), {
+    displayName: "Local Ollama",
+    llmApiBase: "http://localhost:11434/v1",
+    llmModel: "qwen3.5:9b",
+    embeddingApiBase: "http://localhost:11434/v1",
+    embeddingModel: "nomic-embed-text-v2-moe:latest",
+    embeddingDimensions: 768,
+  });
+  assert.equal(ollamaPreset(256).embeddingDimensions, 256);
+  assert.equal(ollamaPreset(0).embeddingDimensions, 768);
+});
 
 Deno.test("provider state is explicit without overstating configuration", () => {
   assert.deepEqual(providerPresentation({ phase: "checking", mode: "local" }), {
@@ -88,7 +102,7 @@ Deno.test("model-dependent controls expose the shared provider status", async ()
       "proposal-approve",
       "ingest-btn",
       "discoveries-scan",
-      "lint-analyze",
+      "lint-analyse",
       "rebuild-semantic-btn",
     ]
   ) {

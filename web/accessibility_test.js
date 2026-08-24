@@ -66,7 +66,7 @@ Deno.test("primary action text retains AA contrast at rest and hover", async () 
   for (const variable of ["accent-strong", "accent-action-hover"]) {
     const value = css.match(new RegExp(`--${variable}:\\s*(#[0-9a-f]{6})`, "i"))
       ?.[1];
-    assert.ok(value, `${variable} must be a six-digit color`);
+    assert.ok(value, `${variable} must be a six-digit colour`);
     assert.ok(
       contrast("#ffffff", value) >= 4.5,
       `${variable} must retain 4.5:1 contrast with white text`,

@@ -15,5 +15,5 @@
 /bundle/
 web/app.bundle.js
 
-# Desktop build artifacts
+# Desktop build artefacts
 desktop-app/

@@ -29,7 +29,7 @@ deno task app
 
 ```bash
 deno task dev      # auto-reload via --watch
-deno task lint     # deno lint --fix && deno fmt
+deno task lint     # Lint and format tracked source/documentation paths
 deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
 deno task test:e2e           # provider-independent server/UI workflow tests
@@ -39,7 +39,7 @@ deno task test:browser       # real browser search/graph smoke; pass a Chromium 
 Compile a self-extracting QuickJS executable for the current host with
 `deno task compile`, or cross-compile Windows x64 with
 `deno task compile:windows`. Run `deno task test:compiled <executable>` on the
-artifact's target operating system to verify native SQLite startup, offline
+artefact's target operating system to verify native SQLite startup, offline
 vault APIs, and embedded UI assets from an unrelated working directory.
 
 ### Permissions
@@ -104,13 +104,12 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Model roles
 
-| Variable                      | Default        | Used by                             |
-| ----------------------------- | -------------- | ----------------------------------- |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`   | Per-chunk extraction                |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:122b` | Source-level consolidation          |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:122b` | new/merge/contradict decisions      |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:122b` | Rewriting existing notes            |
-| `SYNTHESIS_LLM_MODEL`         | `qwen3.5:122b` | Backward-compat / API response only |
+| Variable                      | Default        | Used by                        |
+| ----------------------------- | -------------- | ------------------------------ |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`   | Per-chunk extraction           |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:122b` | Source-level consolidation     |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:122b` | new/merge/contradict decisions |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:122b` | Rewriting existing notes       |
 
 ### LLM tuning
 
@@ -133,7 +132,13 @@ override with validation (clamping, enum checks, minimum bounds).
 | `SYNTHESIS_EMBED_API_BASE`   | inherits `SYNTHESIS_API_BASE`    | Separate endpoint if needed     |
 | `SYNTHESIS_EMBED_API_KEY`    | inherits `SYNTHESIS_API_KEY`     | -                               |
 | `SYNTHESIS_EMBED_MODEL`      | `nomic-embed-text-v2-moe:latest` | -                               |
-| `SYNTHESIS_EMBED_DIMENSIONS` | `768`                            | min 64; must match model output |
+| `SYNTHESIS_EMBED_DIMENSIONS` | `768`                            | min 64; requested and validated |
+
+The default width is the Nomic model's native 768-dimensional output. Synthesis
+adds its required `search_document:` prefix to wiki pages and `search_query:`
+prefix to retrieval queries. This input format is part of the semantic-index
+identity, so existing unprefixed vectors are invalidated rather than mixed with
+the corrected vector space.
 
 ### Ingest
 
@@ -187,7 +192,7 @@ override with validation (clamping, enum checks, minimum bounds).
 2. Wire it into the `POST /api/ingest` handler in `src/routes.ts`
 3. Preserve immutable-source and note provenance in `src/orchestrate.ts`
 
-### Customizing the distillation prompt
+### Customising the distillation prompt
 
 Edit the prompt constants in `src/distil.ts`:
 
@@ -197,10 +202,12 @@ Edit the prompt constants in `src/distil.ts`:
 
 ### Changing the embedding model
 
-Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` matches the
-model's output. Provider URL, model, and dimensions form the derived semantic
-index identity. Selecting a different identity invalidates embeddings and links
-instead of mixing incompatible vector spaces. Use **Build semantic index** or
+Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` is supported
+by the provider and model. Synthesis sends that width in each embedding request
+and rejects a response of another size. Provider URL, model, dimensions, and
+recognised model-specific input format form the derived semantic-index identity.
+Selecting a different identity invalidates embeddings and links instead of
+mixing incompatible vector spaces. Use **Build semantic index** or
 `POST /api/semantic-index/rebuild` to repopulate the vault in bounded resumable
 batches. A different vector width still requires a new database because the
 sqlite-vec virtual-table width is fixed.
@@ -249,7 +256,7 @@ Request body:
 }
 ```
 
-The server normalizes and rejects duplicate videos, enforces
+The server normalises and rejects duplicate videos, enforces
 `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS`, and requires the exact count-specific
 confirmation. It resolves one provider configuration, then processes sources
 sequentially through the ordinary stage, validation, stale-hash, embedding,
@@ -275,11 +282,11 @@ opening a new SSE request with the same exact input.
 `GET /api/export` streams the authoritative vault as tar. The exporter rejects
 symlinks and unsafe/overlong archive paths and excludes SQLite and app-data
 secrets. Its test extracts the archive into a fresh vault, creates a new SQLite
-database, rebuilds the catalog, and verifies keyword search.
+database, rebuilds the catalogue, and verifies keyword search.
 
 `POST /api/rebuild` requires `{ "confirm": "REBUILD" }`. Files are fully
-preflighted before `DB.replaceCatalog()` transactionally replaces derived rows.
-Rebuild clears embeddings, semantic links, proposals, discovery candidate
+preflighted before `DB.replaceCatalogue()` transactionally replaces derived
+rows. Rebuild clears embeddings, semantic links, proposals, discovery candidate
 coverage, and discoveries. Do not add a provider call to this path.
 
 `GET /api/semantic-index` reports whether the index has a recorded model
@@ -341,7 +348,7 @@ user-confirmed batch.
 `POST /api/ingest/undo` requires `{ "confirm": "UNDO" }`. Undo accepts only the
 newest not-yet-undone history record and refuses any affected page whose current
 hash differs from its recorded approved hash. Files are restored with rollback,
-then `DB.undoIngest()` updates the catalog transactionally. Immutable sources
+then `DB.undoIngest()` updates the catalogue transactionally. Immutable sources
 and archived after-images remain in the vault.
 
 ### `POST /api/ingest/file` (SSE)

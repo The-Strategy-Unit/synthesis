@@ -7,7 +7,7 @@ import {
   graphFocusNodeIds,
   searchContextGraph,
   seededGraphRandom,
-  semanticNeighborLinks,
+  semanticNeighbourLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
 
@@ -46,15 +46,15 @@ Deno.test("semantic neighbour breadth is local, deterministic, and keeps explici
     { source: 3, target: 4, kind: "semantic", similarity: 0.6 },
   ];
 
-  assert.deepEqual(semanticNeighborLinks(nodes, links, 0), [links[0]]);
-  assert.deepEqual(semanticNeighborLinks(nodes, links, 1), [
+  assert.deepEqual(semanticNeighbourLinks(nodes, links, 0), [links[0]]);
+  assert.deepEqual(semanticNeighbourLinks(nodes, links, 1), [
     links[0],
     links[1],
     links[2],
     links[4],
   ]);
   assert.throws(
-    () => semanticNeighborLinks(nodes, links, -1),
+    () => semanticNeighbourLinks(nodes, links, -1),
     /must be non-negative/,
   );
 });

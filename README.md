@@ -44,7 +44,7 @@ rebuildable.
   store
 - Provider-independent browsing, source review, graph navigation, keyword
   search, and deterministic health checks
-- Streamed portable vault export, provider-free catalog rebuild, resumable
+- Streamed portable vault export, provider-free catalogue rebuild, resumable
   provider-backed semantic rebuild, and hash-guarded last-ingest undo
 
 Synthesis is intended for research and knowledge-management workflows. It is not
@@ -129,7 +129,7 @@ the experimental QuickJS backend:
 deno task compile:windows
 ```
 
-The artifact is `dist/synthesis-windows-x86_64.exe`. It embeds the web UI, PDF
+The artefact is `dist/synthesis-windows-x86_64.exe`. It embeds the web UI, PDF
 support, SQLite, the Windows `sqlite-vec` extension, and Windows
 credential-store support. Copy it to the Windows computer, start Ollama, run the
 executable, and open `http://127.0.0.1:8000`. The default vault is
@@ -270,7 +270,7 @@ resulting wiki.
 5. **Rewrite** - update affected pages while preserving links and provenance.
 6. **Index** - update SQLite FTS, embeddings, graph links, `index.md`, and
    `log.md`.
-7. **Synthesize across sources** - shortlist cross-source page pairs across the
+7. **Synthesise across sources** - shortlist cross-source page pairs across the
    vault without excluding highly consolidated pages, then propose grounded
    relationships or possible consolidations for review.
 8. **Query** - answer from compiled pages, cite them, and optionally compile a
@@ -317,14 +317,14 @@ in the vault or profile file.
 **Export** streams a tar archive containing `vault.json`, `schema.md`, `notes/`,
 `sources/`, and `history/`. It deliberately excludes SQLite and provider
 credentials. **Rebuild** strictly validates source hashes, wiki pages, links,
-and provenance before replacing the derived SQLite catalog. Rebuild restores
+and provenance before replacing the derived SQLite catalogue. Rebuild restores
 keyword search, typed reviewed relationships, and explicit wiki links
 immediately. **Build semantic index** sends bounded page batches to the
 explicitly configured embedding provider; completed pages are checkpointed so
 the operation can resume until semantic search and mutual proximity links are
 complete. Rebuild also clears pending proposals, discovery candidate coverage,
 and discovery-review state because those queues are not yet durable vault
-artifacts.
+artefacts.
 
 **Undo ingest** applies only to the newest accepted, not-yet-undone ingest. It
 refuses to overwrite a page changed since approval, retains immutable sources,
@@ -359,6 +359,10 @@ environment variables. Common settings are:
 See [docs/DEVELOPERS.md](docs/DEVELOPERS.md) for the complete configuration
 reference.
 
+The default `nomic-embed-text-v2-moe:latest` model emits 768-dimensional
+vectors. Synthesis requests and validates that width and applies the model's
+required document/query retrieval prefixes automatically.
+
 ## API
 
 | Endpoint                       | Method  | Description                                  |
@@ -371,7 +375,7 @@ reference.
 | `/api/provider/diagnose`       | POST    | Check active endpoints and required models   |
 | `/api/schema`                  | GET/PUT | Read or update the vault schema              |
 | `/api/export`                  | GET     | Stream the portable authoritative vault      |
-| `/api/rebuild`                 | POST    | Rebuild derived catalog state from files     |
+| `/api/rebuild`                 | POST    | Rebuild derived catalogue state from files   |
 | `/api/semantic-index`          | GET     | Inspect semantic index coverage              |
 | `/api/semantic-index/rebuild`  | POST    | Build or resume bounded semantic state       |
 | `/api/notes`                   | GET     | List wiki pages                              |
@@ -474,7 +478,7 @@ src/wiki_store.ts              index, log, and cited synthesis persistence
 src/query.ts                   grounded cited wiki answers
 src/wiki_lint.ts               deterministic and AI-assisted wiki health
 src/vault_export.ts            portable authoritative tar streaming
-src/vault_rebuild.ts           strict provider-free catalog reconstruction
+src/vault_rebuild.ts           strict provider-free catalogue reconstruction
 src/ingest_history.ts          accepted-ingest revision history
 src/ingest_undo.ts             hash-guarded last-ingest recovery
 src/provider_*.ts              provider validation, runtime, and persistence
@@ -495,6 +499,6 @@ query answers, and discovery generation require Ollama or a configured remote
 provider; semantic search additionally requires complete compatible index
 coverage.
 
-## License
+## Licence
 
 See `LICENSE`.

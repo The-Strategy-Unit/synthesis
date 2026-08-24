@@ -40,12 +40,12 @@ export function reduceShellState(state, action) {
 }
 
 export function queueBadge(count, singular, plural) {
-  const normalized = Number.isSafeInteger(count) && count > 0 ? count : 0;
+  const normalised = Number.isSafeInteger(count) && count > 0 ? count : 0;
   return {
-    hidden: normalized === 0,
-    label: normalized === 0
+    hidden: normalised === 0,
+    label: normalised === 0
       ? `No ${plural}`
-      : `${normalized} ${normalized === 1 ? singular : plural}`,
-    text: normalized > 99 ? "99+" : String(normalized),
+      : `${normalised} ${normalised === 1 ? singular : plural}`,
+    text: normalised > 99 ? "99+" : String(normalised),
   };
 }

@@ -197,7 +197,7 @@ body {
 
 .nav-item:disabled,
 .primary-action:disabled,
-#lint-analyze:disabled,
+#lint-analyse:disabled,
 #discoveries-scan:disabled {
   opacity: 0.58;
   cursor: not-allowed;
@@ -850,7 +850,7 @@ body {
   background: var(--text);
 }
 
-#semantic-neighbors-slider {
+#semantic-neighbours-slider {
   margin-left: 0.5rem;
   vertical-align: middle;
 }
@@ -1064,7 +1064,7 @@ body {
 #ask-submit,
 #ask-save,
 #lint-refresh,
-#lint-analyze,
+#lint-analyse,
 #proposal-approve,
 #discoveries-scan,
 #discovery-confirm,
@@ -1085,7 +1085,7 @@ body {
 #ask-submit:hover,
 #ask-save:hover,
 #lint-refresh:hover,
-#lint-analyze:hover,
+#lint-analyse:hover,
 #proposal-approve:hover,
 #discoveries-scan:hover,
 #discovery-confirm:hover,
@@ -1114,7 +1114,7 @@ body {
 #ask-submit:focus-visible,
 #ask-save:focus-visible,
 #lint-refresh:focus-visible,
-#lint-analyze:focus-visible,
+#lint-analyse:focus-visible,
 #proposal-approve:focus-visible,
 #proposal-reject:focus-visible,
 #discoveries-scan:focus-visible,
@@ -1145,7 +1145,7 @@ body {
   outline-offset: 2px;
 }
 
-#rebuild-catalog-btn:disabled,
+#rebuild-catalogue-btn:disabled,
 #undo-ingest-btn:disabled {
   cursor: wait;
   opacity: 0.65;

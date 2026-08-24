@@ -58,3 +58,18 @@ export function providerEmptyState(phase) {
     ? { action: "add-source", label: "Add your first source" }
     : { action: "configure-provider", label: "Configure AI provider" };
 }
+
+export function ollamaPreset(dimensions = 768) {
+  const embeddingDimensions = Number.isSafeInteger(dimensions) &&
+      dimensions >= 64
+    ? dimensions
+    : 768;
+  return {
+    displayName: "Local Ollama",
+    llmApiBase: "http://localhost:11434/v1",
+    llmModel: "qwen3.5:9b",
+    embeddingApiBase: "http://localhost:11434/v1",
+    embeddingModel: "nomic-embed-text-v2-moe:latest",
+    embeddingDimensions,
+  };
+}

@@ -19,7 +19,7 @@ main.ts                     # Composition root and loopback HTTP server
 ├── src/orchestrate.ts      # Source staging, approval, rollback, and note integration
 ├── src/vault_manifest.ts   # Stable vault identity and format version
 ├── src/vault_export.ts     # Streaming portable tar export
-├── src/vault_rebuild.ts    # Provider-free catalog reconstruction
+├── src/vault_rebuild.ts    # Provider-free catalogue reconstruction
 ├── src/semantic_index.ts   # Model-bound bounded/resumable vector rebuild
 ├── src/wiki_schema.ts      # Editable vault policy supplied to model workflows
 ├── src/wiki_graph.ts       # Explicit-link-first graph and related-page views
@@ -155,8 +155,8 @@ hop.
 `POST /api/rebuild` validates the manifest/schema, source metadata and hashes,
 compiler-managed pages, unique titles, exact wiki-link targets, and provenance
 before any database mutation. It regenerates `index.md`, then atomically
-replaces the SQLite source/note/provenance/FTS catalog. Embeddings and semantic
-links are empty after rebuild. A separately confirmed, provider-backed
+replaces the SQLite source/note/provenance/FTS catalogue. Embeddings and
+semantic links are empty after rebuild. A separately confirmed, provider-backed
 `POST /api/semantic-index/rebuild` processes missing page embeddings in bounded
 resumable batches and recreates links only after complete coverage. Proposals,
 discovery candidate coverage, and discoveries are cleared because their
@@ -228,12 +228,14 @@ CREATE VIRTUAL TABLE embeddings USING vec0(
 );
 ```
 
-Vector dimensions default to 768 (`SYNTHESIS_EMBED_DIMENSIONS`).
+Vector dimensions default to 768 (`SYNTHESIS_EMBED_DIMENSIONS`), matching the
+native output width of `nomic-embed-text-v2-moe`.
 
 `catalog_metadata.embedding_identity` binds current vectors to the normalised
-embedding-provider URL, model, and dimensions. A different identity atomically
-clears vectors and derived links. Legacy vectors without identity are cleared
-during database migration rather than assumed compatible.
+embedding-provider URL, model, dimensions, and any model-specific input format.
+A different identity atomically clears vectors and derived links. Legacy vectors
+without identity are cleared during database migration rather than assumed
+compatible.
 
 ### `links` table
 
@@ -327,10 +329,14 @@ workflow.
 
 ### Embedding and storage
 
-`DB.embedText()` (static) calls the OpenAI-compatible `/embeddings` endpoint and
-returns a `number[]`. `embedAndStore()` wraps this: embeds
-`title + "\n" + body`, then calls `upsertEmbedding()` which deletes any existing
-vector for that note_id and inserts the new one.
+`DB.embedText()` (static) calls the OpenAI-compatible `/embeddings` endpoint,
+requests the configured dimensions, validates the returned width, and returns a
+`number[]`. Callers identify text as a document or query. For the default Nomic
+v2 model, the input layer applies its required `search_document:` or
+`search_query:` retrieval instruction; other model inputs remain unchanged.
+`embedAndStore()` wraps this: embeds `title + "\n" + body`, then calls
+`upsertEmbedding()` which deletes any existing vector for that note_id and
+inserts the new one.
 
 ### Future multi-resolution retrieval (not implemented)
 
@@ -360,10 +366,9 @@ passage embeddings for longer pages:
 Passage vectors should live in a separate table keyed by passage ID, with the
 note ID, ordinal or source location, text, and content hash retained alongside
 them. Page embeddings must remain available for broad discovery, graph
-suggestions, and short atomic wiki entries. The 768-dimensional default was
-selected after retrieval and resource benchmarking. Changing dimensions still
-requires rebuilding the vector index, so benchmark alternatives in a new vault
-first.
+suggestions, and short atomic wiki entries. The 768-dimensional default matches
+the default model's native output. Changing dimensions still requires rebuilding
+the vector index, so benchmark alternatives in a new vault first.
 
 ### Link computation
 
@@ -441,7 +446,7 @@ They require Deno on the target machine and include:
 - The application source, locked dependencies, docs, and browser assets
 - A platform-appropriate `yt-dlp` binary
 - A setup script (`setup.sh` or `setup.ps1`) that checks Ollama and pulls models
-- Template substitution for model names from `config.build`
+- Template substitution for every configured chat role and embedding model
 
 Platforms: Linux x86_64, macOS ARM64, Windows x86_64.
 
@@ -449,5 +454,5 @@ Platforms: Linux x86_64, macOS ARM64, Windows x86_64.
 with Deno's experimental QuickJS backend. `deno task compile` targets the
 current host; `deno task compile:windows` cross-compiles Windows x86_64. The web
 assets, PDF support, SQLite, `sqlite-vec`, and target OS credential-store addon
-are embedded. Run `deno task test:compiled <executable>` on the artifact's
+are embedded. Run `deno task test:compiled <executable>` on the artefact's
 target OS.

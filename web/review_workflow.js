@@ -24,10 +24,10 @@ export function discoveryMatchesFilter(discovery, query, relationshipType) {
     relationshipType && relationshipType !== "all" &&
     discovery.relationshipType !== relationshipType
   ) return false;
-  const normalizedQuery = typeof query === "string"
-    ? query.trim().toLocaleLowerCase("en-US")
+  const normalisedQuery = typeof query === "string"
+    ? query.trim().toLocaleLowerCase("en-GB")
     : "";
-  if (!normalizedQuery) return true;
+  if (!normalisedQuery) return true;
   const text = [
     discovery.relationshipType,
     discovery.explanation,
@@ -39,8 +39,8 @@ export function discoveryMatchesFilter(discovery, query, relationshipType) {
       ? discovery.sources.map((source) => source?.title)
       : []),
   ].filter((value) => typeof value === "string").join(" ")
-    .toLocaleLowerCase("en-US");
-  return text.includes(normalizedQuery);
+    .toLocaleLowerCase("en-GB");
+  return text.includes(normalisedQuery);
 }
 
 export function reviewDecisionSummary(decisions) {

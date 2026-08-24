@@ -15,7 +15,7 @@ import {
   graphLinkStrength,
   searchContextGraph,
   seededGraphRandom,
-  semanticNeighborLinks,
+  semanticNeighbourLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
 import {
@@ -43,6 +43,7 @@ import {
   reviewDecisionSummary,
 } from "./review_workflow.js";
 import {
+  ollamaPreset,
   providerCapabilities,
   providerEmptyState,
   providerPresentation,
@@ -172,13 +173,13 @@ async function fetchConfig() {
 }
 
 function applyConfig() {
-  const slider = document.getElementById("semantic-neighbors-slider");
+  const slider = document.getElementById("semantic-neighbours-slider");
   slider.max = uiConfig.maxSemanticNeighbors;
   slider.value = Math.min(
     uiConfig.semanticNeighbors,
     uiConfig.maxSemanticNeighbors,
   );
-  document.getElementById("semantic-neighbors-value").textContent =
+  document.getElementById("semantic-neighbours-value").textContent =
     slider.value;
 }
 
@@ -271,19 +272,21 @@ async function consumeSse(response, onEvent) {
   if (buffer.trim()) await consumeBlock(buffer);
 }
 
-const rebuildCatalogButton = document.getElementById("rebuild-catalog-btn");
+const rebuildCatalogueButton = document.getElementById(
+  "rebuild-catalogue-btn",
+);
 const rebuildSemanticButton = document.getElementById("rebuild-semantic-btn");
 
-async function rebuildCatalog() {
+async function rebuildCatalogue() {
   const confirmed = globalThis.confirm(
-    "Rebuild the local catalog from authoritative vault files? " +
+    "Rebuild the local catalogue from authoritative vault files? " +
       "Accepted Markdown and sources stay intact. Embeddings, semantic " +
       "connections, pending proposals, and discovery review state are reset.",
   );
   if (!confirmed) return;
 
-  rebuildCatalogButton.disabled = true;
-  rebuildCatalogButton.textContent = "Rebuilding...";
+  rebuildCatalogueButton.disabled = true;
+  rebuildCatalogueButton.textContent = "Rebuilding...";
   try {
     const data = await api("rebuild", {
       method: "POST",
@@ -298,12 +301,12 @@ async function rebuildCatalog() {
   } catch (error) {
     globalThis.alert(error.message);
   } finally {
-    rebuildCatalogButton.disabled = false;
-    rebuildCatalogButton.textContent = "Rebuild";
+    rebuildCatalogueButton.disabled = false;
+    rebuildCatalogueButton.textContent = "Rebuild";
   }
 }
 
-rebuildCatalogButton.addEventListener("click", rebuildCatalog);
+rebuildCatalogueButton.addEventListener("click", rebuildCatalogue);
 
 async function rebuildSemanticIndex() {
   const confirmed = globalThis.confirm(
@@ -1716,6 +1719,7 @@ const ingestButton = document.getElementById("ingest-btn");
 const ingestCancelButton = document.getElementById("ingest-cancel-btn");
 let activeIngestController = null;
 let providerState = { phase: "checking", mode: "unknown" };
+let vaultEmbeddingDimensions = 768;
 
 function setProviderBusy(busy) {
   for (const control of providerForm.elements) control.disabled = busy;
@@ -1742,7 +1746,7 @@ function renderProviderState(nextState) {
   addSourceButton.disabled = !capabilities.modelActions;
   askOpenButton.disabled = !capabilities.modelActions;
   discoveriesScan.disabled = !capabilities.modelActions;
-  lintAnalyze.disabled = !capabilities.modelActions;
+  lintAnalyse.disabled = !capabilities.modelActions;
   ingestButton.disabled = !capabilities.modelActions ||
     activeIngestController !== null;
   rebuildSemanticButton.disabled = !capabilities.modelActions;
@@ -1766,7 +1770,7 @@ function renderProviderState(nextState) {
       addSourceButton,
       askOpenButton,
       discoveriesScan,
-      lintAnalyze,
+      lintAnalyse,
       ingestButton,
     ]
   ) {
@@ -1807,6 +1811,9 @@ function updateKeyHint(id, stored) {
 }
 
 function populateProviderForm(data) {
+  if (Number.isSafeInteger(data.embeddingDimensions)) {
+    vaultEmbeddingDimensions = data.embeddingDimensions;
+  }
   const profile = data.profile;
   if (profile) {
     providerForm.elements.displayName.value = profile.displayName;
@@ -1852,14 +1859,14 @@ async function openProviderModal() {
 }
 
 function useOllamaPreset() {
-  providerForm.elements.displayName.value = "Local Ollama";
-  providerForm.elements.llmApiBase.value = "http://localhost:11434/v1";
-  providerForm.elements.llmModel.value = "qwen3.5:9b";
-  providerForm.elements.embeddingApiBase.value = "http://localhost:11434/v1";
-  providerForm.elements.embeddingModel.value = "qwen3-embedding:8b";
-  if (!providerForm.elements.embeddingDimensions.value) {
-    providerForm.elements.embeddingDimensions.value = 4096;
-  }
+  const preset = ollamaPreset(vaultEmbeddingDimensions);
+  providerForm.elements.displayName.value = preset.displayName;
+  providerForm.elements.llmApiBase.value = preset.llmApiBase;
+  providerForm.elements.llmModel.value = preset.llmModel;
+  providerForm.elements.embeddingApiBase.value = preset.embeddingApiBase;
+  providerForm.elements.embeddingModel.value = preset.embeddingModel;
+  providerForm.elements.embeddingDimensions.value = preset
+    .embeddingDimensions;
   llmKeyInput.value = "ollama";
   embeddingKeyInput.value = "ollama";
   providerStatus.textContent =
@@ -2194,7 +2201,7 @@ bindModalDismissal(sourcesModal, closeSourcesModal);
 
 const lintModal = document.getElementById("lint-modal");
 const lintRefresh = document.getElementById("lint-refresh");
-const lintAnalyze = document.getElementById("lint-analyze");
+const lintAnalyse = document.getElementById("lint-analyse");
 const lintStatus = document.getElementById("lint-status");
 const lintSummary = document.getElementById("lint-summary");
 const lintIssues = document.getElementById("lint-issues");
@@ -2216,7 +2223,7 @@ function lintCount(label, count) {
 
 async function runWikiLint() {
   lintRefresh.disabled = true;
-  lintAnalyze.disabled = true;
+  lintAnalyse.disabled = true;
   lintStatus.textContent = "Checking wiki structure and provenance...";
   lintSummary.classList.add("hidden");
   lintIssues.replaceChildren();
@@ -2255,16 +2262,16 @@ async function runWikiLint() {
     lintStatus.textContent = error.message;
   } finally {
     lintRefresh.disabled = false;
-    lintAnalyze.disabled = !providerCapabilities(providerState.phase)
+    lintAnalyse.disabled = !providerCapabilities(providerState.phase)
       .modelActions;
   }
 }
 
-async function analyzeWikiHealth() {
+async function analyseWikiHealth() {
   lintRefresh.disabled = true;
-  lintAnalyze.disabled = true;
+  lintAnalyse.disabled = true;
   lintStatus.textContent =
-    "Analyzing contradictions, stale claims, and gaps...";
+    "Analysing contradictions, stale claims, and gaps...";
   try {
     const analysis = await api("lint/analyze", {
       method: "POST",
@@ -2303,7 +2310,7 @@ async function analyzeWikiHealth() {
     lintStatus.textContent = error.message;
   } finally {
     lintRefresh.disabled = false;
-    lintAnalyze.disabled = !providerCapabilities(providerState.phase)
+    lintAnalyse.disabled = !providerCapabilities(providerState.phase)
       .modelActions;
   }
 }
@@ -2315,7 +2322,7 @@ document.getElementById("lint-open-btn").addEventListener("click", () => {
 document.getElementById("lint-close").addEventListener("click", closeLintModal);
 bindModalDismissal(lintModal, closeLintModal);
 lintRefresh.addEventListener("click", runWikiLint);
-lintAnalyze.addEventListener("click", analyzeWikiHealth);
+lintAnalyse.addEventListener("click", analyseWikiHealth);
 
 function escapeHtml(str) {
   return String(str)
@@ -2369,15 +2376,15 @@ function renderEvidence(page) {
   }).join("");
   const related = (page.related ?? []).map((item) => {
     const relationshipTypes = item.kind === "explicit"
-      ? [...new Set((item.relationships ?? []).map((relationship) =>
-        String(relationship.type).replaceAll("_", " ")
-      ))]
+      ? [
+        ...new Set((item.relationships ?? []).map((relationship) =>
+          String(relationship.type).replaceAll("_", " ")
+        )),
+      ]
       : [];
     const label = item.kind === "explicit"
       ? `Reviewed wiki link${
-        relationshipTypes.length > 0
-          ? ` · ${relationshipTypes.join(", ")}`
-          : ""
+        relationshipTypes.length > 0 ? ` · ${relationshipTypes.join(", ")}` : ""
       }`
       : "Mutual semantic proximity";
     return `<li><a href="/?note=${encodeURIComponent(item.id)}" ` +
@@ -2502,7 +2509,7 @@ function setGraphFocus(noteId) {
 function clearGraphSearch() {
   graphSearch = null;
   graphFocusId = null;
-  applySemanticNeighborhoodBreadth();
+  applySemanticNeighbourhoodBreadth();
 }
 
 async function clearSearch() {
@@ -2566,8 +2573,7 @@ async function doSearch(q, requestedMode) {
       providerState.semanticIndex,
     ).searchMode;
     attemptedMode = searchMode;
-    document.getElementById("note-list-heading").textContent =
-      "Search results";
+    document.getElementById("note-list-heading").textContent = "Search results";
     const searchMethod = document.getElementById("search-method");
     searchMethod.textContent = searchMethodSummary(searchMode);
     searchMethod.classList.remove("hidden");
@@ -2584,7 +2590,7 @@ async function doSearch(q, requestedMode) {
       ),
       matchedIds: new Set(),
     };
-    applySemanticNeighborhoodBreadth();
+    applySemanticNeighbourhoodBreadth();
     pageCount.textContent = String(results.length);
     pageCount.setAttribute(
       "aria-label",
@@ -2967,7 +2973,7 @@ async function loadGraph() {
     ),
   };
   graphUnavailable = false;
-  applySemanticNeighborhoodBreadth();
+  applySemanticNeighbourhoodBreadth();
 }
 
 const tooltip = select("#graph-tooltip");
@@ -3111,7 +3117,7 @@ function renderGraph() {
       setGraphFocus(d.id);
     })
     .on("mouseover", (_event, d) => {
-      highlightNeighborhood(d.id);
+      highlightNeighbourhood(d.id);
       const visibleConnections = degree.get(d.id) ?? 0;
       const declaredConnections = graphData.links.filter((link) =>
         link.kind === "explicit" &&
@@ -3155,7 +3161,7 @@ function renderGraph() {
     return endpoint && typeof endpoint === "object" ? endpoint.id : endpoint;
   }
 
-  function highlightNeighborhood(hoveredId) {
+  function highlightNeighbourhood(hoveredId) {
     const connectedIds = graphFocusNodeIds(
       graphData.nodes,
       graphData.links,
@@ -3184,15 +3190,15 @@ function renderGraph() {
       .classed("is-muted", (datum) => !connectedIds.has(datum.id));
   }
 
-  function clearNeighborhoodHighlight() {
+  function clearNeighbourhoodHighlight() {
     link.classed("is-highlighted is-muted", false);
     node.classed("is-focused is-connected is-muted", false);
     label.classed("is-highlighted is-muted", false);
   }
 
   refreshGraphFocusHighlight = () => {
-    if (graphFocusId === null) clearNeighborhoodHighlight();
-    else highlightNeighborhood(graphFocusId);
+    if (graphFocusId === null) clearNeighbourhoodHighlight();
+    else highlightNeighbourhood(graphFocusId);
   };
   refreshGraphFocusHighlight();
 
@@ -3282,21 +3288,21 @@ function renderGraph() {
 
 // --- Semantic neighbourhood breadth ---
 
-const semanticNeighborsSlider = document.getElementById(
-  "semantic-neighbors-slider",
+const semanticNeighboursSlider = document.getElementById(
+  "semantic-neighbours-slider",
 );
-const semanticNeighborsValue = document.getElementById(
-  "semantic-neighbors-value",
+const semanticNeighboursValue = document.getElementById(
+  "semantic-neighbours-value",
 );
 
-semanticNeighborsSlider.addEventListener("input", () => {
-  semanticNeighborsValue.textContent = semanticNeighborsSlider.value;
-  applySemanticNeighborhoodBreadth();
+semanticNeighboursSlider.addEventListener("input", () => {
+  semanticNeighboursValue.textContent = semanticNeighboursSlider.value;
+  applySemanticNeighbourhoodBreadth();
 });
 
-function applySemanticNeighborhoodBreadth() {
-  const breadth = Number(semanticNeighborsSlider.value);
-  const semanticLinks = semanticNeighborLinks(
+function applySemanticNeighbourhoodBreadth() {
+  const breadth = Number(semanticNeighboursSlider.value);
+  const semanticLinks = semanticNeighbourLinks(
     rawGraphData.nodes,
     rawGraphData.links,
     breadth,
