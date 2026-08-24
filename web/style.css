@@ -55,7 +55,7 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100vh;
 }
 
@@ -69,6 +69,71 @@ body {
   border-bottom: 1px solid var(--border);
   position: relative;
   z-index: 40;
+}
+
+#operation-feedback {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 1rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  position: relative;
+  z-index: 39;
+}
+
+#operation-progress {
+  width: 100%;
+  height: 0.25rem;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--accent);
+}
+
+#operation-progress::-webkit-progress-bar {
+  background: var(--panel-2);
+}
+
+#operation-progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+#operation-progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+[role="status"].operation-active::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 0.2rem;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%)
+    0 0 / 45% 100% no-repeat,
+    var(--panel-2);
+  animation: operation-progress 1.15s ease-in-out infinite;
+}
+
+@keyframes operation-progress {
+  from {
+    background-position: -80% 0;
+  }
+
+  to {
+    background-position: 180% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [role="status"].operation-active::after {
+    background: var(--accent);
+    opacity: 0.65;
+    animation: none;
+  }
 }
 
 .brand-area,

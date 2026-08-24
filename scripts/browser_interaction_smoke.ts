@@ -469,8 +469,38 @@ async function run(): Promise<void> {
       false,
     );
 
+    console.log("Browser smoke: checking long-operation feedback.");
+    await client.evaluate(`(() => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (input, init) => {
+        if (String(input).endsWith('/api/lint')) {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => originalFetch(input, init).then(resolve, reject), 500);
+          });
+        }
+        return originalFetch(input, init);
+      };
+      document.querySelector('#lint-open-btn').click();
+    })()`);
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          "document.querySelector('#lint-status').classList.contains('operation-active') && document.querySelector('#lint-status').getAttribute('aria-busy') === 'true' && !document.querySelector('#operation-feedback').classList.contains('hidden') && document.querySelector('#operation-feedback').getAttribute('aria-busy') === 'true'",
+        ),
+      Boolean,
+      "Long-operation progress did not become visible",
+    );
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          "!document.querySelector('#lint-status').classList.contains('operation-active') && document.querySelector('#lint-status').getAttribute('aria-busy') === 'false' && document.querySelector('#operation-feedback').classList.contains('hidden') && document.querySelector('#operation-feedback').getAttribute('aria-busy') === 'false'",
+        ),
+      Boolean,
+      "Long-operation progress did not clear after completion",
+    );
+
     console.log(
-      "Browser interaction smoke passed: relevance, maximise, fit, Escape, and restore.",
+      "Browser interaction smoke passed: relevance, graph controls, and operation feedback.",
     );
   } finally {
     client?.close();

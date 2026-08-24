@@ -36,6 +36,24 @@ Deno.test("changing workflow messages are polite live regions", async () => {
   }
 });
 
+Deno.test("server work exposes accessible indeterminate progress", async () => {
+  const html = await Deno.readTextFile(
+    new URL("./index.html", import.meta.url),
+  );
+  const css = await Deno.readTextFile(new URL("./style.css", import.meta.url));
+
+  assert.match(
+    html,
+    /id="operation-feedback"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"[^>]*aria-busy="false"/,
+  );
+  assert.match(
+    html,
+    /<progress id="operation-progress"\s+aria-labelledby="operation-feedback-label"><\/progress>/,
+  );
+  assert.match(css, /\[role="status"\]\.operation-active::after/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
 Deno.test("long ingest exposes an explicit non-submitting stop control", async () => {
   const html = await Deno.readTextFile(
     new URL("./index.html", import.meta.url),

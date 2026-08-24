@@ -185,20 +185,77 @@ function applyConfig() {
 
 // --- API helpers ---
 
-async function api(path, opts = {}) {
-  const res = await fetch(`/api/${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
+const operationFeedback = document.getElementById("operation-feedback");
+const operationFeedbackLabel = document.getElementById(
+  "operation-feedback-label",
+);
+const activeOperations = new Map();
+const activeStatusOperations = new WeakMap();
+
+function renderOperationFeedback() {
+  const operations = [...activeOperations.values()];
+  const current =
+    [...operations].reverse().find((operation) => operation.specific) ??
+      operations.at(-1);
+  operationFeedback.classList.toggle("hidden", !current);
+  operationFeedback.setAttribute("aria-busy", String(Boolean(current)));
+  if (current) operationFeedbackLabel.textContent = current.message;
+}
+
+function beginOperation(message, status) {
+  const token = Symbol("operation");
+  activeOperations.set(token, {
+    message: message ?? "Synthesis is working…",
+    specific: Boolean(message),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const error = new Error(data.error || `Request failed (${res.status})`);
-    error.code = data.code;
-    error.status = res.status;
-    error.data = data;
-    throw error;
+  if (status) {
+    const count = (activeStatusOperations.get(status) ?? 0) + 1;
+    activeStatusOperations.set(status, count);
+    status.classList.add("operation-active");
+    status.setAttribute("aria-busy", "true");
   }
-  return data;
+  renderOperationFeedback();
+
+  return () => {
+    activeOperations.delete(token);
+    if (status) {
+      const count = Math.max(
+        0,
+        (activeStatusOperations.get(status) ?? 1) - 1,
+      );
+      if (count === 0) {
+        activeStatusOperations.delete(status);
+        status.classList.remove("operation-active");
+        status.setAttribute("aria-busy", "false");
+      } else activeStatusOperations.set(status, count);
+    }
+    renderOperationFeedback();
+  };
+}
+
+async function api(path, opts = {}) {
+  const { progress, ...fetchOptions } = opts;
+  const finishOperation = beginOperation(
+    progress?.message,
+    progress?.status,
+  );
+  try {
+    const res = await fetch(`/api/${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...fetchOptions,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = new Error(data.error || `Request failed (${res.status})`);
+      error.code = data.code;
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  } finally {
+    finishOperation();
+  }
 }
 
 function showModalDialog(dialog, initialFocus) {
@@ -287,6 +344,9 @@ async function rebuildCatalogue() {
 
   rebuildCatalogueButton.disabled = true;
   rebuildCatalogueButton.textContent = "Rebuilding...";
+  const finishOperation = beginOperation(
+    "Rebuilding the vault catalogue…",
+  );
   try {
     const data = await api("rebuild", {
       method: "POST",
@@ -301,6 +361,7 @@ async function rebuildCatalogue() {
   } catch (error) {
     globalThis.alert(error.message);
   } finally {
+    finishOperation();
     rebuildCatalogueButton.disabled = false;
     rebuildCatalogueButton.textContent = "Rebuild";
   }
@@ -316,6 +377,9 @@ async function rebuildSemanticIndex() {
 
   rebuildSemanticButton.disabled = true;
   rebuildSemanticButton.textContent = "Building semantic index...";
+  const finishOperation = beginOperation(
+    "Building the semantic index…",
+  );
   try {
     const data = await api("semantic-index/rebuild", {
       method: "POST",
@@ -334,6 +398,7 @@ async function rebuildSemanticIndex() {
   } catch (error) {
     globalThis.alert(error.message);
   } finally {
+    finishOperation();
     const semanticIndex = providerState.semanticIndex;
     rebuildSemanticButton.disabled = !providerCapabilities(
       providerState.phase,
@@ -361,6 +426,7 @@ async function undoIngest() {
 
   undoIngestButton.disabled = true;
   undoIngestButton.textContent = "Undoing...";
+  const finishOperation = beginOperation("Undoing the latest ingest…");
   try {
     const data = await api("ingest/undo", {
       method: "POST",
@@ -378,6 +444,7 @@ async function undoIngest() {
   } catch (error) {
     globalThis.alert(error.message);
   } finally {
+    finishOperation();
     undoIngestButton.disabled = false;
     undoIngestButton.textContent = "Undo ingest";
   }
@@ -701,6 +768,10 @@ async function submitWikiQuestion() {
   clearReviewedAnswer();
   setAskBusy(true);
   askStatus.textContent = "Reading the compiled wiki...";
+  const finishOperation = beginOperation(
+    "Reading the compiled wiki with AI…",
+    askStatus,
+  );
   try {
     const data = await api("query", {
       method: "POST",
@@ -711,6 +782,7 @@ async function submitWikiQuestion() {
   } catch (error) {
     askStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setAskBusy(false);
   }
 }
@@ -725,6 +797,10 @@ async function saveReviewedWikiAnswer() {
   }
   setAskBusy(true);
   askStatus.textContent = "Saving the reviewed synthesis...";
+  const finishOperation = beginOperation(
+    "Saving the reviewed synthesis…",
+    askStatus,
+  );
   try {
     const data = await api("query/save", {
       method: "POST",
@@ -750,6 +826,7 @@ async function saveReviewedWikiAnswer() {
       askStatus.textContent = error.message;
     }
   } finally {
+    finishOperation();
     setAskBusy(false);
   }
 }
@@ -1033,6 +1110,10 @@ async function loadProposalDetail(proposalId, button) {
   }
   reviewStatus.textContent = "Loading proposed changes...";
   proposalDetail.classList.add("hidden");
+  const finishOperation = beginOperation(
+    "Loading proposed changes…",
+    reviewStatus,
+  );
   try {
     const data = await api(`proposals/${proposalId}`);
     if (selectedProposalId !== proposalId) return;
@@ -1041,6 +1122,8 @@ async function loadProposalDetail(proposalId, button) {
   } catch (error) {
     if (selectedProposalId !== proposalId) return;
     reviewStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -1096,10 +1179,16 @@ async function loadPendingProposals(preferredId) {
 
 async function openReviewWorkspace(preferredId, updateHistory = true) {
   setPrimaryWorkspace("review", updateHistory);
+  const finishOperation = beginOperation(
+    "Loading the review queue…",
+    reviewStatus,
+  );
   try {
     await loadPendingProposals(preferredId);
   } catch (error) {
     reviewStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -1120,6 +1209,10 @@ async function approveSelectedProposal() {
   reviewStatus.textContent = `Applying ${changes.length} reviewed change${
     changes.length === 1 ? "" : "s"
   }...`;
+  const finishOperation = beginOperation(
+    "Applying reviewed changes…",
+    reviewStatus,
+  );
   try {
     const response = await fetch(
       `/api/proposals/${selectedProposalId}/approve`,
@@ -1155,6 +1248,7 @@ async function approveSelectedProposal() {
   } catch (error) {
     reviewStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setProposalBusy(false);
   }
 }
@@ -1163,6 +1257,10 @@ async function rejectSelectedProposal() {
   if (!selectedProposalId) return;
   setProposalBusy(true);
   reviewStatus.textContent = "Rejecting proposal...";
+  const finishOperation = beginOperation(
+    "Rejecting the proposal…",
+    reviewStatus,
+  );
   try {
     await api(`proposals/${selectedProposalId}/reject`, {
       method: "POST",
@@ -1172,6 +1270,7 @@ async function rejectSelectedProposal() {
   } catch (error) {
     reviewStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setProposalBusy(false);
   }
 }
@@ -1390,6 +1489,10 @@ async function loadDiscoveryDetail(discoveryId, button) {
   }
   discoveriesStatus.textContent = "Loading discovery evidence...";
   discoveryDetail.classList.add("hidden");
+  const finishOperation = beginOperation(
+    "Loading discovery evidence…",
+    discoveriesStatus,
+  );
   try {
     const data = await api(`discoveries/${discoveryId}`);
     if (selectedDiscoveryId !== discoveryId) return;
@@ -1399,6 +1502,8 @@ async function loadDiscoveryDetail(discoveryId, button) {
   } catch (error) {
     if (selectedDiscoveryId !== discoveryId) return;
     discoveriesStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -1512,10 +1617,16 @@ async function loadDiscoveries(preferredId) {
 
 async function openDiscoveriesModal(preferredId) {
   showModalDialog(discoveriesModal);
+  const finishOperation = beginOperation(
+    "Loading synthesis proposals…",
+    discoveriesStatus,
+  );
   try {
     await loadDiscoveries(preferredId);
   } catch (error) {
     discoveriesStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -1531,6 +1642,10 @@ async function scanDiscoveries() {
   setDiscoveryBusy(true);
   discoveriesStatus.textContent =
     "Building the cross-source candidate frontier...";
+  const finishOperation = beginOperation(
+    "Comparing sources with AI…",
+    discoveriesStatus,
+  );
   let generation;
   let preferredId;
   let lastCoverage;
@@ -1553,6 +1668,7 @@ async function scanDiscoveries() {
   } catch (error) {
     discoveriesStatus.textContent = error.message;
   } finally {
+    finishOperation();
     discoverySweepRunning = false;
     discoverySweepStopRequested = false;
     setDiscoveryBusy(false);
@@ -1604,6 +1720,12 @@ async function applyDiscoveryBatch() {
   discoveriesStatus.textContent = snapshot.action === "confirm"
     ? `Confirming ${snapshot.ids.length} selected relationships...`
     : `Rejecting ${snapshot.ids.length} selected proposals...`;
+  const finishOperation = beginOperation(
+    snapshot.action === "confirm"
+      ? "Confirming selected relationships…"
+      : "Rejecting selected proposals…",
+    discoveriesStatus,
+  );
   try {
     const result = await api("discoveries/batch", {
       method: "POST",
@@ -1623,6 +1745,7 @@ async function applyDiscoveryBatch() {
   } catch (error) {
     discoveriesStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setDiscoveryBusy(false);
   }
 }
@@ -1631,6 +1754,12 @@ async function reviewSelectedDiscovery(action) {
   if (!selectedDiscoveryId) return;
   setDiscoveryBusy(true);
   discoveriesStatus.textContent = `${action} discovery...`;
+  const actionLabel = {
+    investigate: "Marking the discovery for investigation…",
+    reject: "Rejecting the discovery…",
+    confirm: "Confirming the discovery link…",
+  }[action];
+  const finishOperation = beginOperation(actionLabel, discoveriesStatus);
   try {
     const data = await api(`discoveries/${selectedDiscoveryId}/${action}`, {
       method: "POST",
@@ -1646,6 +1775,7 @@ async function reviewSelectedDiscovery(action) {
   } catch (error) {
     discoveriesStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setDiscoveryBusy(false);
     if (action === "investigate") discoveryInvestigate.disabled = true;
   }
@@ -1841,6 +1971,10 @@ async function openProviderModal() {
   showModalDialog(providerModal);
   providerStatus.textContent = "Loading provider settings...";
   setProviderBusy(true);
+  const finishOperation = beginOperation(
+    "Loading AI provider settings…",
+    providerStatus,
+  );
   try {
     const data = await api("provider");
     populateProviderForm(data);
@@ -1854,6 +1988,7 @@ async function openProviderModal() {
   } catch (error) {
     providerStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setProviderBusy(false);
   }
 }
@@ -1918,6 +2053,10 @@ async function diagnoseActiveProvider() {
   providerStatus.textContent =
     "Checking models and running live compatibility checks. Cold models may take a moment...";
   providerDiagnostics.classList.add("hidden");
+  const finishOperation = beginOperation(
+    "Diagnosing the active AI provider…",
+    providerStatus,
+  );
   try {
     const data = await api("provider/diagnose", {
       method: "POST",
@@ -1935,6 +2074,7 @@ async function diagnoseActiveProvider() {
     renderProviderState({ phase: "unavailable" });
     providerStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setProviderBusy(false);
   }
 }
@@ -1951,6 +2091,10 @@ async function saveProvider(event) {
   const fields = new FormData(providerForm);
   setProviderBusy(true);
   providerStatus.textContent = "Testing chat and embedding connections...";
+  const finishOperation = beginOperation(
+    "Testing and saving the AI provider…",
+    providerStatus,
+  );
   try {
     const data = await api("provider", {
       method: "POST",
@@ -1978,6 +2122,7 @@ async function saveProvider(event) {
   } catch (error) {
     providerStatus.textContent = error.message;
   } finally {
+    finishOperation();
     llmKeyInput.value = "";
     embeddingKeyInput.value = "";
     setProviderBusy(false);
@@ -2013,6 +2158,10 @@ async function openSchemaModal() {
   showModalDialog(schemaModal);
   schemaStatus.textContent = "Loading schema...";
   setSchemaBusy(true);
+  const finishOperation = beginOperation(
+    "Loading the wiki schema…",
+    schemaStatus,
+  );
   try {
     const data = await api("schema");
     schemaInput.value = data.schema;
@@ -2020,6 +2169,7 @@ async function openSchemaModal() {
   } catch (error) {
     schemaStatus.textContent = error.message;
   } finally {
+    finishOperation();
     setSchemaBusy(false);
   }
 }
@@ -2032,6 +2182,10 @@ async function saveSchema() {
   setSchemaBusy(true);
   schemaSave.textContent = "Saving...";
   schemaStatus.textContent = "Validating schema...";
+  const finishOperation = beginOperation(
+    "Validating and saving the wiki schema…",
+    schemaStatus,
+  );
   try {
     const data = await api("schema", {
       method: "PUT",
@@ -2042,6 +2196,7 @@ async function saveSchema() {
   } catch (error) {
     schemaStatus.textContent = error.message;
   } finally {
+    finishOperation();
     schemaSave.textContent = "Save schema";
     setSchemaBusy(false);
   }
@@ -2129,6 +2284,10 @@ async function loadSourceDetail(sourceId, button) {
     item.classList.toggle("active", item === button);
   }
   sourcesStatus.textContent = "Loading source provenance...";
+  const finishOperation = beginOperation(
+    "Loading source provenance…",
+    sourcesStatus,
+  );
   try {
     const data = await api(`sources/${sourceId}`);
     if (selectedSourceId !== sourceId) return;
@@ -2138,6 +2297,8 @@ async function loadSourceDetail(sourceId, button) {
     if (selectedSourceId !== sourceId) return;
     sourceDetail.classList.add("hidden");
     sourcesStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -2146,6 +2307,10 @@ async function openSourcesModal(preferredSourceId) {
   sourcesList.replaceChildren();
   sourceDetail.classList.add("hidden");
   sourcesStatus.textContent = "Loading sources...";
+  const finishOperation = beginOperation(
+    "Loading source provenance…",
+    sourcesStatus,
+  );
   try {
     const data = await api("sources");
     const sources = data.sources ?? [];
@@ -2184,6 +2349,8 @@ async function openSourcesModal(preferredSourceId) {
     (preferred ?? sourcesList.querySelector("button"))?.click();
   } catch (error) {
     sourcesStatus.textContent = error.message;
+  } finally {
+    finishOperation();
   }
 }
 
@@ -2229,6 +2396,10 @@ async function runWikiLint() {
   lintIssues.replaceChildren();
   lintAnalysis.classList.add("hidden");
   lintAnalysisFindings.replaceChildren();
+  const finishOperation = beginOperation(
+    "Checking wiki structure and provenance…",
+    lintStatus,
+  );
   try {
     const report = await api("lint");
     lintSummary.replaceChildren(
@@ -2261,6 +2432,7 @@ async function runWikiLint() {
   } catch (error) {
     lintStatus.textContent = error.message;
   } finally {
+    finishOperation();
     lintRefresh.disabled = false;
     lintAnalyse.disabled = !providerCapabilities(providerState.phase)
       .modelActions;
@@ -2272,6 +2444,10 @@ async function analyseWikiHealth() {
   lintAnalyse.disabled = true;
   lintStatus.textContent =
     "Analysing contradictions, stale claims, and gaps...";
+  const finishOperation = beginOperation(
+    "Analysing wiki health with AI…",
+    lintStatus,
+  );
   try {
     const analysis = await api("lint/analyze", {
       method: "POST",
@@ -2309,6 +2485,7 @@ async function analyseWikiHealth() {
   } catch (error) {
     lintStatus.textContent = error.message;
   } finally {
+    finishOperation();
     lintRefresh.disabled = false;
     lintAnalyse.disabled = !providerCapabilities(providerState.phase)
       .modelActions;
@@ -2790,6 +2967,12 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   ingestCancelButton.disabled = false;
   ingestCancelButton.classList.remove("hidden");
   renderIngestProgress("ingesting");
+  const finishOperation = beginOperation(
+    automatic
+      ? "Running the trusted source batch…"
+      : "Preparing the source for review…",
+    status,
+  );
 
   let completed = false;
   let stagedProposalId = null;
@@ -2902,6 +3085,7 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       ? `Automatic batch stopped: ${err.message}`
       : `Could not prepare source: ${err.message}`;
   } finally {
+    finishOperation();
     if (activeIngestController === requestController) {
       activeIngestController = null;
     }

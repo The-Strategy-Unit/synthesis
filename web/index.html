@@ -57,6 +57,13 @@
         </div>
       </header>
 
+      <div id="operation-feedback" class="hidden" role="status"
+        aria-live="polite" aria-atomic="true" aria-busy="false">
+        <span id="operation-feedback-label">Synthesis is working…</span>
+        <progress id="operation-progress"
+          aria-labelledby="operation-feedback-label"></progress>
+      </div>
+
       <div id="workspace">
         <nav id="primary-nav" aria-label="Primary navigation">
           <div class="nav-group">
