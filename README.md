@@ -20,8 +20,6 @@ rebuildable.
 
 - [Architecture](docs/ARCHITECTURE.md) - runtime, persistence, and compiler flow
 - [Developer guide](docs/DEVELOPERS.md) - setup, configuration, testing, and API
-- [Private beta deployment](docs/DEPLOYMENT.md) - protected stateful hosting,
-  backups, and rollout
 
 ## MVP capabilities
 

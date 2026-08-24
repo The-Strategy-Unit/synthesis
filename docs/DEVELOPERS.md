@@ -57,9 +57,6 @@ vault APIs, and embedded UI assets from an unrelated working directory.
 Application validation limits provider API bases to HTTPS endpoints ending in
 `/v1`, except that loopback HTTP is allowed for local providers.
 
-See [Private Beta Deployment](DEPLOYMENT.md) for the authentication, quota,
-backup, and reverse-proxy configuration.
-
 ## Configuration reference
 
 All config lives in `src/config.ts`. Every value has an environment variable
