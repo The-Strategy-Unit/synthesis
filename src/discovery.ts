@@ -478,7 +478,7 @@ async function candidateFingerprint(
 
 function tokenSet(value: string): Set<string> {
   return new Set(
-    (value.normalize("NFKC").toLocaleLowerCase("en-US").match(
+    (value.normalize("NFKC").toLocaleLowerCase("en-GB").match(
       /[\p{L}\p{N}]+/gu,
     ) ?? []).filter((token) =>
       token.length >= 2 && !CANDIDATE_STOP_WORDS.has(token)
@@ -812,7 +812,7 @@ export async function generateDiscoveries(
 ): Promise<DiscoveryGenerationResult> {
   const scope = options.scope ?? "seeded";
   const pages = await candidatePages(db);
-  const normalizedSeedIds = scope === "vault"
+  const normalisedSeedIds = scope === "vault"
     ? []
     : [...new Set(seedIds)].filter((id) => pages.has(id)).sort((a, b) => a - b);
   const pageSnapshotHash = await discoveryPageSnapshot(pages);
@@ -830,7 +830,7 @@ export async function generateDiscoveries(
       manifest.scope === scope && manifest.model === model &&
       manifest.prompt_version === DISCOVERY_PROMPT_VERSION &&
       manifest.page_snapshot_hash === pageSnapshotHash &&
-      JSON.stringify(manifestSeeds) === JSON.stringify(normalizedSeedIds) &&
+      JSON.stringify(manifestSeeds) === JSON.stringify(normalisedSeedIds) &&
       storedCandidates.length > 0 &&
       storedCandidates.every((candidate) =>
         candidate.model === model &&
@@ -848,7 +848,7 @@ export async function generateDiscoveries(
       candidates,
       model,
       scope,
-      normalizedSeedIds,
+      normalisedSeedIds,
       pageSnapshotHash,
     );
   }

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { defaultYtDlpExecutable } from "./config.ts";
 import { ingestText, parseVtt } from "./ingest.ts";
 import {
-  normalizeYouTubePlaylistInput,
-  normalizeYouTubeVideoInput,
+  normaliseYouTubePlaylistInput,
+  normaliseYouTubeVideoInput,
   validateYouTubeUrl,
 } from "./youtube_url.ts";
 
@@ -66,7 +66,7 @@ Deno.test("validateYouTubeUrl rejects unsafe or non-YouTube URLs", () => {
   }
 });
 
-Deno.test("YouTube video IDs and URLs normalize to canonical watch URLs", () => {
+Deno.test("YouTube video IDs and URLs normalise to canonical watch URLs", () => {
   const videoId = "dQw4w9WgXcQ";
   const canonical = `https://www.youtube.com/watch?v=${videoId}`;
   const accepted = [
@@ -79,7 +79,7 @@ Deno.test("YouTube video IDs and URLs normalize to canonical watch URLs", () => 
   ];
 
   for (const value of accepted) {
-    assert.equal(normalizeYouTubeVideoInput(value), canonical);
+    assert.equal(normaliseYouTubeVideoInput(value), canonical);
   }
   for (
     const value of [
@@ -89,13 +89,13 @@ Deno.test("YouTube video IDs and URLs normalize to canonical watch URLs", () => 
     ]
   ) {
     assert.throws(
-      () => normalizeYouTubeVideoInput(value),
+      () => normaliseYouTubeVideoInput(value),
       /YouTube|video ID/,
     );
   }
 });
 
-Deno.test("YouTube playlist IDs and URLs normalize canonically", () => {
+Deno.test("YouTube playlist IDs and URLs normalise canonically", () => {
   const playlistId = "PL1234567890";
   const canonical = `https://www.youtube.com/playlist?list=${playlistId}`;
   for (
@@ -105,7 +105,7 @@ Deno.test("YouTube playlist IDs and URLs normalize canonically", () => {
       `https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=${playlistId}`,
     ]
   ) {
-    assert.equal(normalizeYouTubePlaylistInput(value), canonical);
+    assert.equal(normaliseYouTubePlaylistInput(value), canonical);
   }
   for (
     const value of [
@@ -115,7 +115,7 @@ Deno.test("YouTube playlist IDs and URLs normalize canonically", () => {
     ]
   ) {
     assert.throws(
-      () => normalizeYouTubePlaylistInput(value),
+      () => normaliseYouTubePlaylistInput(value),
       /YouTube|playlist ID/,
     );
   }

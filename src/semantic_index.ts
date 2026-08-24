@@ -44,6 +44,7 @@ export async function rebuildSemanticIndex(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      "document",
     );
     if (await Deno.readTextFile(note.file_path) !== before) {
       throw new Error(

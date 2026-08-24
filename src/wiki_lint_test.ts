@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DB } from "./db.ts";
 import { renderWikiPage } from "./wiki.ts";
 import {
-  analyzeWikiHealth,
+  analyseWikiHealth,
   lintWiki,
   validateWikiLintAnalysis,
   type WikiLintReport,
@@ -163,7 +163,7 @@ Deno.test("LLM wiki health findings must cite supplied pages", async () => {
         choices: [{ message: { content: JSON.stringify(valid) } }],
       }));
     };
-    const result = await analyzeWikiHealth(
+    const result = await analyseWikiHealth(
       report,
       pages,
       "https://api.example.test/v1",

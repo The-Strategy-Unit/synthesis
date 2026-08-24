@@ -113,7 +113,7 @@ dbTest(
       db.indexNote(
         communicationId,
         "SBARR Communication Framework",
-        "Standardized communication supports safe handovers.",
+        "Standardised communication supports safe handovers.",
       );
 
       assert.deepEqual(
@@ -152,7 +152,7 @@ Deno.test("keyword queries are bounded, quoted, and stop-word aware", () => {
   assert.deepEqual(keywordSearchQueries("?!"), []);
 });
 
-dbTest("catalog replacement is complete and transactional", async () => {
+dbTest("catalogue replacement is complete and transactional", async () => {
   await withTempDb((db, dir) => {
     const oldSourceId = db.addSource(
       "old-source",
@@ -190,7 +190,7 @@ dbTest("catalog replacement is complete and transactional", async () => {
     });
 
     assert.throws(() =>
-      db.replaceCatalog([], [{
+      db.replaceCatalogue([], [{
         title: "Invalid replacement",
         filePath: `${dir}/invalid.md`,
         body: "Invalid body.",
@@ -200,7 +200,7 @@ dbTest("catalog replacement is complete and transactional", async () => {
     assert.equal(db.getIngestProposals().length, 1);
     assert.equal(db.getDiscoveries().length, 1);
 
-    db.replaceCatalog([{
+    db.replaceCatalogue([{
       contentHash: "new-source",
       title: "New source",
       sourceUrl: "https://example.test/new",
@@ -762,6 +762,53 @@ dbTest("embedding vectors persist with integer note IDs", async () => {
   });
 });
 
+dbTest(
+  "embedding requests apply retrieval tasks and the configured dimensions",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    const bodies: Array<Record<string, unknown>> = [];
+    try {
+      globalThis.fetch = (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return Promise.resolve(Response.json({
+          data: [{ embedding: Array(config.embed.dimensions).fill(0) }],
+        }));
+      };
+      const endpoint = "https://provider.example/v1";
+      const nomic = "nomic-embed-text-v2-moe:latest";
+      await DB.embedText("Page text", endpoint, "secret", nomic, "document");
+      await DB.embedText("Search text", endpoint, "secret", nomic, "query");
+      await DB.embedText(
+        "Generic text",
+        endpoint,
+        "secret",
+        "embedding-model",
+        "document",
+      );
+
+      assert.deepEqual(bodies, [
+        {
+          model: nomic,
+          input: "search_document: Page text",
+          dimensions: config.embed.dimensions,
+        },
+        {
+          model: nomic,
+          input: "search_query: Search text",
+          dimensions: config.embed.dimensions,
+        },
+        {
+          model: "embedding-model",
+          input: "Generic text",
+          dimensions: config.embed.dimensions,
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
 dbTest("embedding requests preserve explicit caller cancellation", async () => {
   const originalFetch = globalThis.fetch;
   try {
@@ -779,6 +826,7 @@ dbTest("embedding requests preserve explicit caller cancellation", async () => {
       "https://provider.example/v1",
       "secret",
       "embedding-model",
+      "document",
       controller.signal,
     );
     controller.abort();
@@ -793,7 +841,7 @@ dbTest("embedding requests preserve explicit caller cancellation", async () => {
 });
 
 dbTest(
-  "hybrid search prioritizes literal matches and survives embedding failure",
+  "hybrid search prioritises literal matches and survives embedding failure",
   async () => {
     const originalFetch = globalThis.fetch;
     try {

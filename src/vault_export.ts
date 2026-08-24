@@ -48,7 +48,7 @@ async function collectFiles(path: string, files: ExportFile[]): Promise<void> {
   }
   const entries = [];
   for await (const entry of Deno.readDir(path)) entries.push(entry.name);
-  entries.sort((left, right) => left.localeCompare(right, "en-US"));
+  entries.sort((left, right) => left.localeCompare(right, "en-GB"));
   for (const entry of entries) await collectFiles(`${path}/${entry}`, files);
 }
 
@@ -140,7 +140,7 @@ export async function exportVault(): Promise<VaultExport> {
     await collectFiles(`${config.vaultDir}/${directory}`, files);
   }
   files.sort((left, right) =>
-    left.archivePath.localeCompare(right.archivePath, "en-US")
+    left.archivePath.localeCompare(right.archivePath, "en-GB")
   );
   const iterator = tarChunks(files);
   return {

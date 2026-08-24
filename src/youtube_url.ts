@@ -29,7 +29,7 @@ export function validateYouTubeUrl(value: string): string {
   return url.href;
 }
 
-export function normalizeYouTubeVideoInput(value: string): string {
+export function normaliseYouTubeVideoInput(value: string): string {
   const input = value.trim();
   if (YOUTUBE_VIDEO_ID.test(input)) {
     return `https://www.youtube.com/watch?v=${input}`;
@@ -49,7 +49,7 @@ export function normalizeYouTubeVideoInput(value: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
-export function normalizeYouTubePlaylistInput(value: string): string {
+export function normaliseYouTubePlaylistInput(value: string): string {
   const input = value.trim();
   const playlistId = YOUTUBE_PLAYLIST_ID.test(input)
     ? input

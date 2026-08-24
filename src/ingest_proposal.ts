@@ -76,14 +76,14 @@ function pageMarkdown(value: unknown, context: string): string {
   if (typeof value !== "string") {
     throw new Error(`${context} must be a string`);
   }
-  const normalized = value.replace(/\r\n?/g, "\n");
-  if (normalized.length > MAX_MARKDOWN_LENGTH) {
+  const normalised = value.replace(/\r\n?/g, "\n");
+  if (normalised.length > MAX_MARKDOWN_LENGTH) {
     throw new Error(
       `${context} must not exceed ${MAX_MARKDOWN_LENGTH} characters`,
     );
   }
-  parseWikiPage(normalized);
-  return normalized;
+  parseWikiPage(normalised);
+  return normalised;
 }
 
 export function validateIngestProposal(
@@ -142,7 +142,7 @@ export function validateIngestProposal(
       }
       pageIds.add(change.pageId);
     }
-    const title = change.page.title.toLocaleLowerCase("en-US");
+    const title = change.page.title.toLocaleLowerCase("en-GB");
     if (pageTitles.has(title)) {
       throw new Error(
         `Ingest proposal contains duplicate page title "${change.page.title}"`,
@@ -160,7 +160,7 @@ export function validateIngestProposal(
   };
 }
 
-export function serializeIngestProposal(value: unknown): string {
+export function serialiseIngestProposal(value: unknown): string {
   const { reviewedChanges: _reviewedChanges, ...proposal } =
     validateIngestProposal(value);
   return JSON.stringify(proposal);

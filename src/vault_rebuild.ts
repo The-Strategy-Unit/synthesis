@@ -1,7 +1,7 @@
 import { relative } from "node:path";
 
 import { notesDir, sourcesDir } from "./config.ts";
-import type { CatalogNote, CatalogSource, DB } from "./db.ts";
+import type { CatalogueNote, CatalogueSource, DB } from "./db.ts";
 import { errMsg } from "./utils.ts";
 import { ensureVaultManifest } from "./vault_manifest.ts";
 import {
@@ -16,7 +16,7 @@ const SOURCE_HASH = /^[a-f0-9]{64}$/;
 const SOURCE_TYPES = new Set(["youtube", "text", "markdown", "pdf"]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-interface PreparedNote extends CatalogNote {
+interface PreparedNote extends CatalogueNote {
   page: WikiPage;
 }
 
@@ -99,7 +99,7 @@ function sourceUrl(value: unknown, context: string): string | null {
   return url.href;
 }
 
-async function parseSource(directory: string): Promise<CatalogSource> {
+async function parseSource(directory: string): Promise<CatalogueSource> {
   const contentHash = directory.slice(directory.lastIndexOf("/") + 1);
   if (!SOURCE_HASH.test(contentHash)) {
     throw new Error(
@@ -185,7 +185,7 @@ async function parseSource(directory: string): Promise<CatalogSource> {
   };
 }
 
-async function readSources(): Promise<CatalogSource[]> {
+async function readSources(): Promise<CatalogueSource[]> {
   let root: Deno.FileInfo;
   try {
     root = await Deno.lstat(sourcesDir());
@@ -203,8 +203,8 @@ async function readSources(): Promise<CatalogSource[]> {
     }
     directories.push(`${sourcesDir()}/${entry.name}`);
   }
-  directories.sort((left, right) => left.localeCompare(right, "en-US"));
-  const sources: CatalogSource[] = [];
+  directories.sort((left, right) => left.localeCompare(right, "en-GB"));
+  const sources: CatalogueSource[] = [];
   for (const directory of directories) {
     sources.push(await parseSource(directory));
   }
@@ -232,7 +232,7 @@ async function collectNoteFiles(
   }
   const names: string[] = [];
   for await (const entry of Deno.readDir(directory)) names.push(entry.name);
-  names.sort((left, right) => left.localeCompare(right, "en-US"));
+  names.sort((left, right) => left.localeCompare(right, "en-GB"));
   for (const name of names) {
     await collectNoteFiles(`${directory}/${name}`, files);
   }
@@ -255,7 +255,7 @@ async function readNotes(
     } catch (error) {
       throw new Error(`Invalid wiki page ${archivePath}: ${errMsg(error)}`);
     }
-    const titleKey = page.title.toLocaleLowerCase("en-US");
+    const titleKey = page.title.toLocaleLowerCase("en-GB");
     const duplicate = titles.get(titleKey);
     if (duplicate) {
       throw new Error(
@@ -286,7 +286,7 @@ async function readNotes(
 
   for (const note of notes) {
     for (const link of note.page.links) {
-      if (!titles.has(link.toLocaleLowerCase("en-US"))) {
+      if (!titles.has(link.toLocaleLowerCase("en-GB"))) {
         throw new Error(
           `Wiki page "${note.title}" links to missing page "${link}"`,
         );
@@ -324,9 +324,11 @@ async function replaceIndex(notes: PreparedNote[]): Promise<void> {
   }
 }
 
-/** Rebuild provider-independent SQLite catalog state from authoritative files. */
-export async function rebuildVaultCatalog(db: DB): Promise<VaultRebuildResult> {
-  let sources: CatalogSource[];
+/** Rebuild provider-independent SQLite catalogue state from authoritative files. */
+export async function rebuildVaultCatalogue(
+  db: DB,
+): Promise<VaultRebuildResult> {
+  let sources: CatalogueSource[];
   let notes: PreparedNote[];
   try {
     await ensureVaultManifest();
@@ -339,7 +341,7 @@ export async function rebuildVaultCatalog(db: DB): Promise<VaultRebuildResult> {
     throw new VaultRebuildError(`Vault preflight failed: ${errMsg(error)}`);
   }
   await replaceIndex(notes);
-  db.replaceCatalog(sources, notes);
+  db.replaceCatalogue(sources, notes);
   return {
     sourceCount: sources.length,
     noteCount: notes.length,

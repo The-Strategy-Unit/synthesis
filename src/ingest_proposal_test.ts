@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   parseStoredIngestProposal,
-  serializeIngestProposal,
+  serialiseIngestProposal,
   validateIngestProposal,
   validateIngestProposalApproval,
 } from "./ingest_proposal.ts";
@@ -41,7 +41,7 @@ Deno.test("ingest proposals round-trip through a validated stored form", () => {
     ignored: "not persisted",
   };
 
-  const stored = serializeIngestProposal(proposal);
+  const stored = serialiseIngestProposal(proposal);
   assert.doesNotMatch(stored, /ignored/);
   const parsed = parseStoredIngestProposal(stored);
   assert.equal(parsed.sourceId, 7);

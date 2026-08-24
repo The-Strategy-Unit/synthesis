@@ -1,4 +1,4 @@
-import { normalizeYouTubeVideoInput } from "./youtube_url.ts";
+import { normaliseYouTubeVideoInput } from "./youtube_url.ts";
 
 export const TRUSTED_BATCH_REVIEW_MODE = "automatic" as const;
 
@@ -63,7 +63,7 @@ export function validateTrustedBatchRequest(
       );
     }
     try {
-      return normalizeYouTubeVideoInput(value.trim());
+      return normaliseYouTubeVideoInput(value.trim());
     } catch {
       throw new TrustedBatchInputError(
         `Trusted batch urls[${index}] must be a valid YouTube video URL or ID`,

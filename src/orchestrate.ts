@@ -16,7 +16,7 @@ import {
   type IngestProposalApprovalChange,
   type IngestProposalChange,
   parseStoredIngestProposal,
-  serializeIngestProposal,
+  serialiseIngestProposal,
   validateIngestProposalApproval,
 } from "./ingest_proposal.ts";
 import {
@@ -102,8 +102,8 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
     left.every((byte, index) => byte === right[index]);
 }
 
-function normalizedTitle(title: string): string {
-  return title.toLocaleLowerCase("en-US");
+function normalisedTitle(title: string): string {
+  return title.toLocaleLowerCase("en-GB");
 }
 
 function sourceReferencesForRewrite(
@@ -155,7 +155,7 @@ function resolvePageLinks(
   const page = validateWikiPage({
     ...note,
     links: note.links.map((link) =>
-      canonicalTitles.get(normalizedTitle(link)) ?? link
+      canonicalTitles.get(normalisedTitle(link)) ?? link
     ),
   });
   return {
@@ -272,13 +272,13 @@ function validateProposedWikiLinks(
 ): void {
   const titleCounts = new Map<string, number>();
   for (const note of db.getAllNotes()) {
-    const key = normalizedTitle(note.title);
+    const key = normalisedTitle(note.title);
     titleCounts.set(key, (titleCounts.get(key) ?? 0) + 1);
   }
 
   const creates = [...createdPages];
   for (const page of creates) {
-    const key = normalizedTitle(page.title);
+    const key = normalisedTitle(page.title);
     if (titleCounts.has(key)) {
       throw new InvalidWikiLinkError(
         `Proposed page title "${page.title}" is already in use`,
@@ -289,7 +289,7 @@ function validateProposedWikiLinks(
 
   for (const page of [...updatedPages, ...creates]) {
     for (const link of page.links) {
-      const matches = titleCounts.get(normalizedTitle(link)) ?? 0;
+      const matches = titleCounts.get(normalisedTitle(link)) ?? 0;
       if (matches !== 1) {
         throw new InvalidWikiLinkError(
           `Wiki link "${link}" on "${page.title}" has ${matches} targets; expected exactly one`,
@@ -496,6 +496,7 @@ async function applyPreparedWikiChanges(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      "document",
       options?.signal,
     );
     embeddedUpdates.push({ ...update, embedding });
@@ -507,6 +508,7 @@ async function applyPreparedWikiChanges(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      "document",
       options?.signal,
     );
     embeddedCreates.push({ ...create, embedding });
@@ -743,7 +745,7 @@ async function prepareSingleSourceChanges(
     const canonicalTitle = decision.action === "new"
       ? note.title
       : existingById.get(decision.existing_id!)!.title;
-    canonicalTitles.set(normalizedTitle(note.title), canonicalTitle);
+    canonicalTitles.set(normalisedTitle(note.title), canonicalTitle);
   }
   const resolvedNotes = distilled.notes.map((note) =>
     resolvePageLinks(note, canonicalTitles)
@@ -1032,7 +1034,7 @@ export async function stageSingleSource(
   for (const create of prepared.preparedCreates) {
     proposalChanges.push({ action: "new", markdown: create.content });
   }
-  const proposalJson = serializeIngestProposal({
+  const proposalJson = serialiseIngestProposal({
     version: 1,
     sourceId: prepared.sourceId,
     contentHash: prepared.contentHash,
@@ -1086,7 +1088,7 @@ export async function approveIngestProposal(
   const excludedNewTitles = new Set(
     proposal.reviewedChanges.flatMap((change, index) =>
       change.action === "new" && !selectedIndexes.has(index)
-        ? [normalizedTitle(change.page.title)]
+        ? [normalisedTitle(change.page.title)]
         : []
     ),
   );
@@ -1103,7 +1105,7 @@ export async function approveIngestProposal(
         ...change.page,
         body: requested.body ?? change.page.body,
         links: change.page.links.filter((link) =>
-          !excludedNewTitles.has(normalizedTitle(link))
+          !excludedNewTitles.has(normalisedTitle(link))
         ),
       });
       const sourcePages = findSourceReferencePages(

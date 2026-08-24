@@ -6,7 +6,7 @@
  * Run: deno run --allow-all scripts/setup.ts
  */
 
-import { config } from "../src/config.ts";
+import { config, configuredModelNames } from "../src/config.ts";
 
 const OLLAMA_URL = "https://ollama.com";
 
@@ -186,15 +186,7 @@ async function main() {
   }
 
   // Check and pull models
-  const requiredModels = [
-    ...new Set([
-      config.llm.extractModel,
-      config.llm.consolidateModel,
-      config.llm.integrateModel,
-      config.llm.rewriteModel,
-      config.embed.model,
-    ]),
-  ];
+  const requiredModels = configuredModelNames();
 
   console.log("\nChecking models...");
   for (const model of requiredModels) {

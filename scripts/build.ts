@@ -8,7 +8,7 @@
 
 import { fileURLToPath } from "node:url";
 
-import { config } from "../src/config.ts";
+import { config, configuredModelNames } from "../src/config.ts";
 
 const DIST_DIR = fileURLToPath(new URL("../dist", import.meta.url));
 const PROJECT_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -45,7 +45,7 @@ fi
 
 # Check and pull models if needed
 echo "Checking models..."
-for model in "{llm_model}" "{embed_model}"; do
+for model in {models}; do
     if ollama list 2>/dev/null | grep -q "$model"; then
         echo "✓ $model is installed"
     else
@@ -86,7 +86,7 @@ fi
 
 # Check and pull models if needed
 echo "Checking models..."
-for model in "{llm_model}" "{embed_model}"; do
+for model in {models}; do
     if ollama list 2>/dev/null | grep -q "$model"; then
         echo "✓ $model is installed"
     else
@@ -128,7 +128,7 @@ try {
 
 # Check and pull models if needed
 Write-Host "Checking models..." -ForegroundColor Yellow
-$models = @("{llm_model}", "{embed_model}")
+$models = @({models})
 
 foreach ($model in $models) {
     $list = ollama list 2>&1
@@ -205,9 +205,15 @@ async function createSetupScript(
   platform: PlatformConfig,
   outputDir: string,
 ): Promise<void> {
-  const template = platform.setupScriptTemplate
-    .replace("{llm_model}", config.build.llmModel)
-    .replace("{embed_model}", config.build.embedModel);
+  const quote = platform.os === "windows"
+    ? (model: string) => `'${model.replaceAll("'", "''")}'`
+    : (model: string) => `'${model.replaceAll("'", `'"'"'`)}'`;
+  const template = platform.setupScriptTemplate.replace(
+    "{models}",
+    configuredModelNames().map(quote).join(
+      platform.os === "windows" ? ", " : " ",
+    ),
+  );
 
   const ext = platform.os === "windows" ? "ps1" : "sh";
   const scriptPath = `${outputDir}/setup.${ext}`;
@@ -275,7 +281,7 @@ Your notes will be saved to:
 
 ## Environment Variables
 
-Customize Synthesis via environment variables:
+Customise Synthesis via environment variables:
 - SYNTHESIS_VAULT: Custom vault directory
 - SYNTHESIS_PORT: Custom server port (default: 8000)
 

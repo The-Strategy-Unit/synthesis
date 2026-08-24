@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { config } from "./config.ts";
 import { DB } from "./db.ts";
 import { exportVault } from "./vault_export.ts";
-import { rebuildVaultCatalog } from "./vault_rebuild.ts";
+import { rebuildVaultCatalogue } from "./vault_rebuild.ts";
 import { renderWikiPage } from "./wiki.ts";
 
 const decoder = new TextDecoder();
@@ -147,7 +147,7 @@ Deno.test({
       }
       config.vaultDir = restoredDir;
       restoredDb = new DB(`${restoredDir}/synthesis.db`);
-      const rebuilt = await rebuildVaultCatalog(restoredDb);
+      const rebuilt = await rebuildVaultCatalogue(restoredDb);
       assert.equal(rebuilt.sourceCount, 1);
       assert.equal(rebuilt.noteCount, 1);
       assert.equal(

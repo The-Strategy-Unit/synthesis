@@ -169,7 +169,7 @@ function stringArray(
   const unique = new Map<string, string>();
   value.forEach((item, index) => {
     const parsed = parseItem(item, `${context}[${index}]`);
-    const key = parsed.toLocaleLowerCase("en-US");
+    const key = parsed.toLocaleLowerCase("en-GB");
     if (!unique.has(key)) unique.set(key, parsed);
   });
   return [...unique.values()];
@@ -190,7 +190,7 @@ export function validateWikiPage(value: unknown): WikiPage {
     MAX_LINKS,
     pageTitle,
   ).filter((link) =>
-    link.toLocaleLowerCase("en-US") !== title.toLocaleLowerCase("en-US")
+    link.toLocaleLowerCase("en-GB") !== title.toLocaleLowerCase("en-GB")
   );
 
   const relationships = page.relationships === undefined
@@ -223,7 +223,7 @@ function validateWikiRelationships(
     );
   }
   const linkKeys = new Set(
-    links.map((link) => link.toLocaleLowerCase("en-US")),
+    links.map((link) => link.toLocaleLowerCase("en-GB")),
   );
   const unique = new Map<string, WikiRelationship>();
   value.forEach((item, index) => {
@@ -231,12 +231,12 @@ function validateWikiRelationships(
     const relationship = asRecord(item, context);
     const target = pageTitle(relationship.target, `${context}.target`);
     if (
-      target.toLocaleLowerCase("en-US") ===
-        pageTitleValue.toLocaleLowerCase("en-US")
+      target.toLocaleLowerCase("en-GB") ===
+        pageTitleValue.toLocaleLowerCase("en-GB")
     ) {
       throw new Error(`${context}.target must reference another page`);
     }
-    if (!linkKeys.has(target.toLocaleLowerCase("en-US"))) {
+    if (!linkKeys.has(target.toLocaleLowerCase("en-GB"))) {
       throw new Error(`${context}.target must also appear in Wiki page.links`);
     }
     if (
@@ -280,7 +280,7 @@ function validateWikiRelationships(
       confirmedAt: new Date(confirmedAt).toISOString(),
     };
     unique.set(
-      `${target.toLocaleLowerCase("en-US")}|${parsed.type}`,
+      `${target.toLocaleLowerCase("en-GB")}|${parsed.type}`,
       parsed,
     );
   });
@@ -298,10 +298,10 @@ const INDEX_HEADINGS: ReadonlyArray<[WikiPageType, string]> = [
 ];
 
 function oneLineSummary(value: unknown): string {
-  const normalized = typeof value === "string"
+  const normalised = typeof value === "string"
     ? value.replace(/\s+/g, " ")
     : value;
-  const summary = requiredText(normalized, "Wiki index summary", 1_000);
+  const summary = requiredText(normalised, "Wiki index summary", 1_000);
   return summary.length <= 200
     ? summary
     : `${summary.slice(0, 197).trimEnd()}…`;
@@ -327,7 +327,7 @@ export function renderWikiIndex(entryValues: WikiIndexEntry[]): string {
     const pages = entries
       .filter((entry) => entry.type === type)
       .sort((left, right) =>
-        left.title.localeCompare(right.title, "en-US", { sensitivity: "base" })
+        left.title.localeCompare(right.title, "en-GB", { sensitivity: "base" })
       );
     if (pages.length === 0) continue;
     sections.push(
@@ -399,29 +399,77 @@ function parseJsonField(
     throw new Error(`Wiki frontmatter.${name} is missing`);
   }
   try {
-    return JSON.parse(value);
+    return JSON.parse(withoutJsonTrailingCommas(value));
   } catch {
     throw new Error(`Wiki frontmatter.${name} is invalid JSON`);
   }
 }
 
-export function parseWikiPage(markdown: string): WikiPage {
-  const normalized = markdown.replace(/\r\n?/g, "\n");
-  const frontmatter = normalized.match(/^---\n([\s\S]*?)\n---\n+/);
-  if (!frontmatter) throw new Error("Wiki page has invalid frontmatter");
-
-  const fields = new Map<string, string>();
-  for (const line of frontmatter[1].split("\n")) {
-    const separator = line.indexOf(":");
-    if (separator <= 0) {
-      throw new Error("Wiki frontmatter contains an invalid field");
+function withoutJsonTrailingCommas(value: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (inString) {
+      result += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
     }
-    const name = line.slice(0, separator).trim();
+    if (character === '"') {
+      inString = true;
+      result += character;
+      continue;
+    }
+    if (character === ",") {
+      let next = index + 1;
+      while (/\s/.test(value[next] ?? "")) next++;
+      if (value[next] === "]" || value[next] === "}") continue;
+    }
+    result += character;
+  }
+  return result;
+}
+
+function parseFrontmatterFields(frontmatter: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  let name: string | undefined;
+  let fragments: string[] = [];
+
+  const commit = () => {
+    if (name === undefined) return;
     if (fields.has(name)) {
       throw new Error(`Wiki frontmatter.${name} is duplicated`);
     }
-    fields.set(name, line.slice(separator + 1).trim());
+    fields.set(name, fragments.join(" ").trim());
+  };
+
+  for (const line of frontmatter.split("\n")) {
+    const field = line.match(/^([A-Za-z][A-Za-z0-9_]*):\s*(.*)$/);
+    if (field) {
+      commit();
+      name = field[1];
+      fragments = field[2] ? [field[2].trim()] : [];
+      continue;
+    }
+    const continuation = line.trim();
+    if (name === undefined || !continuation) {
+      throw new Error("Wiki frontmatter contains an invalid field");
+    }
+    fragments.push(continuation);
   }
+  commit();
+  return fields;
+}
+
+export function parseWikiPage(markdown: string): WikiPage {
+  const normalised = markdown.replace(/\r\n?/g, "\n");
+  const frontmatter = normalised.match(/^---\n([\s\S]*?)\n---\n+/);
+  if (!frontmatter) throw new Error("Wiki page has invalid frontmatter");
+
+  const fields = parseFrontmatterFields(frontmatter[1]);
 
   const title = parseJsonField(fields, "title");
   const type = fields.get("type");
@@ -430,7 +478,7 @@ export function parseWikiPage(markdown: string): WikiPage {
   const relationships = fields.has("relationships")
     ? parseJsonField(fields, "relationships")
     : undefined;
-  const content = normalized.slice(frontmatter[0].length);
+  const content = normalised.slice(frontmatter[0].length);
   const headingEnd = content.indexOf("\n");
   if (headingEnd === -1 || !content.startsWith("# ")) {
     throw new Error("Wiki page must start with a level-one title");
@@ -526,12 +574,19 @@ export function findSourceReferencePages(
   contentHash: string,
 ): number[] | undefined {
   if (!SHA256_PATTERN.test(contentHash)) return undefined;
-  const line = markdown.split("\n").find((candidate) =>
-    candidate.includes(`synthesis-source:${contentHash}`)
+  const marker = `<!-- synthesis-source:${contentHash} -->`;
+  const markerAt = markdown.indexOf(marker);
+  if (markerAt === -1) return undefined;
+  const bulletAt = markdown.lastIndexOf("\n- ", markerAt);
+  const reference = markdown.slice(
+    bulletAt === -1 ? 0 : bulletAt + 1,
+    markerAt,
   );
-  const match = line?.match(/; pages: (\d+(?:, \d+)*); SHA-256:/);
+  const match = reference.match(
+    /;\s*pages:\s*(\d+(?:,\s*\d+)*)\s*;\s*SHA-256:/,
+  );
   if (!match) return undefined;
-  const pages = match[1].split(", ").map(Number);
+  const pages = match[1].split(/,\s*/).map(Number);
   if (
     pages.length === 0 || pages.length > MAX_SOURCE_PAGES ||
     pages.some((page) => !Number.isSafeInteger(page) || page < 1)
@@ -553,20 +608,38 @@ function claimBlocks(body: string): string[] {
   return body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
 }
 
+function claimCitationBlocks(body: string): string[] {
+  const merged: string[] = [];
+  for (const block of claimBlocks(body)) {
+    if (CLAIM_MARKER_PATTERN.test(block) && merged.length > 0) {
+      const previous = merged.at(-1)!;
+      const previousLastLine = previous.split("\n").at(-1) ?? "";
+      if (!CLAIM_MARKER_PATTERN.test(previousLastLine)) {
+        merged[merged.length - 1] = `${previous}\n${block}`;
+        continue;
+      }
+    }
+    merged.push(block);
+  }
+  return merged;
+}
+
 /** Read compiler-managed claim-to-source mappings, with a legacy fallback. */
 export function findClaimCitations(markdown: string): ClaimCitation[] {
   const page = parseWikiPage(markdown);
-  const normalized = markdown.replace(/\r\n?/g, "\n");
-  const frontmatter = normalized.match(/^---\n[\s\S]*?\n---\n+/);
+  const normalised = markdown.replace(/\r\n?/g, "\n");
+  const frontmatter = normalised.match(/^---\n[\s\S]*?\n---\n+/);
   if (!frontmatter) throw new Error("Wiki page has invalid frontmatter");
-  const content = normalized.slice(frontmatter[0].length);
+  const content = normalised.slice(frontmatter[0].length);
   const headingEnd = content.indexOf("\n");
   const afterHeading = content.slice(headingEnd + 1).replace(/^\n/, "");
   const relatedAt = afterHeading.indexOf("\n\n## Related\n");
   const sourcesAt = afterHeading.indexOf("\n\n## Sources\n");
   const boundaries = [relatedAt, sourcesAt].filter((index) => index >= 0);
   const bodyEnd = boundaries.length > 0 ? Math.min(...boundaries) : undefined;
-  const rawBlocks = claimBlocks(afterHeading.slice(0, bodyEnd).trim());
+  const rawBlocks = claimCitationBlocks(
+    afterHeading.slice(0, bodyEnd).trim(),
+  );
   const sourceHashes = findSourceReferenceHashes(markdown);
   const sourceSet = new Set(sourceHashes);
   const hasMarkers = rawBlocks.some((block) =>

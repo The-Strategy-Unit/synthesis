@@ -230,8 +230,6 @@ export const config = {
     consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.5:122b"),
     integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:122b"),
     rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.5:122b"),
-    // Kept for backward compat in API responses
-    model: env("SYNTHESIS_LLM_MODEL", "qwen3.5:122b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
     extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),
@@ -337,13 +335,20 @@ export const config = {
 
   build: {
     version: "0.1.0",
-    llmModel: env("SYNTHESIS_LLM_MODEL", "qwen3.5:122b"),
-    embedModel: env(
-      "SYNTHESIS_EMBED_MODEL",
-      "nomic-embed-text-v2-moe:latest",
-    ),
   },
 };
+
+export function configuredModelNames(): string[] {
+  return [
+    ...new Set([
+      config.llm.extractModel,
+      config.llm.consolidateModel,
+      config.llm.integrateModel,
+      config.llm.rewriteModel,
+      config.embed.model,
+    ]),
+  ];
+}
 
 export function dbPath(): string {
   return `${config.vaultDir}/synthesis.db`;

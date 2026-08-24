@@ -16,7 +16,7 @@ function completion(content: string, finishReason = "stop"): Response {
   });
 }
 
-Deno.test("chat completions normalize local and remote provider requests", async () => {
+Deno.test("chat completions normalise local and remote provider requests", async () => {
   const originalFetch = globalThis.fetch;
   const originalReasoningEffort = config.llm.reasoningEffort;
   const requests: Array<{ url: string; body: Record<string, unknown> }> = [];

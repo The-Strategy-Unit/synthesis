@@ -156,10 +156,10 @@ export async function saveWikiSynthesis(
     return note;
   });
   const citedTitles = new Set(
-    citedNotes.map((note) => note.title.toLocaleLowerCase("en-US")),
+    citedNotes.map((note) => note.title.toLocaleLowerCase("en-GB")),
   );
   const linkedTitles = new Set(
-    page.links.map((title) => title.toLocaleLowerCase("en-US")),
+    page.links.map((title) => title.toLocaleLowerCase("en-GB")),
   );
   if (
     citedTitles.size !== linkedTitles.size ||
@@ -186,6 +186,7 @@ export async function saveWikiSynthesis(
     providers.embedding.apiBase,
     providers.embedding.apiKey,
     providers.embedding.model,
+    "document",
   );
   const filePath = await createPageFile(db, page.title, markdown);
   let noteId: number;

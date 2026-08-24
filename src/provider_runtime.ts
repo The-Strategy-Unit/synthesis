@@ -1,4 +1,5 @@
 import { config } from "./config.ts";
+import { embeddingInput, usesNomicV2TaskPrefixes } from "./embedding.ts";
 import { chatCompletion, parseJsonResponse } from "./llm.ts";
 import type { ProviderProfileStore } from "./provider_profile_store.ts";
 import type { ProviderSecret, SecretStore } from "./secret_store.ts";
@@ -85,6 +86,9 @@ export function embeddingIdentity(
     apiBase,
     model: embedding.model.normalize("NFKC").trim(),
     dimensions,
+    ...(usesNomicV2TaskPrefixes(embedding.model)
+      ? { inputFormat: "nomic-v2-task-prefixes-v1" }
+      : {}),
   });
 }
 
@@ -356,7 +360,12 @@ async function probeEmbeddingProvider(
       },
       body: JSON.stringify({
         model,
-        input: "Synthesis provider compatibility check",
+        input: embeddingInput(
+          "Synthesis provider compatibility check",
+          model,
+          "query",
+        ),
+        dimensions: config.embed.dimensions,
       }),
       signal: AbortSignal.timeout(config.security.modelTimeoutMs),
     });

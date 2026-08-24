@@ -113,7 +113,7 @@ async function waitForServer(url: string): Promise<boolean> {
       await response.body?.cancel();
       return true;
     } catch {
-      // The server normally needs a moment to initialize SQLite and routes.
+      // The server normally needs a moment to initialise SQLite and routes.
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -196,7 +196,6 @@ const allowedEnv = [
   "SYNTHESIS_INTEGRATE_TEMPERATURE",
   "SYNTHESIS_LABEL_ZOOM_THRESHOLD",
   "SYNTHESIS_LINK_K",
-  "SYNTHESIS_LLM_MODEL",
   "SYNTHESIS_LLM_TEMPERATURE",
   "SYNTHESIS_MAX_BODY_BYTES",
   "SYNTHESIS_MAX_CHARS",
@@ -205,6 +204,7 @@ const allowedEnv = [
   "SYNTHESIS_MAX_PLAYLIST_ITEMS",
   "SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS",
   "SYNTHESIS_MAX_SEARCH_CHARS",
+  "SYNTHESIS_MAX_SUBTITLE_BYTES",
   "SYNTHESIS_MAX_TITLE_CHARS",
   "SYNTHESIS_MAX_TOKENS",
   "SYNTHESIS_MAX_TRANSCRIPT_CHARS",

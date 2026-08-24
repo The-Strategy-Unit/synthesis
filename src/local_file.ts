@@ -60,14 +60,14 @@ const TEXT_MEDIA_TYPES = new Set([
 ]);
 
 function safeFileName(value: string): string {
-  const normalized = value.trim();
+  const normalised = value.trim();
   if (
-    !normalized || normalized.length > MAX_FILE_NAME_LENGTH ||
-    /[\p{Cc}\\/]/u.test(normalized)
+    !normalised || normalised.length > MAX_FILE_NAME_LENGTH ||
+    /[\p{Cc}\\/]/u.test(normalised)
   ) {
     throw new LocalFileError("INVALID_FILE", "The file name is invalid");
   }
-  return normalized;
+  return normalised;
 }
 
 function mediaType(value: string): string {

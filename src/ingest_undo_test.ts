@@ -11,7 +11,8 @@ import {
 import { renderWikiPage } from "./wiki.ts";
 
 Deno.test({
-  name: "last-ingest undo restores files and catalog without deleting sources",
+  name:
+    "last-ingest undo restores files and catalogue without deleting sources",
   permissions: "inherit",
   fn: async () => {
     const dir = await Deno.makeTempDir({ prefix: "synthesis-undo-test-" });

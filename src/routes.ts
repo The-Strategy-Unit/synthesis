@@ -24,8 +24,8 @@ import {
   type IngestResult,
   ingestText,
   ingestYouTube,
-  normalizeYouTubePlaylistInput,
-  normalizeYouTubeVideoInput,
+  normaliseYouTubePlaylistInput,
+  normaliseYouTubeVideoInput,
 } from "./ingest.ts";
 import { ingestLocalFile, LocalFileError } from "./local_file.ts";
 import {
@@ -39,7 +39,7 @@ import {
   undoLastIngest,
 } from "./ingest_undo.ts";
 import { exportVault } from "./vault_export.ts";
-import { rebuildVaultCatalog, VaultRebuildError } from "./vault_rebuild.ts";
+import { rebuildVaultCatalogue, VaultRebuildError } from "./vault_rebuild.ts";
 import {
   type AppliedIngestResult,
   approveIngestProposal,
@@ -76,7 +76,7 @@ import {
 } from "./provider_settings.ts";
 import type { SecretStore } from "./secret_store.ts";
 import { saveWikiSynthesis, WikiPageExistsError } from "./wiki_store.ts";
-import { analyzeWikiHealth, lintWiki } from "./wiki_lint.ts";
+import { analyseWikiHealth, lintWiki } from "./wiki_lint.ts";
 import { ensureWikiSchema, saveWikiSchema } from "./wiki_schema.ts";
 import { buildWikiGraph, getRelatedWikiPages } from "./wiki_graph.ts";
 import {
@@ -372,14 +372,14 @@ export function createHandler(
             throw new ApiError(
               400,
               "CONFIRMATION_REQUIRED",
-              "Set 'confirm' to 'REBUILD' to rebuild the local catalog",
+              "Set 'confirm' to 'REBUILD' to rebuild the local catalogue",
             );
           }
           const release = await ingestGate.acquire(identity, req.signal, {
             countTowardsQuota: false,
           });
           try {
-            return json({ rebuild: await rebuildVaultCatalog(db) });
+            return json({ rebuild: await rebuildVaultCatalogue(db) });
           } catch (error) {
             if (error instanceof VaultRebuildError) {
               throw new ApiError(
@@ -806,7 +806,7 @@ export function createHandler(
             const providers = await resolveProviders();
             const schema = await ensureWikiSchema();
             return json(
-              await analyzeWikiHealth(
+              await analyseWikiHealth(
                 report,
                 context,
                 providers.llm.apiBase,
@@ -921,7 +921,7 @@ export function createHandler(
             );
             if (sourceIds.some((sourceId) => sourceId === undefined)) {
               throw new Error(
-                `Wiki claim ${index + 1} has uncataloged source provenance`,
+                `Wiki claim ${index + 1} has uncatalogued source provenance`,
               );
             }
             return {
@@ -1068,7 +1068,7 @@ export function createHandler(
             throw new ApiError(404, "NOT_FOUND", "Not found");
           }
           const body = await readJson(req);
-          const playlistUrl = normalizePlaylistInput(
+          const playlistUrl = normalisePlaylistInput(
             requiredString(body.url, "url", 2048),
           );
           const release = await ingestGate.acquire(identity, req.signal);
@@ -1337,6 +1337,7 @@ async function retrieveWikiContext(
       providers.embedding.apiBase,
       providers.embedding.apiKey,
       providers.embedding.model,
+      "query",
     );
     semanticIds = db.searchSemantic(embedding, 8).map((result) =>
       result.note_id
@@ -1426,6 +1427,7 @@ async function semanticSearch(
       provider.embedding.apiBase,
       provider.embedding.apiKey,
       provider.embedding.model,
+      "query",
     ),
   ).map((r) => ({
     id: r.note_id,
@@ -1476,7 +1478,7 @@ function orderSearchResults<
 >(results: T[]): T[] {
   return [...results].sort((left, right) =>
     right.score - left.score ||
-    left.title.localeCompare(right.title, "en-US")
+    left.title.localeCompare(right.title, "en-GB")
   );
 }
 
@@ -1672,15 +1674,15 @@ function readSource(body: Record<string, unknown>): {
   );
   if (!hasUrl) return { kind: "text", value };
   try {
-    return { kind: "youtube", value: normalizeYouTubeVideoInput(value) };
+    return { kind: "youtube", value: normaliseYouTubeVideoInput(value) };
   } catch (error) {
     throw new ApiError(400, "INVALID_YOUTUBE_INPUT", errMsg(error));
   }
 }
 
-function normalizePlaylistInput(value: string): string {
+function normalisePlaylistInput(value: string): string {
   try {
-    return normalizeYouTubePlaylistInput(value);
+    return normaliseYouTubePlaylistInput(value);
   } catch (error) {
     throw new ApiError(400, "INVALID_YOUTUBE_INPUT", errMsg(error));
   }

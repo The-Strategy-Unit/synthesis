@@ -165,7 +165,7 @@ function parseNoteArray(
   );
   const titles = new Map<string, string>();
   for (const note of notes) {
-    const title = note.title.toLocaleLowerCase("en-US");
+    const title = note.title.toLocaleLowerCase("en-GB");
     if (titles.has(title)) {
       throw new Error(`${context} contains duplicate page title ${note.title}`);
     }
@@ -175,7 +175,7 @@ function parseNoteArray(
   return notes.map((note) => ({
     ...note,
     links: note.links.flatMap((link) => {
-      const title = titles.get(link.toLocaleLowerCase("en-US"));
+      const title = titles.get(link.toLocaleLowerCase("en-GB"));
       return title ? [title] : [];
     }),
   }));
@@ -474,8 +474,8 @@ export interface IntegrationDecision {
   existing_id?: number;
 }
 
-function normalizedTokens(value: string): string[] {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US").match(
+function normalisedTokens(value: string): string[] {
+  return value.normalize("NFKC").toLocaleLowerCase("en-GB").match(
     /[\p{L}\p{N}]+/gu,
   ) ?? [];
 }
@@ -492,17 +492,17 @@ function setSimilarity(left: string[], right: string[]): number {
 }
 
 function characterGrams(value: string): string[] {
-  const normalized = normalizedTokens(value).join(" ");
-  if (normalized.length < 3) return normalized ? [normalized] : [];
+  const normalised = normalisedTokens(value).join(" ");
+  if (normalised.length < 3) return normalised ? [normalised] : [];
   return Array.from(
-    { length: normalized.length - 2 },
-    (_, index) => normalized.slice(index, index + 3),
+    { length: normalised.length - 2 },
+    (_, index) => normalised.slice(index, index + 3),
   );
 }
 
 function titleSimilarity(left: string, right: string): number {
-  const leftKey = normalizedTokens(left).join(" ");
-  const rightKey = normalizedTokens(right).join(" ");
+  const leftKey = normalisedTokens(left).join(" ");
+  const rightKey = normalisedTokens(right).join(" ");
   if (leftKey === rightKey) return 1;
   const leftGrams = new Set(characterGrams(left));
   const rightGrams = new Set(characterGrams(right));
@@ -514,7 +514,7 @@ function titleSimilarity(left: string, right: string): number {
   return (2 * shared) / (leftGrams.size + rightGrams.size);
 }
 
-function normalizedNumbers(value: string): Set<string> {
+function normalisedNumbers(value: string): Set<string> {
   return new Set(
     Array.from(value.matchAll(/[-+]?\d[\d,]*(?:\.\d+)?%?/g), (match) => {
       const raw = match[0].replaceAll(",", "");
@@ -526,8 +526,8 @@ function normalizedNumbers(value: string): Set<string> {
 }
 
 function hasNumericConflict(existingBody: string, incomingBody: string) {
-  const existingNumbers = normalizedNumbers(existingBody);
-  const incomingNumbers = normalizedNumbers(incomingBody);
+  const existingNumbers = normalisedNumbers(existingBody);
+  const incomingNumbers = normalisedNumbers(incomingBody);
   if (existingNumbers.size === 0 || incomingNumbers.size === 0) return false;
   const changed = [...incomingNumbers].some((value) =>
     !existingNumbers.has(value)
@@ -541,8 +541,8 @@ function hasNumericConflict(existingBody: string, incomingBody: string) {
   const maskNumbers = (value: string) =>
     value.replace(/[-+]?\d[\d,]*(?:\.\d+)?%?/g, " number ");
   return setSimilarity(
-    normalizedTokens(maskNumbers(existingBody)),
-    normalizedTokens(maskNumbers(incomingBody)),
+    normalisedTokens(maskNumbers(existingBody)),
+    normalisedTokens(maskNumbers(incomingBody)),
   ) >= 0.72;
 }
 
@@ -554,8 +554,8 @@ function strongestDuplicateMatch(
     const titles = titleSimilarity(incoming.title, existing.title);
     const bodies = existing.body
       ? setSimilarity(
-        normalizedTokens(incoming.body),
-        normalizedTokens(existing.body),
+        normalisedTokens(incoming.body),
+        normalisedTokens(existing.body),
       )
       : 0;
     const score = titles === 1
@@ -831,7 +831,7 @@ function mergePageValues(
 ): string[] {
   const merged = new Map<string, string>();
   for (const value of [...existing, ...incoming]) {
-    const key = value.toLocaleLowerCase("en-US");
+    const key = value.toLocaleLowerCase("en-GB");
     if (!merged.has(key)) merged.set(key, value);
   }
   return [...merged.values()].slice(0, maxItems);

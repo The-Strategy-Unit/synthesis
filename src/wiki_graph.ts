@@ -25,8 +25,8 @@ export interface WikiGraph {
   links: WikiGraphLink[];
 }
 
-function normalizedTitle(title: string): string {
-  return title.toLocaleLowerCase("en-US");
+function normalisedTitle(title: string): string {
+  return title.toLocaleLowerCase("en-GB");
 }
 
 function edgeKey(left: number, right: number): string {
@@ -37,7 +37,7 @@ export async function buildWikiGraph(db: DB): Promise<WikiGraph> {
   const notes = db.getAllNotes();
   const idsByTitle = new Map<string, number[]>();
   for (const note of notes) {
-    const key = normalizedTitle(note.title);
+    const key = normalisedTitle(note.title);
     idsByTitle.set(key, [...(idsByTitle.get(key) ?? []), note.id]);
   }
 
@@ -50,12 +50,12 @@ export async function buildWikiGraph(db: DB): Promise<WikiGraph> {
       continue;
     }
     for (const title of page.links) {
-      const targetIds = idsByTitle.get(normalizedTitle(title));
+      const targetIds = idsByTitle.get(normalisedTitle(title));
       if (targetIds?.length !== 1 || targetIds[0] === note.id) continue;
       const targetId = targetIds[0];
       const key = edgeKey(note.id, targetId);
       const relationship = page.relationships?.filter((item) =>
-        normalizedTitle(item.target) === normalizedTitle(title)
+        normalisedTitle(item.target) === normalisedTitle(title)
       ) ?? [];
       const existing = explicit.get(key);
       explicit.set(key, {
@@ -136,6 +136,6 @@ export async function getRelatedWikiPages(
   }).sort((left, right) =>
     Number(left.kind === "semantic") - Number(right.kind === "semantic") ||
     (right.similarity ?? 1) - (left.similarity ?? 1) ||
-    left.title.localeCompare(right.title, "en-US", { sensitivity: "base" })
+    left.title.localeCompare(right.title, "en-GB", { sensitivity: "base" })
   );
 }

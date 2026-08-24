@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { config } from "./config.ts";
 import { DB } from "./db.ts";
-import { rebuildVaultCatalog } from "./vault_rebuild.ts";
+import { rebuildVaultCatalogue } from "./vault_rebuild.ts";
 import { renderWikiPage } from "./wiki.ts";
 
 const encoder = new TextEncoder();
@@ -55,7 +55,7 @@ async function writeSource(
 }
 
 Deno.test({
-  name: "vault files rebuild the complete provider-independent catalog",
+  name: "vault files rebuild the complete provider-independent catalogue",
   permissions: "inherit",
   fn: async () => {
     const dir = await Deno.makeTempDir({ prefix: "synthesis-rebuild-test-" });
@@ -74,7 +74,7 @@ Deno.test({
       );
       const localHash = await writeSource(dir, {
         title: "Local evidence",
-        transcript: "Normalized local evidence.\n",
+        transcript: "Normalised local evidence.\n",
         sourceType: "markdown",
         original: originalMarkdown,
       });
@@ -126,7 +126,7 @@ Deno.test({
         throw new Error("vault rebuild must not call a provider");
       };
 
-      const result = await rebuildVaultCatalog(db);
+      const result = await rebuildVaultCatalogue(db);
 
       assert.deepEqual(result, {
         sourceCount: 2,
@@ -175,7 +175,7 @@ Deno.test({
         "tampered original\n",
       );
       await assert.rejects(
-        rebuildVaultCatalog(db),
+        rebuildVaultCatalogue(db),
         /does not match its SHA-256/,
       );
       assert.equal(db.getAllNotes().length, 2);

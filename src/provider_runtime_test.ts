@@ -6,6 +6,7 @@ import {
   checkProviderConnection,
   checkProviderReadiness,
   diagnoseProviders,
+  embeddingIdentity,
   environmentProviders,
   providerMode,
   ProviderRuntimeError,
@@ -23,6 +24,20 @@ const profile: ProviderProfile = {
     dimensions: config.embed.dimensions,
   },
 };
+
+Deno.test("embedding identity records the Nomic retrieval input format", () => {
+  const nomic = JSON.parse(embeddingIdentity({
+    apiBase: "http://registry.example:5000/v1/",
+    model: "registry.example:5000/nomic-ai/nomic-embed-text-v2-moe:latest",
+  })) as Record<string, unknown>;
+  assert.equal(nomic.inputFormat, "nomic-v2-task-prefixes-v1");
+
+  const generic = JSON.parse(embeddingIdentity({
+    apiBase: "https://embed.example.test/v1",
+    model: "generic-embed-model",
+  })) as Record<string, unknown>;
+  assert.equal("inputFormat" in generic, false);
+});
 
 function secrets(
   values: Partial<Record<"llm" | "embedding", string>>,
@@ -217,7 +232,8 @@ Deno.test("provider diagnostics identify local mode and missing models", async (
         providers.embedding.model,
       ]),
     ].map((id) => ({ id }));
-    globalThis.fetch = (input) => {
+    let embeddingBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (input, init) => {
       const url = String(input);
       if (url.endsWith("/models")) {
         return Promise.resolve(Response.json({ data: availableModels }));
@@ -231,6 +247,10 @@ Deno.test("provider diagnostics identify local mode and missing models", async (
         }));
       }
       if (url.endsWith("/embeddings")) {
+        embeddingBody = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
         return Promise.resolve(Response.json({
           data: [{ embedding: Array(config.embed.dimensions).fill(0) }],
         }));
@@ -243,6 +263,11 @@ Deno.test("provider diagnostics identify local mode and missing models", async (
     assert.equal(ready.embedding.probe.ok, true);
     assert.equal(ready.embedding.actualDimensions, config.embed.dimensions);
     assert.equal(ready.embedding.expectedDimensions, config.embed.dimensions);
+    assert.deepEqual(embeddingBody, {
+      model: providers.embedding.model,
+      input: "search_query: Synthesis provider compatibility check",
+      dimensions: config.embed.dimensions,
+    });
     assert.equal(typeof ready.chat.probe.latencyMs, "number");
     assert.equal(typeof ready.embedding.probe.latencyMs, "number");
 

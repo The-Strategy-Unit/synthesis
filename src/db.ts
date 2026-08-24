@@ -2,23 +2,24 @@ import { DatabaseSync } from "node:sqlite";
 
 import { load } from "sqlite-vec";
 import { config } from "./config.ts";
+import { embeddingInput, type EmbeddingPurpose } from "./embedding.ts";
 
 const EMBEDDING_DIM = config.embed.dimensions;
 const RECIPROCAL_RANK_OFFSET = 60;
 
-function normalizedSearchText(value: string): string {
-  return value.normalize("NFKC").trim().toLocaleLowerCase("en-US").replace(
+function normalisedSearchText(value: string): string {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("en-GB").replace(
     /\s+/g,
     " ",
   );
 }
 
 function titleMatchBoost(query: string, title: string): number {
-  const normalizedQuery = normalizedSearchText(query);
-  const normalizedTitle = normalizedSearchText(title);
-  if (normalizedTitle === normalizedQuery) return 1;
-  if (normalizedTitle.startsWith(normalizedQuery)) return 0.25;
-  if (normalizedTitle.includes(normalizedQuery)) return 0.1;
+  const normalisedQuery = normalisedSearchText(query);
+  const normalisedTitle = normalisedSearchText(title);
+  if (normalisedTitle === normalisedQuery) return 1;
+  if (normalisedTitle.startsWith(normalisedQuery)) return 0.25;
+  if (normalisedTitle.includes(normalisedQuery)) return 0.1;
   return 0;
 }
 
@@ -226,7 +227,7 @@ export interface IntegrationCandidate {
   body: string;
 }
 
-export interface CatalogSource {
+export interface CatalogueSource {
   contentHash: string;
   title: string;
   sourceUrl: string | null;
@@ -235,7 +236,7 @@ export interface CatalogSource {
   summary: string;
 }
 
-export interface CatalogNote {
+export interface CatalogueNote {
   title: string;
   filePath: string;
   body: string;
@@ -300,7 +301,7 @@ const SEARCH_STOP_WORDS = new Set([
 
 export function keywordSearchQueries(value: string): string[] {
   const tokens = [
-    ...value.normalize("NFKC").toLocaleLowerCase("en-US")
+    ...value.normalize("NFKC").toLocaleLowerCase("en-GB")
       .matchAll(/[\p{L}\p{N}_]+/gu),
   ].map((match) => match[0]);
   const uniqueTokens = [...new Set(tokens)].slice(0, 16);
@@ -778,24 +779,24 @@ export class DB {
   }
 
   activateSemanticIndex(identity: string): SemanticIndexStatus {
-    const normalized = identity.normalize("NFKC").trim();
+    const normalised = identity.normalize("NFKC").trim();
     if (
-      !normalized || normalized.length > 1_000 || /\p{Cc}/u.test(normalized)
+      !normalised || normalised.length > 1_000 || /\p{Cc}/u.test(normalised)
     ) {
       throw new Error("Embedding identity is invalid");
     }
     const current = this.semanticIndexStatus();
-    if (current.identity !== normalized) {
+    if (current.identity !== normalised) {
       this.withTransaction(() => {
         this.db.exec("DELETE FROM links; DELETE FROM embeddings;");
         this.db.prepare(
           `INSERT INTO catalog_metadata (key, value)
            VALUES ('embedding_identity', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        ).run(normalized);
+        ).run(normalised);
       });
     }
-    return this.semanticIndexStatus(normalized);
+    return this.semanticIndexStatus(normalised);
   }
 
   clearSemanticIndex(): void {
@@ -1024,8 +1025,11 @@ export class DB {
     this.db.exec("DELETE FROM links");
   }
 
-  /** Atomically replace SQLite's derived catalog from validated vault files. */
-  replaceCatalog(sources: CatalogSource[], notes: CatalogNote[]): void {
+  /** Atomically replace SQLite's derived catalogue from validated vault files. */
+  replaceCatalogue(
+    sources: CatalogueSource[],
+    notes: CatalogueNote[],
+  ): void {
     this.withTransaction(() => {
       this.db.exec(`
         DELETE FROM discovery_candidates;
@@ -1073,7 +1077,7 @@ export class DB {
           const sourceId = sourceIds.get(sourceHash);
           if (sourceId === undefined) {
             throw new Error(
-              `Catalog note "${note.title}" references unknown source ${sourceHash}`,
+              `Catalogue note "${note.title}" references unknown source ${sourceHash}`,
             );
           }
           this.attachNoteSource(noteId, sourceId, "reference");
@@ -1082,18 +1086,18 @@ export class DB {
     });
   }
 
-  /** Apply catalog changes for a hash-verified ingest undo. */
+  /** Apply catalogue changes for a hash-verified ingest undo. */
   undoIngest(sourceHash: string, changes: IngestUndoChange[]): void {
     this.withTransaction(() => {
       const source = this.getSourceByHash(sourceHash);
       if (!source) {
-        throw new Error(`Undo source ${sourceHash} is not cataloged`);
+        throw new Error(`Undo source ${sourceHash} is not catalogued`);
       }
 
       for (const change of changes) {
         const note = this.getNoteByFilePath(change.filePath);
         if (!note || note.title !== change.title) {
-          throw new Error(`Undo page "${change.title}" is not cataloged`);
+          throw new Error(`Undo page "${change.title}" is not catalogued`);
         }
         if (change.action === "new") {
           this.deleteNote(note.id);
@@ -1157,6 +1161,7 @@ export class DB {
     apiBase: string,
     apiKey: string,
     model: string,
+    purpose: EmbeddingPurpose,
     signal?: AbortSignal,
   ): Promise<number[]> {
     let res: Response;
@@ -1168,7 +1173,11 @@ export class DB {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ model, input: text }),
+        body: JSON.stringify({
+          model,
+          input: embeddingInput(text, model, purpose),
+          dimensions: config.embed.dimensions,
+        }),
         signal: signal
           ? AbortSignal.any([signal, timeoutSignal])
           : timeoutSignal,
@@ -1225,6 +1234,7 @@ export class DB {
       apiBase,
       apiKey,
       model,
+      "document",
     );
     this.upsertEmbedding(noteId, embedding);
     return embedding;
@@ -1265,10 +1275,10 @@ export class DB {
       const ownSources = sourceIdsByNote.get(noteId) ?? new Set<number>();
       const selected: Array<{ id: number; similarity: number }> = [];
       for (const n of this.findNearest(noteId, emb, candidatePool)) {
-        const neighborSources = sourceIdsByNote.get(n.id) ?? new Set<number>();
+        const neighbourSources = sourceIdsByNote.get(n.id) ?? new Set<number>();
         if (
           ownSources.size > 0 &&
-          [...ownSources].some((sourceId) => neighborSources.has(sourceId))
+          [...ownSources].some((sourceId) => neighbourSources.has(sourceId))
         ) {
           continue;
         }
@@ -1282,8 +1292,8 @@ export class DB {
     let count = 0;
     for (const [noteId, candidates] of rankings) {
       for (const candidate of candidates) {
-        const reciprocal = rankings.get(candidate.id)?.find((neighbor) =>
-          neighbor.id === noteId
+        const reciprocal = rankings.get(candidate.id)?.find((neighbour) =>
+          neighbour.id === noteId
         );
         if (!reciprocal) continue;
         const key = `${Math.min(noteId, candidate.id)}-${
@@ -1346,7 +1356,9 @@ export class DB {
   > {
     const [kw, qEmb] = await Promise.all([
       Promise.resolve(this.searchKeyword(query, limit)),
-      DB.embedText(query, apiBase, apiKey, embedModel).catch(() => null),
+      DB.embedText(query, apiBase, apiKey, embedModel, "query").catch(() =>
+        null
+      ),
     ]);
     const fused = new Map<number, {
       id: number;
@@ -1393,7 +1405,7 @@ export class DB {
       }))
       .sort((left, right) =>
         right.score - left.score ||
-        left.title.localeCompare(right.title, "en-US")
+        left.title.localeCompare(right.title, "en-GB")
       )
       .slice(0, limit);
   }

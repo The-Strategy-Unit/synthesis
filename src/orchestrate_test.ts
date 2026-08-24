@@ -558,7 +558,7 @@ Deno.test({
       const logBeforeFailure = await Deno.readTextFile(logPath);
 
       const thirdSource = {
-        transcript: "A third source exercises transactional retry behavior.",
+        transcript: "A third source exercises transactional retry behaviour.",
         sourceUrl: "https://youtube.com/watch?v=source-three",
         title: "Third source",
       };

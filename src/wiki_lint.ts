@@ -67,8 +67,8 @@ Every finding must cite one or more supplied numeric page IDs. Return at most 20
 Respond with ONLY JSON:
 {"findings":[{"kind":"contradiction|stale_claim|missing_connection|data_gap","severity":"warning|info","summary":"...","page_ids":[1,2],"recommendation":"..."}]}`;
 
-function normalizedTitle(title: string): string {
-  return title.toLocaleLowerCase("en-US");
+function normalisedTitle(title: string): string {
+  return title.toLocaleLowerCase("en-GB");
 }
 
 export async function lintWiki(
@@ -83,7 +83,7 @@ export async function lintWiki(
   const sourceIds = new Set<number>();
 
   for (const note of notes) {
-    const key = normalizedTitle(note.title);
+    const key = normalisedTitle(note.title);
     allTitles.add(key);
     const ids = idsByTitle.get(key) ?? [];
     ids.push(note.id);
@@ -162,7 +162,7 @@ export async function lintWiki(
   for (const note of parsedNotes) {
     if (!note.page) continue;
     for (const link of note.page.links) {
-      const target = normalizedTitle(link);
+      const target = normalisedTitle(link);
       if (!allTitles.has(target)) {
         issues.push({
           code: "broken_link",
@@ -181,7 +181,7 @@ export async function lintWiki(
   const compilerPages = parsedNotes.filter((note) => note.page);
   if (compilerPages.length > 1) {
     for (const note of compilerPages) {
-      if ((inbound.get(normalizedTitle(note.title)) ?? 0) > 0) continue;
+      if ((inbound.get(normalisedTitle(note.title)) ?? 0) > 0) continue;
       issues.push({
         code: "orphan_page",
         severity: "warning",
@@ -194,7 +194,7 @@ export async function lintWiki(
 
   issues.sort((left, right) =>
     SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity] ||
-    left.pageTitle.localeCompare(right.pageTitle, "en-US", {
+    left.pageTitle.localeCompare(right.pageTitle, "en-GB", {
       sensitivity: "base",
     }) || left.code.localeCompare(right.code)
   );
@@ -291,7 +291,7 @@ export function validateWikiLintAnalysis(
   };
 }
 
-export async function analyzeWikiHealth(
+export async function analyseWikiHealth(
   report: WikiLintReport,
   pages: WikiQueryPage[],
   apiBase: string,

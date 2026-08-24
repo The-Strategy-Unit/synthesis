@@ -2,13 +2,13 @@
 
 import { config } from "./config.ts";
 import {
-  normalizeYouTubePlaylistInput,
-  normalizeYouTubeVideoInput,
+  normaliseYouTubePlaylistInput,
+  normaliseYouTubeVideoInput,
 } from "./youtube_url.ts";
 
 export {
-  normalizeYouTubePlaylistInput,
-  normalizeYouTubeVideoInput,
+  normaliseYouTubePlaylistInput,
+  normaliseYouTubeVideoInput,
   validateYouTubeUrl,
 } from "./youtube_url.ts";
 
@@ -79,7 +79,7 @@ export async function ingestYouTube(
   url: string,
   signal?: AbortSignal,
 ): Promise<IngestResult> {
-  const validatedUrl = normalizeYouTubeVideoInput(url);
+  const validatedUrl = normaliseYouTubeVideoInput(url);
   const tmpDir = await Deno.makeTempDir();
 
   try {
@@ -148,7 +148,7 @@ async function fetchVideoTitle(
   url: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const validatedUrl = normalizeYouTubeVideoInput(url);
+  const validatedUrl = normaliseYouTubeVideoInput(url);
   const { success, code, stdout } = await runYtDlp([
     "--get-title",
     validatedUrl,
@@ -193,7 +193,7 @@ export async function getPlaylistVideos(
   playlistUrl: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const validatedUrl = normalizeYouTubePlaylistInput(playlistUrl);
+  const validatedUrl = normaliseYouTubePlaylistInput(playlistUrl);
   const { success, code, stdout } = await runYtDlp([
     "--flat-playlist",
     "--playlist-end",
@@ -210,7 +210,7 @@ export async function getPlaylistVideos(
   const urls = [
     ...new Set(
       new TextDecoder().decode(stdout).trim().split("\n").filter(Boolean).map(
-        normalizeYouTubeVideoInput,
+        normaliseYouTubeVideoInput,
       ),
     ),
   ];

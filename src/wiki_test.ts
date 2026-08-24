@@ -21,7 +21,7 @@ const page: WikiPage = {
   links: ["Claim One"],
 };
 
-Deno.test("wiki pages normalize tags and links", () => {
+Deno.test("wiki pages normalise tags and links", () => {
   assert.deepEqual(
     validateWikiPage({
       title: "Evidence Map",
@@ -109,6 +109,19 @@ Deno.test("rendered wiki pages parse back into the same domain value", () => {
   assert.deepEqual(parseWikiPage(rendered), page);
   assert.deepEqual(parseWikiPage(rendered.replaceAll("\n", "\r\n")), page);
   assert.deepEqual(findClaimCitations(rendered), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+
+  const formatterStyle = rendered
+    .replace('tags: ["research"]', 'tags: [\n  "research",\n]')
+    .replace('links: ["Claim One"]', 'links: [\n  "Claim One",\n]')
+    .replace(
+      `\n<!-- synthesis-claim:${hash} -->`,
+      `\n\n<!-- synthesis-claim:${hash} -->`,
+    );
+  assert.deepEqual(parseWikiPage(formatterStyle), page);
+  assert.deepEqual(findClaimCitations(formatterStyle), [{
     text: page.body,
     sourceHashes: [hash],
   }]);
@@ -226,6 +239,16 @@ Deno.test("wiki sources require valid hashes and HTTP URLs", () => {
   assert.match(pageAware, /Page-aware report; pages: 2, 7; SHA-256:/);
   assert.deepEqual(
     findSourceReferencePages(pageAware, "c".repeat(64)),
+    [2, 7],
+  );
+  assert.deepEqual(
+    findSourceReferencePages(
+      pageAware.replace(
+        "; pages: 2, 7; SHA-256:",
+        "; pages: 2, 7;\n  SHA-256:",
+      ),
+      "c".repeat(64),
+    ),
     [2, 7],
   );
   assert.equal(

@@ -1080,7 +1080,7 @@ routeTest(
     try {
       await withTempHandler(async (handle, db, dir) => {
         const seedPath = `${dir}/seed.md`;
-        const neighborPath = `${dir}/neighbor.md`;
+        const neighbourPath = `${dir}/neighbour.md`;
         const seedPage = renderWikiPage({
           title: "Mechanism evidence",
           type: "concept",
@@ -1088,7 +1088,7 @@ routeTest(
           tags: ["mechanism"],
           links: ["Related assay"],
         }, []);
-        const neighborPage = renderWikiPage({
+        const neighbourPage = renderWikiPage({
           title: "Related assay",
           type: "entity",
           body: "The assay measures a downstream response.",
@@ -1096,11 +1096,11 @@ routeTest(
           links: [],
         }, []);
         await Deno.writeTextFile(seedPath, seedPage);
-        await Deno.writeTextFile(neighborPath, neighborPage);
+        await Deno.writeTextFile(neighbourPath, neighbourPage);
         const seedId = db.addNote("Mechanism evidence", seedPath, null, "text");
-        const neighborId = db.addNote(
+        const neighbourId = db.addNote(
           "Related assay",
-          neighborPath,
+          neighbourPath,
           null,
           "text",
         );
@@ -1110,7 +1110,7 @@ routeTest(
           "A kinase mechanism is reported.",
         );
         db.indexNote(
-          neighborId,
+          neighbourId,
           "Related assay",
           "A downstream response assay.",
         );
@@ -1131,7 +1131,7 @@ routeTest(
               message: {
                 content: JSON.stringify({
                   answer: "The mechanism is connected to its response assay.",
-                  citations: [seedId, neighborId],
+                  citations: [seedId, neighbourId],
                   suggested_page: {
                     title: "Mechanism and assay synthesis",
                     tags: ["mechanism"],
@@ -1157,12 +1157,12 @@ routeTest(
           result.citations.map((item: { id: number }) => item.id),
           [
             seedId,
-            neighborId,
+            neighbourId,
           ],
         );
         assert.deepEqual(suppliedPages.map((page) => page.id), [
           seedId,
-          neighborId,
+          neighbourId,
         ]);
         assert.equal(fetchCalls, 1);
       });
@@ -2481,7 +2481,7 @@ routeTest(
 );
 
 routeTest(
-  "SSE ingestion serializes identities and enforces queue and quota limits",
+  "SSE ingestion serialises identities and enforces queue and quota limits",
   async () => {
     const originalFetch = globalThis.fetch;
     const original = {
