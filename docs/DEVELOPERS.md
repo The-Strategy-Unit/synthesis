@@ -50,6 +50,21 @@ runtime artefacts. Do not add broad directory includes: the 80 MiB build ceiling
 is intended to catch dependency bloat and accidental inclusion of tests, docs,
 or local material.
 
+The cross-platform packaging workflow runs for pull requests, manual dispatches,
+and pushed `v*` tags. Pull requests and manual runs produce downloadable build
+artefacts only. A tag run additionally requires the tag to equal
+`v<deno.json version>`; after every target-native compiled smoke test passes, it
+creates the GitHub Release with generated notes, platform archives, and
+`SHA256SUMS`. Existing releases are never overwritten: a rerun succeeds only
+when the published asset names already match exactly.
+
+To release, update and commit `deno.json`, then push its matching annotated tag:
+
+```bash
+git tag -a v0.1.0 -m "Synthesis v0.1.0"
+git push origin v0.1.0
+```
+
 ### Permissions
 
 `scripts/start.ts` grants the child runtime:
@@ -204,9 +219,14 @@ the corrected vector space.
 
 Edit the prompt constants in `src/distil.ts`:
 
-- `EXTRACT_PROMPT` - per-chunk extraction
-- `CONSOLIDATE_PROMPT` - source-level consolidation
+- `EXTRACT_PROMPT` - per-chunk extraction of substantial topical evidence
+  candidates
+- `CONSOLIDATE_PROMPT` - source-level composition into coherent wiki pages
 - Integrate and rewrite prompts are inline in their respective functions
+
+Keep these stages asymmetrical: extraction should preserve relevant evidence and
+qualifications, while consolidation should decide the smallest useful page set.
+Do not reintroduce fixed page quotas or one-claim-per-page instructions.
 
 ### Changing the embedding model
 
