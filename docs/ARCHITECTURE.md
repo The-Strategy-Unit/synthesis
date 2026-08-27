@@ -57,9 +57,9 @@ SHA-256 identity check (original bytes for uploads, transcript otherwise)
 src/distil.ts: distil()
   ├── splitTranscript() → chunks (maxChars=12000, overlap=500)
   ├── extractChunk() per chunk (parallel, extractModel, JSON mode)
-  │     → candidate atomic notes
+  │     → substantial topical evidence candidates
   └── consolidateCandidates() (consolidateModel, single call)
-        → deduplicated notes + summary
+        → a small set of coherent source-level wiki pages + summary
   ↓
 Persist immutable extracted text + metadata + summary under sources/<sha256>/
   and preserve uploaded bytes as original.pdf/.md/.txt
@@ -458,12 +458,22 @@ YouTube support remains external through `yt-dlp` beside the executable or on
 `PATH`.
 
 `src/compiled_entry.ts` opens the normal vault by default. `--trial` creates a
-disposable loopback-only vault, writes five ordinary cited Markdown pages from
-three curated blood-pressure trial extracts, rebuilds the provider-independent
-catalogue, and opens the browser. The trial makes no provider call and uses the
-same vault format and application routes as ordinary operation.
+disposable loopback-only vault, writes seven ordinary cited Markdown pages from
+four curated blood-pressure trial extracts, rebuilds the provider-independent
+catalogue, and opens the browser. Its guided story follows an apparent
+population-dependent disagreement into a direct trial-result conflict and a
+scoped, provenance-preserving resolution. The trial makes no provider call and
+uses the same vault format and application routes as ordinary operation.
 
 Run `deno task test:compiled <executable>` on the artefact's target OS. The
 smoke check covers the UI, native SQLite and `sqlite-vec` startup, PDF text
 extraction, and the pre-populated trial vault. Cross-platform CI runs that gate
 on Linux x86_64, macOS ARM64, and Windows x86_64.
+
+The same workflow is the release boundary. Pull requests and manual dispatches
+retain read-only repository permissions and upload CI artefacts. A pushed `v*`
+tag adds a dependent release job with narrowly scoped `contents: write`
+permission. It verifies the tag against `deno.json`, waits for all native smoke
+tests, packages each executable with the licence, generates SHA-256 checksums,
+and creates the GitHub Release. Published assets are treated as immutable;
+reruns accept an exact existing asset set and fail closed on any mismatch.

@@ -80,14 +80,15 @@ Start a prebuilt executable with a disposable, provider-free evidence vault:
 ```
 
 From a warmed source checkout, use `deno task trial`. Unless `SYNTHESIS_PORT` is
-set, Synthesis chooses a free loopback port, opens the browser, and loads five
-linked pages derived from curated extracts of the ACCORD BP, SPRINT, and STEP
-randomised trials. Open **Blood-pressure targets across trials**, follow the
-three trial pages, inspect **Sources**, then search for
-`stroke hypotension mortality`. No model is needed for this path. The extracts
-link to the papers but are not the full papers, and the disposable vault is an
-evidence-synthesis demonstration, not clinical guidance. Export before stopping
-if you want to keep changes.
+set, Synthesis chooses a free loopback port, opens the browser, and loads seven
+linked pages derived from curated extracts of the ACCORD BP, SPRINT, STEP, and
+BPROAD randomised trials. Open **How the evidence conflict evolved** to follow
+the evidence as an apparent disagreement becomes a direct conflict, then open
+**Blood-pressure targets across trials** to see the scoped resolution. Inspect
+**Sources**, then search for `stroke hypotension hyperkalaemia`. No model is
+needed for this path. The extracts link to the papers but are not the full
+papers, and the disposable vault is an evidence-synthesis demonstration, not
+clinical guidance. Export before stopping if you want to keep changes.
 
 ### Local Ollama
 
@@ -130,6 +131,33 @@ sources and does not remove evidence checking or human review. In particular,
 trusting a source does not guarantee that an automatically generated summary or
 relationship preserves every qualification in that source. Provider calls have a
 ten-minute default timeout so slower local 122B decisions can complete.
+
+### Recompile an archived vault
+
+`scripts/recompile_vault.ts` builds a new wiki from another vault's immutable
+source archives without copying its existing pages, catalogue, or history. It
+hash-checks every archived source, preserves original ingest order when history
+is available, stages and explicitly selects each source's changes, and computes
+the semantic graph after the complete model-bound index is ready. The source
+vault is never mutated, and the destination must be empty unless `--resume` is
+used after an interrupted run.
+
+For a local Ollama recompilation from 66 archived sources:
+
+```bash
+deno run --allow-env \
+  --allow-net=127.0.0.1:11434,localhost:11434 \
+  --allow-read=. --allow-write=new-vault --allow-ffi \
+  scripts/recompile_vault.ts \
+  --source old-vault --destination new-vault \
+  --extract-model qwen3.5:27b --editor-model gpt-oss:120b \
+  --embedding-model nomic-embed-text-v2-moe:latest \
+  --confirm "RECOMPILE 66 SOURCES"
+```
+
+The exact confirmation is count-bound. The tool checks that all three advertised
+model roles are available before creating the destination. Re-run the same
+command with `--resume` to reuse already accepted sources and pending proposals.
 
 ### Remote OpenAI-compatible provider
 
@@ -176,6 +204,21 @@ V8. Treat these builds as controlled demonstration/private-beta artefacts, test
 them on their target operating system, and do not use them to process untrusted
 material. See
 [Deno compile](https://docs.deno.com/runtime/reference/cli/compile/).
+
+Releases are automated from version tags. Update the `version` in `deno.json`,
+commit and push that change, then create and push the matching annotated tag:
+
+```bash
+git tag -a v0.1.0 -m "Synthesis v0.1.0"
+git push origin v0.1.0
+```
+
+The cross-platform workflow rejects a tag that does not equal
+`v<deno.json version>`. After all three target-native compiled smoke tests pass,
+it publishes a GitHub Release with Linux and macOS tarballs, a Windows zip, the
+licence in each archive, generated release notes, and `SHA256SUMS`.
+`workflow_dispatch` builds downloadable workflow artefacts but does not publish
+a release.
 
 ## Create, open, export, and restore a vault
 
@@ -298,9 +341,10 @@ resulting wiki.
 
 1. **Archive** - preserve the raw source or original uploaded file, extracted
    page-aware text, metadata, hash, and source summary.
-2. **Extract** - identify durable concepts, entities, findings, procedures, and
-   cautions from bounded chunks.
-3. **Consolidate** - deduplicate candidate pages within the source.
+2. **Extract** - identify substantial topical evidence candidates from bounded
+   chunks without turning each isolated claim into a page.
+3. **Consolidate** - compose the candidates into a small set of coherent,
+   source-level wiki pages.
 4. **Integrate** - classify each page as `new`, `merge`, or `contradict` against
    the existing wiki.
 5. **Rewrite** - update affected pages while preserving links and provenance.
