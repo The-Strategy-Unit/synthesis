@@ -299,12 +299,12 @@ const INDEX_HEADINGS: ReadonlyArray<[WikiPageType, string]> = [
 
 function oneLineSummary(value: unknown): string {
   const normalised = typeof value === "string"
-    ? value.replace(/\s+/g, " ")
+    ? value.replace(/\s+/g, " ").trim()
     : value;
-  const summary = requiredText(normalised, "Wiki index summary", 1_000);
-  return summary.length <= 200
-    ? summary
-    : `${summary.slice(0, 197).trimEnd()}…`;
+  const excerpt = typeof normalised === "string" && normalised.length > 200
+    ? `${normalised.slice(0, 197).trimEnd()}…`
+    : normalised;
+  return requiredText(excerpt, "Wiki index summary", 200);
 }
 
 export function renderWikiIndex(entryValues: WikiIndexEntry[]): string {
