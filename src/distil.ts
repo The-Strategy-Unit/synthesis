@@ -24,7 +24,7 @@ const MAX_CHUNKS = 32;
 const EXTRACTION_CONCURRENCY = 3;
 const MAX_ITEMS_PER_CHUNK = 8;
 const MAX_CANDIDATES = MAX_CHUNKS * MAX_ITEMS_PER_CHUNK;
-const MAX_FINAL_NOTES = 12;
+const MAX_FINAL_NOTES = 8;
 const MAX_TITLE_LENGTH = 120;
 const MAX_BODY_LENGTH = 4_000;
 const MAX_SUMMARY_LENGTH = 2_000;
@@ -64,13 +64,15 @@ function splitTranscript(
 // --- Stage 1: Extract (small model, runs in parallel per chunk) ---
 
 const EXTRACT_PROMPT =
-  `You are compiling source material into pages for a persistent knowledge wiki. Read the text and extract durable concepts, entities, findings, procedures, and cautions.
+  `You are preparing evidence for a persistent knowledge wiki. Read the text and extract durable topical candidates that a later editor can compose into coherent wiki pages.
 
 Rules:
-- Extract 3-8 items. Each item captures exactly ONE idea.
-- Each title: 2-6 words, descriptive, unique.
+- Extract 2-8 substantial candidates. Group claims that explain the same topic; do not split every fact, quotation, or example into its own item.
+- Each title: 2-10 words, descriptive, unique, and suitable as a stable wiki heading.
 - Type each page as "concept", "entity", or "synthesis". Use "entity" for a specific person, organisation, place, product, drug, disease, study, or named system. Use "concept" for a reusable idea, finding, method, process, or caution. Use "synthesis" only for a comparison or conclusion that connects multiple ideas in this source.
-- Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
+- Each body: a self-contained evidence brief that preserves the important context, mechanism, qualifications, examples, and quantities available for that topic. Prefer a few connected paragraphs over isolated sentences, but do not pad thin evidence.
+- Omit introductions, housekeeping, promotional material, and incidental anecdotes unless they provide durable context for another candidate.
+- Do not refer to "the video", "the speaker", or the extraction process.
 - Only extract what is explicitly stated. Do not invent or speculate.
 - Tags: 1-3 lowercase keywords.
 - Links: 0-5 exact titles of other extracted pages that materially help explain this page. Do not link a page to itself.
@@ -106,12 +108,16 @@ function boundedString(
 
 function parseNote(value: unknown, context: string): DistilNote {
   const note = asRecord(value, context);
-  const parsed = validateWikiPage({ ...note, links: note.links ?? [] });
+  const parsed = validateWikiPage({
+    ...note,
+    tags: Array.isArray(note.tags) ? note.tags.slice(0, MAX_TAGS) : note.tags,
+    links: note.links ?? [],
+  });
   if (parsed.body.length > MAX_BODY_LENGTH) {
     throw new Error(`${context}.body exceeds ${MAX_BODY_LENGTH} characters`);
   }
-  if (parsed.tags.length === 0 || parsed.tags.length > MAX_TAGS) {
-    throw new Error(`${context}.tags must contain 1-${MAX_TAGS} items`);
+  if (parsed.tags.length === 0) {
+    throw new Error(`${context}.tags must contain at least one item`);
   }
   if (parsed.links.length > MAX_LINKS) {
     throw new Error(`${context}.links must contain at most ${MAX_LINKS} items`);
@@ -220,16 +226,19 @@ async function extractChunk(
 // --- Stage 2: Consolidate (big model, single call) ---
 
 const CONSOLIDATE_PROMPT =
-  `You are compiling candidate pages into a persistent knowledge wiki. Consolidate them into a clean, deduplicated set of durable pages.
+  `You are the source-level editor of a persistent knowledge wiki. Compose the candidate evidence into a small, coherent set of durable wiki pages. This is a wiki, not a Zettelkasten: a page should explain a useful subject, not preserve one miniature note per claim.
 
 Rules:
-- Merge near-duplicate candidates into single pages.
-- Remove redundant or trivial items.
+- Group candidates that belong to the same entity, concept, method, evidence theme, or comparison into one readable page.
+- Merge near-duplicates, aliases, continuations, and examples into the relevant broader page.
+- Remove redundant, trivial, administrative, promotional, or source-specific items that will not remain useful outside their original setting.
 - Rank final pages from most to least durable and useful.
-- Produce 5-12 final pages. HARD LIMIT: never return more than 12 notes. If more candidates are useful, keep only the 12 most important.
-- Each title: 2-6 words, descriptive, unique. Titles serve as labels in a knowledge graph.
+- Produce only as many pages as the source supports, usually 1-6. HARD LIMIT: never return more than 8 pages. Do not aim for a quota.
+- Each title: 2-10 words, descriptive, unique, and broad enough to remain stable as later sources extend it. Titles serve as labels in a knowledge graph.
 - Preserve or correct each page type using only "concept", "entity", or "synthesis".
-- Each body: 1-3 sentences, self-contained. No references to "the video" or "the speaker".
+- Each body: coherent explanatory prose, normally 2-5 short paragraphs and roughly 100-450 words when the evidence supports that depth. Preserve context, mechanisms, important examples, quantities, limitations, and uncertainty. Do not pad a thin source to meet a length target.
+- Prefer one developed topical page over several pages that would be understandable only when read together.
+- Do not refer to "the video", "the speaker", the candidates, or the compilation process.
 - Tags: 1-3 lowercase keywords.
 - Links: 0-8 exact titles of other pages in the final response. Every link target must exist, materially help explain the source page, and must not be a self-link.
 - Preserve and combine "source_pages" from candidates. When candidates cite PDF pages, every final page must include the exact supporting page numbers and no others.

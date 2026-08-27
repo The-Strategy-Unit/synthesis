@@ -657,10 +657,60 @@ Deno.test("consolidation safely bounds valid local-model overproduction", async 
       "test-key",
     );
 
-    assert.equal(result.notes.length, 12);
-    assert.equal(result.notes.at(-1)?.title, "Finding 12");
-    assert.deepEqual(result.notes[0].links, ["Finding 12"]);
+    assert.equal(result.notes.length, 8);
+    assert.equal(result.notes.at(-1)?.title, "Finding 8");
+    assert.deepEqual(result.notes[0].links, []);
     assert.equal(fetchCalls, 2, "valid excess pages should not waste a retry");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("distil safely bounds local-model tag overproduction", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  let candidateTags: string[] = [];
+
+  try {
+    globalThis.fetch = (_input, init) => {
+      fetchCalls++;
+      if (fetchCalls === 1) {
+        return Promise.resolve(chatResponse(JSON.stringify({
+          items: [{
+            title: "Candidate finding",
+            type: "concept",
+            body: "The source contains one durable finding.",
+            tags: ["one", "two", "three", "four", "five"],
+            links: [],
+          }],
+        })));
+      }
+      const request = JSON.parse(String(init?.body)) as {
+        messages: Array<{ content: string }>;
+      };
+      const payload = JSON.parse(request.messages[1].content) as {
+        candidates: Array<{ tags: string[] }>;
+      };
+      candidateTags = payload.candidates[0].tags;
+      return Promise.resolve(chatResponse(JSON.stringify({
+        notes: [{
+          title: "Durable finding",
+          type: "concept",
+          body: "The source contains one durable finding.",
+          tags: ["alpha", "beta", "gamma", "delta"],
+          links: [],
+        }],
+      })));
+    };
+
+    const result = await distil(
+      "Source text",
+      "http://stub.invalid/v1",
+      "test-key",
+    );
+    assert.deepEqual(candidateTags, ["one", "two", "three"]);
+    assert.deepEqual(result.notes[0].tags, ["alpha", "beta", "gamma"]);
+    assert.equal(fetchCalls, 2, "extra tags must not waste a retry");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -718,7 +768,7 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
         messages: Array<{ content: string }>;
       };
       const systemPrompt = body.messages[0].content;
-      if (systemPrompt.includes("compiling source material")) {
+      if (systemPrompt.includes("preparing evidence")) {
         const chunk = body.messages[1].content;
         active++;
         peakActive = Math.max(peakActive, active);
@@ -734,7 +784,7 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
         return response;
       }
 
-      assert.match(systemPrompt, /compiling candidate pages/);
+      assert.match(systemPrompt, /source-level editor/);
       const input = JSON.parse(body.messages[1].content) as {
         candidates: Array<{ title: string; body: string }>;
       };
@@ -830,7 +880,7 @@ Deno.test("distil retains and validates PDF page provenance", async () => {
         messages: Array<{ content: string }>;
       };
       const [system, user] = request.messages.map((message) => message.content);
-      if (system.includes("compiling source material")) {
+      if (system.includes("preparing evidence")) {
         extractionChunks.push(user);
         const page = Number(user.match(/^## PDF page (\d+)/)?.[1]);
         assert.ok(page > 0);
