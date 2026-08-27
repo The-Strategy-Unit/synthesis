@@ -4,7 +4,7 @@ Setup, configuration, extending, and troubleshooting for Synthesis.
 
 ## Prerequisites
 
-- [Deno](https://deno.land) ≥ 2.0; Deno 2.9.5 or later for QuickJS compilation
+- [Deno](https://deno.land) ≥ 2.0; Deno 2.9.5 for reproducible QuickJS builds
 - [Ollama](https://ollama.com) running locally (or a remote OpenAI-compatible
   endpoint)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion
@@ -34,13 +34,21 @@ deno task test:unit          # fast, permissionless logic tests
 deno task test:integration   # database, route, and orchestration tests
 deno task test:e2e           # provider-independent server/UI workflow tests
 deno task test:browser       # real browser search/graph smoke; pass a Chromium path if it is not discoverable
+deno task trial              # disposable provider-free evidence demo
 ```
 
 Compile a self-extracting QuickJS executable for the current host with
-`deno task compile`, or cross-compile Windows x64 with
-`deno task compile:windows`. Run `deno task test:compiled <executable>` on the
-artefact's target operating system to verify native SQLite startup, offline
-vault APIs, and embedded UI assets from an unrelated working directory.
+`deno task compile`; target Linux x64, macOS ARM64, or Windows x64 with the
+corresponding `compile:*` task. `deno task build` creates all three. Run
+`deno task test:compiled <executable>` on the artefact's target operating system
+to verify native SQLite startup, offline vault APIs, PDF text extraction, the
+trial vault, and embedded UI assets from an unrelated working directory.
+
+Compilation prebundles and minifies application code, keeps the two native npm
+packages external for target-aware resolution, and embeds only the three web
+runtime artefacts. Do not add broad directory includes: the 80 MiB build ceiling
+is intended to catch dependency bloat and accidental inclusion of tests, docs,
+or local material.
 
 ### Permissions
 

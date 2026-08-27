@@ -440,19 +440,30 @@ knowledge workflow.
 
 ## Packaging
 
-`scripts/build.ts` creates platform-specific source distributions under `dist/`.
-They require Deno on the target machine and include:
+`scripts/compile.ts` creates self-extracting standalone executables with Deno's
+experimental QuickJS backend. It first bundles and minifies the application
+while leaving `sqlite-vec` and the credential-store addon as target-native npm
+packages. It embeds exactly `index.html`, `style.css`, and the generated browser
+bundle instead of the source, tests, docs, or local demo material. Native addons
+require the self-extracting layout. Because the pinned PDF.js Node build assumes
+a rendering canvas and sibling worker, compilation replaces exactly its two
+canvas loaders with a non-rendering text-extraction facade and embeds a minified
+worker at the expected path. The patch fails closed if that upstream shape
+changes.
 
-- The application source, locked dependencies, docs, and browser assets
-- A platform-appropriate `yt-dlp` binary
-- A setup script (`setup.sh` or `setup.ps1`) that checks Ollama and pulls models
-- Template substitution for every configured chat role and embedding model
+`deno task compile` targets the current host. The target-specific tasks emit
+Linux x86_64, macOS ARM64, or Windows x86_64 executables; `deno task build`
+emits all three. An 80 MiB ceiling catches accidental dependency-tree growth.
+YouTube support remains external through `yt-dlp` beside the executable or on
+`PATH`.
 
-Platforms: Linux x86_64, macOS ARM64, Windows x86_64.
+`src/compiled_entry.ts` opens the normal vault by default. `--trial` creates a
+disposable loopback-only vault, writes five ordinary cited Markdown pages from
+three curated blood-pressure trial extracts, rebuilds the provider-independent
+catalogue, and opens the browser. The trial makes no provider call and uses the
+same vault format and application routes as ordinary operation.
 
-`scripts/compile.ts` separately creates self-extracting standalone executables
-with Deno's experimental QuickJS backend. `deno task compile` targets the
-current host; `deno task compile:windows` cross-compiles Windows x86_64. The web
-assets, PDF support, SQLite, `sqlite-vec`, and target OS credential-store addon
-are embedded. Run `deno task test:compiled <executable>` on the artefact's
-target OS.
+Run `deno task test:compiled <executable>` on the artefact's target OS. The
+smoke check covers the UI, native SQLite and `sqlite-vec` startup, PDF text
+extraction, and the pre-populated trial vault. Cross-platform CI runs that gate
+on Linux x86_64, macOS ARM64, and Windows x86_64.
