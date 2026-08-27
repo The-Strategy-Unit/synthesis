@@ -2,6 +2,9 @@ name: Cross-platform packaging
 
 on:
   pull_request:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -25,12 +28,21 @@ jobs:
         timeout-minutes: 2
       - run: deno task compile:windows
       - run: deno task test:compiled dist/synthesis-windows-x86_64.exe
+      - name: Package release archive
+        shell: pwsh
+        run: |
+          $package = "dist/release/synthesis-windows-x86_64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          Copy-Item "dist/synthesis-windows-x86_64.exe" $package
+          Copy-Item "LICENSE" $package
+          Compress-Archive `
+            -Path "$package/*" `
+            -DestinationPath "dist/synthesis-windows-x86_64.zip" `
+            -CompressionLevel Optimal
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-windows-x86_64
-          path: |
-            dist/synthesis-windows-x86_64.exe
-            LICENSE
+          path: dist/synthesis-windows-x86_64.zip
           if-no-files-found: error
 
   linux-compiled:
@@ -42,12 +54,18 @@ jobs:
           deno-version: v2.9.5
       - run: deno task compile:linux
       - run: deno task test:compiled dist/synthesis-linux-x86_64
+      - name: Package release archive
+        run: |
+          package="dist/release/synthesis-linux-x86_64"
+          mkdir -p "$package"
+          cp dist/synthesis-linux-x86_64 LICENSE "$package/"
+          chmod +x "$package/synthesis-linux-x86_64"
+          tar -czf dist/synthesis-linux-x86_64.tar.gz \
+            -C "$package" synthesis-linux-x86_64 LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-linux-x86_64
-          path: |
-            dist/synthesis-linux-x86_64
-            LICENSE
+          path: dist/synthesis-linux-x86_64.tar.gz
           if-no-files-found: error
 
   macos-compiled:
@@ -59,10 +77,93 @@ jobs:
           deno-version: v2.9.5
       - run: deno task compile:macos
       - run: deno task test:compiled dist/synthesis-macos-aarch64
+      - name: Package release archive
+        run: |
+          package="dist/release/synthesis-macos-aarch64"
+          mkdir -p "$package"
+          cp dist/synthesis-macos-aarch64 LICENSE "$package/"
+          chmod +x "$package/synthesis-macos-aarch64"
+          tar -czf dist/synthesis-macos-aarch64.tar.gz \
+            -C "$package" synthesis-macos-aarch64 LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-macos-aarch64
-          path: |
-            dist/synthesis-macos-aarch64
-            LICENSE
+          path: dist/synthesis-macos-aarch64.tar.gz
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - windows-test-and-compile
+      - linux-compiled
+      - macos-compiled
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          version="$(jq -r '.version' deno.json)"
+          expected="v${version}"
+          if [[ "$GITHUB_REF_NAME" != "$expected" ]]; then
+            echo "::error::Release tag $GITHUB_REF_NAME must match deno.json version $expected"
+            exit 1
+          fi
+
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: synthesis-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum \
+            synthesis-linux-x86_64.tar.gz \
+            synthesis-macos-aarch64.tar.gz \
+            synthesis-windows-x86_64.zip \
+            > SHA256SUMS
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          expected_assets="$(printf '%s\n' \
+            SHA256SUMS \
+            synthesis-linux-x86_64.tar.gz \
+            synthesis-macos-aarch64.tar.gz \
+            synthesis-windows-x86_64.zip | sort)"
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            actual_assets="$(gh release view "$GITHUB_REF_NAME" \
+              --json assets --jq '.assets[].name' | sort)"
+            if [[ "$actual_assets" != "$expected_assets" ]]; then
+              echo "::error::Release $GITHUB_REF_NAME already exists with unexpected assets; refusing to overwrite it"
+              exit 1
+            fi
+            echo "Release $GITHUB_REF_NAME already has the expected assets."
+            exit 0
+          fi
+
+          prerelease=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/synthesis-linux-x86_64.tar.gz \
+            release-assets/synthesis-macos-aarch64.tar.gz \
+            release-assets/synthesis-windows-x86_64.zip \
+            release-assets/SHA256SUMS \
+            --verify-tag \
+            --generate-notes \
+            --fail-on-no-commits \
+            --title "Synthesis $GITHUB_REF_NAME" \
+            "${prerelease[@]}"
