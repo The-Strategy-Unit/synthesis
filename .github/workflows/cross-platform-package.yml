@@ -1,0 +1,68 @@
+name: Cross-platform packaging
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-test-and-compile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.5
+      - run: deno lint
+      - run: deno task check
+      - run: deno task test:unit
+      - run: deno task test:integration
+      - run: deno task test:e2e
+      - name: Test browser interactions
+        run: deno task test:browser
+        timeout-minutes: 2
+      - run: deno task compile:windows
+      - run: deno task test:compiled dist/synthesis-windows-x86_64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-windows-x86_64
+          path: |
+            dist/synthesis-windows-x86_64.exe
+            LICENSE
+          if-no-files-found: error
+
+  linux-compiled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.5
+      - run: deno task compile:linux
+      - run: deno task test:compiled dist/synthesis-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-linux-x86_64
+          path: |
+            dist/synthesis-linux-x86_64
+            LICENSE
+          if-no-files-found: error
+
+  macos-compiled:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.5
+      - run: deno task compile:macos
+      - run: deno task test:compiled dist/synthesis-macos-aarch64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-macos-aarch64
+          path: |
+            dist/synthesis-macos-aarch64
+            LICENSE
+          if-no-files-found: error
