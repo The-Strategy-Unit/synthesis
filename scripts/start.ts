@@ -4,13 +4,29 @@
  * Set SYNTHESIS_WATCH=true for development mode with auto-reload
  */
 
-import { config } from "../src/config.ts";
+import {
+  announceAndOpen,
+  environmentBoolean,
+  hostPort,
+} from "../src/browser_launcher.ts";
+import {
+  cleanTrialRun,
+  prepareTrialRun,
+  printTrialGuide,
+} from "../src/trial_vault.ts";
 
+if (
+  Deno.args.length > 1 || (Deno.args.length === 1 && Deno.args[0] !== "--trial")
+) {
+  throw new Error("Usage: scripts/start.ts [--trial]");
+}
+const trial = Deno.args[0] === "--trial" ? await prepareTrialRun() : undefined;
+const { config } = await import("../src/config.ts");
 const vaultDir = config.vaultDir;
 const port = config.port;
 const isDev = Deno.env.get("SYNTHESIS_WATCH") === "true";
 
-function frontendBundleCommand(watch = false): Deno.Command {
+const frontendBundleCommand = (watch = false): Deno.Command => {
   return new Deno.Command(Deno.execPath(), {
     args: [
       "bundle",
@@ -25,26 +41,18 @@ function frontendBundleCommand(watch = false): Deno.Command {
     stdout: "inherit",
     stderr: "inherit",
   });
-}
+};
 
-async function bundleFrontend(): Promise<void> {
+const bundleFrontend = async (): Promise<void> => {
   console.log("Building frontend...");
   const bundle = frontendBundleCommand();
   const status = await bundle.spawn().status;
   if (!status.success) {
     throw new Error("Frontend bundle failed; server was not started.");
   }
-}
+};
 
-function envBool(key: string, fallback: boolean): boolean {
-  const value = Deno.env.get(key)?.trim().toLowerCase();
-  if (value === undefined || value === "") return fallback;
-  if (["1", "true", "yes", "on"].includes(value)) return true;
-  if (["0", "false", "no", "off"].includes(value)) return false;
-  throw new Error(`${key} must be a boolean`);
-}
-
-const openBrowser = envBool("SYNTHESIS_OPEN_BROWSER", true);
+const openBrowser = environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
 
 const os = Deno.build.os;
 const bundledYtDlpPath = os === "windows" ? "./yt-dlp.exe" : "./yt-dlp";
@@ -73,14 +81,7 @@ switch (os) {
     tempDir = Deno.env.get("TMPDIR") ?? "/tmp";
 }
 
-function hostPort(hostname: string, port: string | number): string {
-  const host = hostname.includes(":") && !hostname.startsWith("[")
-    ? `[${hostname}]`
-    : hostname;
-  return `${host}:${port}`;
-}
-
-function assertPortAvailable(hostname: string, port: number): void {
+const assertPortAvailable = (hostname: string, port: number): void => {
   try {
     const listener = Deno.listen({ hostname, port });
     listener.close();
@@ -98,66 +99,11 @@ function assertPortAvailable(hostname: string, port: number): void {
     }
     throw error;
   }
-}
+};
 
 assertPortAvailable(config.host, port);
 await bundleFrontend();
 const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
-
-async function waitForServer(url: string): Promise<boolean> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    try {
-      const response = await fetch(`${url}/api/status`, {
-        signal: AbortSignal.timeout(250),
-      });
-      await response.body?.cancel();
-      return true;
-    } catch {
-      // The server normally needs a moment to initialise SQLite and routes.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return false;
-}
-
-interface BrowserCommand {
-  command: string;
-  args: string[];
-}
-
-function browserCommands(url: string): BrowserCommand[] {
-  if (Deno.build.os === "windows") {
-    return [{ command: "cmd", args: ["/c", "start", url] }];
-  }
-  if (Deno.build.os === "darwin") {
-    return [{ command: "open", args: [url] }];
-  }
-  return [
-    { command: "xdg-open", args: [url] },
-    { command: "gio", args: ["open", url] },
-  ];
-}
-
-async function tryBrowser(command: BrowserCommand): Promise<boolean> {
-  try {
-    const status = await new Deno.Command(command.command, {
-      args: command.args,
-      stdin: "null",
-      stdout: "null",
-      stderr: "null",
-    }).spawn().status;
-    return status.success;
-  } catch {
-    return false;
-  }
-}
-
-async function launchBrowser(url: string): Promise<boolean> {
-  for (const command of browserCommands(url)) {
-    if (await tryBrowser(command)) return true;
-  }
-  return false;
-}
 
 const allowedEnv = [
   "CI",
@@ -258,22 +204,23 @@ const cmd = new Deno.Command(Deno.execPath(), {
 });
 
 const process = cmd.spawn();
-
-if (openBrowser) {
-  const browserHost = ["0.0.0.0", "::"].includes(config.host)
-    ? "localhost"
-    : config.host;
-  const url = `http://${hostPort(browserHost, port)}`;
-
-  if (!await waitForServer(url)) {
-    console.log(`\nServer did not become ready. Open browser to: ${url}\n`);
-  } else if (await launchBrowser(url)) {
-    console.log(`\nOpened browser: ${url}\n`);
-  } else {
-    console.log(`\nNo browser was found. Open browser to: ${url}\n`);
+const stop = () => {
+  try {
+    process.kill("SIGTERM");
+  } catch {
+    // The child may already have stopped.
   }
-}
+};
+Deno.addSignalListener("SIGINT", stop);
 
-const status = await process.status;
-frontendWatcher?.kill();
-Deno.exit(status.code);
+let exitCode = 1;
+try {
+  const url = await announceAndOpen(config.host, port, openBrowser);
+  if (trial) printTrialGuide(url);
+  exitCode = (await process.status).code;
+} finally {
+  Deno.removeSignalListener("SIGINT", stop);
+  frontendWatcher?.kill();
+  await cleanTrialRun(trial);
+}
+Deno.exit(exitCode);
