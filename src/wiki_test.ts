@@ -318,6 +318,16 @@ This index is maintained automatically from compiled wiki pages.
 - [[Zeta pathway]] — First line. Second line.
 `,
   );
+
+  const longSummary = "A".repeat(1_200);
+  assert.match(
+    renderWikiIndex([{
+      title: "Long evidence review",
+      type: "synthesis",
+      summary: longSummary,
+    }]),
+    new RegExp(`- \\[\\[Long evidence review\\]\\] — ${"A".repeat(197)}…`),
+  );
 });
 
 Deno.test("wiki logs use a stable machine-readable format", () => {
