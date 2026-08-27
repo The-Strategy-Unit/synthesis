@@ -11,6 +11,12 @@ integrates them into the existing wiki. New evidence can create a page, merge
 into one, or record a contradiction. The result is ordinary Markdown backed by
 explicit provenance, semantic search, and a query interface with citations.
 
+**Local-first by design:** the authoritative vault is ordinary Markdown,
+immutable sources, and portable history kept on your device; SQLite is a
+rebuildable index. Core reading, provenance, keyword search, export, rebuild,
+and undo work offline, and source content leaves the device only when you
+explicitly configure a remote model provider.
+
 The current `main` line is a single-user MVP for local use and controlled
 private beta evaluation. It is stateful software: one process owns one
 writeable, file-backed vault, while SQLite search and vector state remain
@@ -59,9 +65,29 @@ accuracy.
 
 ## Quick start
 
-Prerequisites: [Deno 2 or later](https://deno.com/), and optionally
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion. Building the
-experimental QuickJS executables requires Deno 2.9.5 or later.
+Running from source requires [Deno 2 or later](https://deno.com/). YouTube
+ingestion optionally requires [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+Building the experimental QuickJS executables requires Deno 2.9.5.
+
+### 15-second trial
+
+Start a prebuilt executable with a disposable, provider-free evidence vault:
+
+```bash
+./synthesis-linux-x86_64 --trial
+# macOS: ./synthesis-macos-aarch64 --trial
+# Windows PowerShell: .\synthesis-windows-x86_64.exe --trial
+```
+
+From a warmed source checkout, use `deno task trial`. Unless `SYNTHESIS_PORT` is
+set, Synthesis chooses a free loopback port, opens the browser, and loads five
+linked pages derived from curated extracts of the ACCORD BP, SPRINT, and STEP
+randomised trials. Open **Blood-pressure targets across trials**, follow the
+three trial pages, inspect **Sources**, then search for
+`stroke hypotension mortality`. No model is needed for this path. The extracts
+link to the papers but are not the full papers, and the disposable vault is an
+evidence-synthesis demonstration, not clinical guidance. Export before stopping
+if you want to keep changes.
 
 ### Local Ollama
 
@@ -120,25 +146,35 @@ then choose **Test and save**. Endpoints must end in `/v1`. Synthesis tests both
 connections before saving; profile metadata goes to the app-data directory and
 keys go to the operating system credential store.
 
-### Windows executable
+### Standalone executables
 
-From Linux, macOS, or Windows, compile an unsigned Windows x64 executable with
-the experimental QuickJS backend:
+Build one target, or all three release targets:
 
 ```bash
-deno task compile:windows
+deno task compile:linux    # dist/synthesis-linux-x86_64
+deno task compile:macos    # dist/synthesis-macos-aarch64
+deno task compile:windows  # dist/synthesis-windows-x86_64.exe
+deno task build            # all three
 ```
 
-The artefact is `dist/synthesis-windows-x86_64.exe`. It embeds the web UI, PDF
-support, SQLite, the Windows `sqlite-vec` extension, and Windows
-credential-store support. Copy it to the Windows computer, start Ollama, run the
-executable, and open `http://127.0.0.1:8000`. The default vault is
-`%USERPROFILE%\Synthesis`.
+Each self-extracting executable uses Deno's experimental QuickJS engine and
+contains only the minified application bundle, three runtime web assets, PDF
+text extraction, SQLite, and the target's `sqlite-vec` and credential-store
+native addons. It does not require Deno on the target computer. The build fails
+if an executable exceeds 80 MiB, guarding against accidentally embedding the
+complete npm dependency tree or local documentation and demos.
 
-YouTube ingestion additionally requires `yt-dlp.exe` either beside
-`synthesis-windows-x86_64.exe` or on `PATH`. The executable is not code-signed;
-sign it before distributing it beyond a controlled internal demo. QuickJS and
-cross-compilation are provided by
+Run the executable normally to use the default vault, or add `--trial` for the
+disposable guided trial. Add `--no-open` for a headless launch. YouTube ingest
+additionally requires `yt-dlp` (`yt-dlp.exe` on Windows) beside the executable
+or on `PATH`.
+
+The executables are unsigned and macOS builds are not notarised. QuickJS is
+smaller and starts with less overhead than V8, but it is experimental, slower
+for compute-heavy JavaScript, and does not receive the same security updates as
+V8. Treat these builds as controlled demonstration/private-beta artefacts, test
+them on their target operating system, and do not use them to process untrusted
+material. See
 [Deno compile](https://docs.deno.com/runtime/reference/cli/compile/).
 
 ## Create, open, export, and restore a vault
@@ -413,8 +449,8 @@ deno task test:unit
 deno task test:integration
 deno task test:e2e
 deno task test:browser -- /path/to/chromium
+deno task trial
 deno task compile
-deno task compile:windows
 deno task build
 ```
 
@@ -424,9 +460,10 @@ launches Chromium against another temporary vault and exercises search
 relevance, graph maximisation, fit, keyboard restoration, and restore in the
 real DOM. Windows CI uses its preinstalled Edge; pass an explicit Chromium
 executable locally when it is not on `PATH`. Both tests clean up their temporary
-vaults. The `build` task creates Deno source distributions with
-platform-specific `yt-dlp`; the `compile` tasks create standalone
-self-extracting QuickJS executables.
+vaults. The `compile` tasks create one standalone executable; `build` creates
+the Linux x64, macOS ARM64, and Windows x64 QuickJS executables. Target-OS CI
+smokes each executable's UI, native SQLite startup, PDF extraction, and trial
+vault.
 
 ### Manual local-provider acceptance
 
