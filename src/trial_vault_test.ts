@@ -14,7 +14,7 @@ Deno.test("trial vault is portable, cited, and refuses existing data", async () 
       assert.equal(entry.isDirectory, true);
       sourceDirectories.push(entry.name);
     }
-    assert.equal(sourceDirectories.length, 3);
+    assert.equal(sourceDirectories.length, 4);
 
     const noteFiles = [];
     for await (const entry of Deno.readDir(join(vault, "notes"))) {
@@ -26,7 +26,13 @@ Deno.test("trial vault is portable, cited, and refuses existing data", async () 
       assert.ok(page.links.length >= 2);
       assert.ok(findSourceReferenceHashes(markdown).length >= 1);
     }
-    assert.equal(noteFiles.length, 5);
+    assert.equal(noteFiles.length, 7);
+    const walkthrough = await Deno.readTextFile(
+      join(vault, "notes", "how-the-evidence-conflict-evolved.md"),
+    );
+    assert.match(walkthrough, /BPROAD/);
+    assert.match(walkthrough, /contradiction/);
+    assert.match(walkthrough, /not a clinical recommendation/);
     await assert.rejects(() => seedTrialVault(vault), /must be empty/);
   } finally {
     await Deno.remove(root, { recursive: true });
