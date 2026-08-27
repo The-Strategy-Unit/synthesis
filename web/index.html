@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Synthesis</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="graph-tooltip" class="hidden"></div>
+
+      <header id="topbar">
+        <div class="brand-area">
+          <button id="nav-toggle" type="button" aria-label="Open navigation"
+            aria-controls="primary-nav" aria-expanded="false">&#9776;</button>
+          <span class="logo">Synthesis</span>
+          <button id="provider-mode" type="button" data-mode="checking"
+            aria-live="polite"
+            aria-atomic="true">AI provider · checking</button>
+        </div>
+        <div class="search-box">
+          <label class="visually-hidden" for="search-input">Search wiki</label>
+          <input type="text" id="search-input"
+            placeholder="Search your knowledge base..." />
+        </div>
+        <div class="topbar-actions">
+          <button id="add-source-btn" class="primary-action" type="button"
+            aria-controls="source-panel" aria-expanded="false"
+            aria-describedby="provider-mode">
+            Add source
+          </button>
+          <div id="vault-tools" class="disclosure">
+            <button id="vault-menu-btn" class="secondary-action" type="button"
+              aria-controls="vault-menu" aria-expanded="false">
+              Vault tools
+            </button>
+            <div id="vault-menu" class="action-menu hidden"
+              aria-label="Vault tools">
+              <button id="provider-open-btn" type="button">AI provider</button>
+              <button id="schema-open-btn" type="button">Wiki schema</button>
+              <a id="export-vault-link" href="/api/export">Export vault</a>
+              <hr />
+              <button id="rebuild-catalogue-btn" type="button"
+                title="Rebuild search and catalogue state from vault files">
+                Rebuild catalogue
+              </button>
+              <button id="rebuild-semantic-btn" type="button"
+                aria-describedby="provider-mode"
+                title="Build or resume semantic search and connection state">
+                Build semantic index
+              </button>
+              <button id="undo-ingest-btn" type="button"
+                title="Undo the latest accepted ingest">Undo latest ingest</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div id="operation-feedback" class="hidden" role="status"
+        aria-live="polite" aria-atomic="true" aria-busy="false">
+        <span id="operation-feedback-label">Synthesis is working…</span>
+        <progress id="operation-progress"
+          aria-labelledby="operation-feedback-label"></progress>
+      </div>
+
+      <div id="workspace">
+        <nav id="primary-nav" aria-label="Primary navigation">
+          <div class="nav-group">
+            <p class="nav-heading">Workspace</p>
+            <button id="wiki-nav-btn" class="nav-item active" type="button"
+              aria-current="page">
+              <span>Wiki</span>
+            </button>
+            <button id="review-open-btn" class="nav-item" type="button">
+              <span>Review</span>
+              <span id="review-count" class="nav-badge hidden"
+                aria-label="No pending reviews">0</span>
+            </button>
+            <button id="discoveries-open-btn" class="nav-item" type="button">
+              <span>Synthesis review</span>
+              <span id="discoveries-count" class="nav-badge hidden"
+                aria-label="No open synthesis proposals">0</span>
+            </button>
+            <button id="ask-open-btn" class="nav-item" type="button"
+              aria-describedby="provider-mode">
+              <span>Ask wiki</span>
+            </button>
+          </div>
+          <div class="nav-group">
+            <p class="nav-heading">Manage</p>
+            <button id="sources-open-btn" class="nav-item" type="button">
+              <span>Sources</span>
+            </button>
+            <button id="lint-open-btn" class="nav-item" type="button">
+              <span>Wiki health</span>
+            </button>
+          </div>
+        </nav>
+
+        <main id="main">
+          <section id="wiki-workspace">
+            <header class="knowledge-toolbar">
+              <div>
+                <p class="workspace-eyebrow">Knowledge</p>
+                <h1 id="workspace-title">Compiled wiki</h1>
+              </div>
+              <div class="workspace-actions">
+                <button id="evidence-toggle" class="workspace-secondary hidden"
+                  type="button" aria-controls="evidence-panel"
+                  aria-expanded="true">Evidence</button>
+                <div class="view-switch" role="group"
+                  aria-label="Knowledge view">
+                  <button id="page-view-btn" class="active" type="button"
+                    aria-pressed="true">Page</button>
+                  <button id="connections-view-btn" type="button"
+                    aria-pressed="false">Connections</button>
+                </div>
+              </div>
+            </header>
+
+            <div id="knowledge-layout">
+              <aside id="sidebar">
+                <div class="sidebar-heading">
+                  <h2 id="note-list-heading">Wiki pages</h2>
+                  <span id="page-count" aria-label="0 wiki pages">0</span>
+                </div>
+                <p id="search-method" class="search-method hidden"
+                  role="status" aria-live="polite"></p>
+                <ul id="note-list"></ul>
+              </aside>
+
+              <section id="reader-panel" aria-label="Wiki page">
+                <div id="reader-empty" class="reader-empty">
+                  <p class="workspace-eyebrow">Compiled knowledge</p>
+                  <h2>Select a wiki page</h2>
+                  <p>
+                  Read the durable synthesis, then inspect its supporting
+                  claims, sources, and connections without losing context.
+                </p>
+                  <button id="reader-add-source" type="button"
+                    aria-describedby="provider-mode">
+                  Add your first source
+                </button>
+                </div>
+                <article id="note-content" class="hidden"
+                  tabindex="-1"></article>
+              </section>
+
+              <aside id="evidence-panel" class="hidden"
+                aria-labelledby="evidence-title">
+                <header>
+                  <div>
+                    <p class="workspace-eyebrow">Provenance</p>
+                    <h2 id="evidence-title">Evidence &amp; context</h2>
+                  </div>
+                  <button id="evidence-close" type="button"
+                    aria-label="Hide evidence panel">&times;</button>
+                </header>
+                <div id="evidence-content"></div>
+              </aside>
+
+              <section id="graph-panel" class="hidden"
+                aria-labelledby="connections-title">
+                <div class="graph-heading">
+                  <div>
+                    <p class="workspace-eyebrow">Explore</p>
+                    <h2 id="connections-title">Knowledge connections</h2>
+                  </div>
+                  <div class="graph-heading-actions">
+                    <div class="graph-breadth-control">
+                      <label for="semantic-neighbours-slider">
+                        Semantic suggestions per page
+                        <span id="semantic-neighbours-value">3</span>
+                      </label>
+                      <input type="range" id="semantic-neighbours-slider"
+                        min="0" max="8" step="1" value="3" />
+                    </div>
+                    <button id="graph-maximize" type="button"
+                      aria-controls="graph-panel" aria-pressed="false">
+                      Maximise graph
+                    </button>
+                    <button id="graph-fit" type="button"
+                      aria-controls="graph" title="Fit every visible node">
+                      Fit graph
+                    </button>
+                  </div>
+                </div>
+                <div class="graph-legend" aria-label="Connection types">
+                  <span><i class="legend-explicit"></i>Reviewed wiki link</span>
+                  <span><i class="legend-semantic"></i>Mutual semantic proximity</span>
+                  <span id="legend-search-match" class="hidden">
+                    <i class="legend-search-match"></i>Direct search result
+                  </span>
+                </div>
+                <div id="graph-search-context"
+                  class="graph-search-context hidden">
+                  <span id="graph-search-summary" role="status"
+                    aria-live="polite"></span>
+                  <button id="graph-search-clear" type="button">
+                    Clear search
+                  </button>
+                </div>
+                <div id="graph-focus-context"
+                  class="graph-focus-context hidden">
+                  <span id="graph-focus-summary" role="status"
+                    aria-live="polite"></span>
+                  <div>
+                    <button id="graph-focus-open" type="button">
+                      Open page
+                    </button>
+                    <button id="graph-focus-clear" type="button">
+                      Clear focus
+                    </button>
+                  </div>
+                </div>
+                <p class="graph-method-note">
+                  Select a node to pin its visible connections. Semantic
+                  proximity draws mutually close pages together. Clusters,
+                  bridges, and hubs can reveal patterns worth investigating. Distances
+                  between disconnected groups, axes, and rotation have no
+                  meaning.
+                </p>
+                <svg id="graph" aria-label="Knowledge connection map"></svg>
+              </section>
+            </div>
+          </section>
+
+          <section id="review-workspace" class="hidden"
+            aria-labelledby="review-title">
+            <header class="review-workspace-header">
+              <div>
+                <p class="workspace-eyebrow">Human review</p>
+                <h1 id="review-title">Review proposed changes</h1>
+                <p>
+                  AI proposals remain separate from the compiled wiki until
+                  every change has an explicit decision.
+                </p>
+              </div>
+            </header>
+            <p id="review-status" role="status" aria-live="polite"></p>
+            <div class="review-layout">
+              <aside class="review-queue" aria-labelledby="review-queue-title">
+                <div class="review-queue-heading">
+                  <h2 id="review-queue-title">Pending sources</h2>
+                  <span id="review-queue-count">0</span>
+                </div>
+                <ul id="proposal-list" aria-label="Pending proposals"></ul>
+              </aside>
+              <section id="proposal-detail" class="hidden"
+                aria-labelledby="proposal-source-title">
+                <header class="proposal-source-header">
+                  <div>
+                    <p class="workspace-eyebrow">Source proposal</p>
+                    <h2 id="proposal-source-title"></h2>
+                    <p id="proposal-source-meta"></p>
+                    <p id="proposal-source-summary"></p>
+                  </div>
+                  <button id="proposal-source-inspect"
+                    class="workspace-secondary" type="button">
+                    Inspect source
+                  </button>
+                </header>
+                <div id="proposal-review-guidance" class="review-guidance">
+                  <strong>Review the proposal before applying it.</strong>
+                  Choose Include or Exclude for each change, or use Include all
+                  changes for a trusted source. You can edit any included body
+                  before the final Apply step.
+                </div>
+                <div class="proposal-change-toolbar">
+                  <h3>Proposed changes</h3>
+                  <button id="proposal-include-all"
+                    class="workspace-secondary" type="button"
+                    aria-describedby="proposal-review-guidance">
+                    Include all changes
+                  </button>
+                </div>
+                <ol id="proposal-changes"></ol>
+                <div class="review-actions">
+                  <p id="proposal-decision-summary" role="status"
+                    aria-live="polite"></p>
+                  <div>
+                    <button id="proposal-reject" type="button">
+                      Reject proposal
+                    </button>
+                    <button id="proposal-approve" type="button"
+                      aria-describedby="provider-mode">
+                      Review every change
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <aside id="source-panel" class="source-panel hidden"
+        aria-labelledby="source-panel-title">
+        <header class="source-panel-header">
+          <div>
+            <h2 id="source-panel-title">Add a source</h2>
+            <p>Prepare one source for review, or explicitly confirm an automatic batch of trusted videos.</p>
+          </div>
+          <button id="source-panel-close" type="button"
+            aria-label="Close add source panel">&times;</button>
+        </header>
+        <div id="ingest-bar">
+          <label id="ingest-input-label"
+            for="ingest-input">Source text, YouTube link, or URL</label>
+          <textarea id="ingest-input" rows="7"
+            placeholder="Paste source text, a YouTube ID, or a URL..."></textarea>
+          <div id="source-file-row" class="source-file-row">
+            <span>or</span>
+            <label class="file-picker" for="ingest-file">
+              Choose PDF, Markdown, or text file
+              <input id="ingest-file" type="file"
+                accept=".pdf,.md,.markdown,.txt,application/pdf,text/markdown,text/plain" />
+            </label>
+            <span id="ingest-file-name"></span>
+          </div>
+          <details class="source-options">
+            <summary>More options</summary>
+            <div>
+              <label id="ingest-title-label"
+                for="ingest-title">Source title</label>
+              <input type="text" id="ingest-title" maxlength="200"
+                placeholder="Optional" />
+              <label for="ingest-source-type">Source type</label>
+              <select id="ingest-source-type">
+                <option value="auto">Auto · safe detection</option>
+                <option value="text">Text</option>
+                <option value="video">YouTube video</option>
+                <option value="playlist">YouTube playlist</option>
+                <option
+                  value="trusted-batch">Trusted videos · automatic apply</option>
+              </select>
+            </div>
+          </details>
+          <section id="trusted-batch-controls"
+            class="trusted-batch-controls hidden"
+            aria-labelledby="trusted-batch-title">
+            <h3
+              id="trusted-batch-title">Automatic apply skips proposal review</h3>
+            <p>
+              Every validated <strong>new</strong>, <strong>merge</strong>, and
+              <strong>contradict</strong> change from this exact list will enter
+              the wiki. Trusted sources do not guarantee accurate model output.
+            </p>
+            <p>
+              Stop safely at any time. The current source or model step may
+              finish first. To resume, submit the same list again; already
+              applied sources are skipped.
+            </p>
+            <label for="trusted-batch-confirmation">
+              Type <code id="trusted-batch-confirmation-phrase">the confirmation shown after adding videos</code>
+            </label>
+            <input id="trusted-batch-confirmation" type="text"
+              autocomplete="off" spellcheck="false"
+              aria-describedby="trusted-batch-title" />
+          </section>
+          <div class="ingest-progress" aria-labelledby="ingest-progress-title">
+            <p id="ingest-progress-title">Preparation progress</p>
+            <ol id="ingest-stages">
+              <li data-ingest-step="read" data-state="pending">
+                <span>1</span>
+                <div><strong>Read source</strong><small>Extract source content</small></div>
+              </li>
+              <li data-ingest-step="draft" data-state="pending">
+                <span>2</span>
+                <div><strong>Draft changes</strong><small>Compare with the wiki</small></div>
+              </li>
+              <li data-ingest-step="review" data-state="pending">
+                <span>3</span>
+                <div><strong id="ingest-final-step-title">Ready for review</strong><small id="ingest-final-step-detail">Nothing changes automatically</small></div>
+              </li>
+            </ol>
+            <p
+              id="ingest-progress-note">Completed proposals remain available in Review.</p>
+          </div>
+          <div class="source-actions">
+            <button id="ingest-btn" type="button"
+              aria-describedby="provider-mode">Prepare for review</button>
+            <button id="ingest-cancel-btn"
+              class="secondary-action hidden" type="button">Stop safely</button>
+            <span id="ingest-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <dialog id="ask-modal" class="modal" aria-labelledby="ask-title">
+      <div class="modal-content ask-content">
+        <button id="ask-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="ask-title">Ask your wiki</h2>
+        <p class="modal-intro">
+          Answers use compiled wiki pages and cite the pages they rely on.
+        </p>
+        <label for="ask-input">Question</label>
+        <textarea id="ask-input" rows="4"
+          placeholder="What does the accumulated evidence show?"></textarea>
+        <div class="ask-actions">
+          <button id="ask-submit" type="button">Ask</button>
+          <button id="ask-save" type="button" class="hidden">
+            Save synthesis
+          </button>
+        </div>
+        <p id="ask-status" role="status" aria-live="polite"></p>
+        <div id="ask-result" class="hidden">
+          <label for="ask-answer">Reviewed synthesis</label>
+          <p class="field-help">
+            Edit the grounded answer if needed. Saving compiles this reviewed
+            text into a durable synthesis page linked to the cited wiki pages.
+          </p>
+          <textarea id="ask-answer" rows="10"></textarea>
+          <h3>Cited wiki pages</h3>
+          <ul id="ask-citations"></ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="discoveries-modal" class="modal"
+      aria-labelledby="discoveries-title">
+      <div class="modal-content discoveries-content">
+        <button id="discoveries-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="discoveries-title">Cross-source synthesis</h2>
+        <p class="modal-intro">
+          Synthesis systematically evaluates plausible page pairs from
+          different sources and remembers its progress. Proposed relationships
+          and possible consolidations are hypotheses for review. Similarity and
+          model confidence are not evidence, and no link is added automatically.
+        </p>
+        <div class="discoveries-toolbar">
+          <button id="discoveries-scan" aria-describedby="provider-mode"
+            type="button">Compare all sources</button>
+        </div>
+        <div class="discovery-filters">
+          <label for="discovery-filter-text">
+            Filter proposals
+            <input id="discovery-filter-text" type="search"
+              placeholder="Page, source, or explanation" autocomplete="off" />
+          </label>
+          <label for="discovery-filter-type">
+            Relationship
+            <select id="discovery-filter-type">
+              <option value="all">All relationships</option>
+            </select>
+          </label>
+        </div>
+        <div class="discovery-batch-actions">
+          <button id="discovery-select-filtered" type="button">
+            Select current filter
+          </button>
+          <button id="discovery-clear-selection" type="button" disabled>
+            Clear selection
+          </button>
+          <span id="discovery-selection-count" role="status"
+            aria-live="polite">0 selected</span>
+          <button id="discovery-batch-reject" type="button" disabled>
+            Reject selected
+          </button>
+          <button id="discovery-batch-confirm" type="button" disabled>
+            Confirm selected
+          </button>
+        </div>
+        <section id="discovery-batch-confirmation"
+          class="batch-confirmation hidden"
+          aria-labelledby="discovery-batch-confirmation-title">
+          <h3 id="discovery-batch-confirmation-title">Confirm exact batch</h3>
+          <p id="discovery-batch-warning"></p>
+          <label for="discovery-batch-confirmation-input">
+            Type <code id="discovery-batch-confirmation-phrase"></code>
+          </label>
+          <input id="discovery-batch-confirmation-input" type="text"
+            autocomplete="off" spellcheck="false" />
+          <div class="batch-confirmation-actions">
+            <button id="discovery-batch-cancel" type="button">Cancel</button>
+            <button id="discovery-batch-apply" type="button" disabled>
+              Apply exact batch
+            </button>
+          </div>
+        </section>
+        <p id="discoveries-status" role="status" aria-live="polite"></p>
+        <div class="discoveries-layout">
+          <ul id="discoveries-list" aria-label="Open synthesis proposals"></ul>
+          <section id="discovery-detail" class="hidden">
+            <div class="discovery-heading">
+              <span id="discovery-relationship"></span>
+              <span id="discovery-review-state"></span>
+            </div>
+            <h3 id="discovery-detail-title">Potential relationship</h3>
+            <p id="discovery-explanation"></p>
+            <h4>Why it may matter</h4>
+            <p id="discovery-significance"></p>
+            <p id="discovery-confidence"></p>
+            <h4>Supporting wiki pages</h4>
+            <ul id="discovery-pages"></ul>
+            <h4>Supporting sources</h4>
+            <ul id="discovery-sources"></ul>
+            <div class="discovery-actions">
+              <button id="discovery-investigate"
+                type="button">Investigate</button>
+              <button id="discovery-reject" type="button">Reject</button>
+              <button id="discovery-confirm" type="button">Confirm link</button>
+            </div>
+            <p id="discovery-action-note" class="field-help"></p>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="lint-modal" class="modal" aria-labelledby="lint-title">
+      <div class="modal-content lint-content">
+        <button id="lint-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="lint-title">Wiki health</h2>
+        <p class="modal-intro">
+          Read-only checks for broken structure, missing provenance, and recorded
+          contradictions.
+        </p>
+        <div class="lint-actions">
+          <button id="lint-refresh" type="button">Run checks</button>
+          <button id="lint-analyse" type="button"
+            aria-describedby="provider-mode">Analyse with AI</button>
+        </div>
+        <p id="lint-status" role="status" aria-live="polite"></p>
+        <div id="lint-summary" class="hidden"></div>
+        <ul id="lint-issues"></ul>
+        <div id="lint-analysis" class="hidden">
+          <h3>AI analysis</h3>
+          <ul id="lint-analysis-findings"></ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="provider-modal" class="modal"
+      aria-labelledby="provider-title">
+      <div class="modal-content provider-content">
+        <button id="provider-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="provider-title">AI provider</h2>
+        <p class="modal-intro">
+          Configure OpenAI-compatible chat and embedding endpoints. API keys are
+          stored in your operating system credential store, never in the vault.
+          When an endpoint is remote, relevant source and wiki text is sent to
+          that service. Synthesis never switches providers automatically.
+        </p>
+        <div class="provider-presets">
+          <button id="provider-ollama" type="button">Use local Ollama</button>
+          <button id="provider-diagnose" type="button">
+            Diagnose active provider
+          </button>
+        </div>
+        <form id="provider-form">
+          <label for="provider-name">Profile name</label>
+          <input id="provider-name" name="displayName" required maxlength="80"
+            autocomplete="off" placeholder="Clinical research provider" />
+
+          <fieldset>
+            <legend>Chat model</legend>
+            <label for="provider-llm-base">API base</label>
+            <input id="provider-llm-base" name="llmApiBase" required
+              type="url" placeholder="https://api.example.com/v1" />
+            <label for="provider-llm-model">Model</label>
+            <input id="provider-llm-model" name="llmModel" required
+              maxlength="200" placeholder="chat-model" />
+            <label for="provider-llm-key">API key</label>
+            <input id="provider-llm-key" name="llmApiKey" type="password"
+              maxlength="4096" autocomplete="new-password" />
+            <small id="provider-llm-key-hint">
+              Required for first-time setup.
+            </small>
+          </fieldset>
+
+          <fieldset>
+            <legend>Embedding model</legend>
+            <label for="provider-embed-base">API base</label>
+            <input id="provider-embed-base" name="embeddingApiBase" required
+              type="url" placeholder="https://api.example.com/v1" />
+            <label for="provider-embed-model">Model</label>
+            <input id="provider-embed-model" name="embeddingModel" required
+              maxlength="200" placeholder="embedding-model" />
+            <label for="provider-embed-dimensions">Dimensions</label>
+            <input id="provider-embed-dimensions" name="embeddingDimensions"
+              required type="number" min="64" max="32768" step="1" />
+            <label for="provider-embed-key">API key</label>
+            <input id="provider-embed-key" name="embeddingApiKey"
+              type="password" maxlength="4096"
+              autocomplete="new-password" />
+            <small id="provider-embed-key-hint">
+              Required for first-time setup.
+            </small>
+          </fieldset>
+
+          <div class="provider-actions">
+            <button id="provider-save" type="submit">
+              Test and save
+            </button>
+          </div>
+        </form>
+        <p id="provider-status" role="status" aria-live="polite"></p>
+        <div id="provider-diagnostics" class="hidden">
+          <p id="provider-diagnostics-summary"></p>
+          <ul id="provider-diagnostics-models"></ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="schema-modal" class="modal" aria-labelledby="schema-title">
+      <div class="modal-content schema-content">
+        <button id="schema-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="schema-title">Wiki schema</h2>
+        <p class="modal-intro">
+          Define how Synthesis organises pages, handles evidence and
+          uncertainty, and stays within its product boundaries. This Markdown
+          file is stored locally with the vault and applied to ingest, query,
+          and wiki health analysis.
+        </p>
+        <label for="schema-input">schema.md</label>
+        <textarea id="schema-input" rows="20" spellcheck="false"></textarea>
+        <div class="schema-actions">
+          <button id="schema-save" type="button">Save schema</button>
+        </div>
+        <p id="schema-status" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
+
+    <dialog id="sources-modal" class="modal"
+      aria-labelledby="sources-title">
+      <div class="modal-content sources-content">
+        <button id="sources-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="sources-title">Source provenance</h2>
+        <p class="modal-intro">
+          Review ingested sources and the wiki pages each source created or
+          changed.
+        </p>
+        <p id="sources-status" role="status" aria-live="polite"></p>
+        <div class="sources-layout">
+          <ul id="sources-list" aria-label="Ingested sources"></ul>
+          <section id="source-detail" class="hidden">
+            <h3 id="source-detail-title"></h3>
+            <p id="source-detail-meta"></p>
+            <p id="source-detail-summary"></p>
+            <a id="source-detail-link" class="hidden" target="_blank"
+              rel="noopener noreferrer">Open original source</a>
+            <h4>Derived wiki pages</h4>
+            <ul id="source-detail-pages"></ul>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module" src="/app.bundle.js"></script>
+  </body>
+</html>

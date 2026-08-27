@@ -1,0 +1,357 @@
+import assert from "node:assert/strict";
+
+import {
+  findClaimCitations,
+  findSourceReferenceHashes,
+  findSourceReferencePages,
+  parseWikiPage,
+  renderWikiIndex,
+  renderWikiLink,
+  renderWikiLogEntry,
+  renderWikiPage,
+  validateWikiPage,
+  type WikiPage,
+} from "./wiki.ts";
+
+const page: WikiPage = {
+  title: "Evidence Map",
+  type: "synthesis",
+  body: "The available evidence supports the main claim.",
+  tags: ["research"],
+  links: ["Claim One"],
+};
+
+Deno.test("wiki pages normalise tags and links", () => {
+  assert.deepEqual(
+    validateWikiPage({
+      title: "Evidence Map",
+      type: "concept",
+      body: "A concise explanation.",
+      tags: ["AI", "ai", "evidence"],
+      links: ["Evidence Map", "Claim One", "claim one", "Claim Two"],
+    }),
+    {
+      title: "Evidence Map",
+      type: "concept",
+      body: "A concise explanation.",
+      tags: ["AI", "evidence"],
+      links: ["Claim One", "Claim Two"],
+    },
+  );
+});
+
+Deno.test("wiki page bodies preserve Markdown paragraphs", () => {
+  assert.equal(
+    validateWikiPage({
+      ...page,
+      body: "First paragraph.\n\nSecond paragraph.",
+    }).body,
+    "First paragraph.\n\nSecond paragraph.",
+  );
+});
+
+Deno.test("wiki pages reject malformed model output", () => {
+  const invalidPages = [
+    { ...page, type: "source" },
+    { ...page, title: "Broken [[title]]" },
+    { ...page, title: "Broken\ntitle" },
+    { ...page, tags: "research" },
+    { ...page, links: ["Valid", 42] },
+  ];
+
+  for (const invalidPage of invalidPages) {
+    assert.throws(() => validateWikiPage(invalidPage));
+  }
+});
+
+Deno.test("wiki links are validated and rendered consistently", () => {
+  assert.equal(renderWikiLink("Claim One"), "[[Claim One]]");
+  assert.throws(() => renderWikiLink("Broken ]] link"), /delimiters/);
+});
+
+Deno.test("wiki Markdown rendering is deterministic and retains provenance", () => {
+  const hash = "a".repeat(64);
+  assert.equal(
+    renderWikiPage(page, [{
+      title: "Research report",
+      url: "https://example.test/report",
+      contentHash: hash,
+    }]),
+    `---
+title: "Evidence Map"
+type: synthesis
+tags: ["research"]
+links: ["Claim One"]
+---
+
+# Evidence Map
+
+The available evidence supports the main claim.
+<!-- synthesis-claim:${hash} -->
+
+## Related
+
+- [[Claim One]]
+
+## Sources
+
+- [Research report](<https://example.test/report>); SHA-256: \`${hash}\` <!-- synthesis-source:${hash} -->
+`,
+  );
+});
+
+Deno.test("rendered wiki pages parse back into the same domain value", () => {
+  const hash = "c".repeat(64);
+  const rendered = renderWikiPage(page, [{
+    title: "Research report",
+    contentHash: hash,
+  }]);
+  assert.deepEqual(parseWikiPage(rendered), page);
+  assert.deepEqual(parseWikiPage(rendered.replaceAll("\n", "\r\n")), page);
+  assert.deepEqual(findClaimCitations(rendered), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+
+  const formatterStyle = rendered
+    .replace('tags: ["research"]', 'tags: [\n  "research",\n]')
+    .replace('links: ["Claim One"]', 'links: [\n  "Claim One",\n]')
+    .replace(
+      `\n<!-- synthesis-claim:${hash} -->`,
+      `\n\n<!-- synthesis-claim:${hash} -->`,
+    );
+  assert.deepEqual(parseWikiPage(formatterStyle), page);
+  assert.deepEqual(findClaimCitations(formatterStyle), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+
+  const legacy = rendered.replace(`\n<!-- synthesis-claim:${hash} -->`, "");
+  assert.deepEqual(findClaimCitations(legacy), [{
+    text: page.body,
+    sourceHashes: [hash],
+  }]);
+  assert.throws(
+    () =>
+      findClaimCitations(
+        rendered.replace(
+          `synthesis-claim:${hash}`,
+          `synthesis-claim:${"d".repeat(64)}`,
+        ),
+      ),
+    /source absent from the Sources section/,
+  );
+});
+
+Deno.test("reviewed relationship meaning remains portable in wiki frontmatter", () => {
+  const relationshipPage = {
+    ...page,
+    links: ["Claim One"],
+    relationships: [{
+      target: "Claim One",
+      type: "contradicts" as const,
+      explanation: "The reviewed pages report incompatible findings.",
+      significance: "The disagreement must remain visible.",
+      pageHashes: ["a".repeat(64), "b".repeat(64)],
+      confirmedAt: "2026-08-19T12:00:00.000Z",
+    }],
+  };
+  const rendered = renderWikiPage(relationshipPage, []);
+  assert.match(rendered, /^relationships: /m);
+  assert.deepEqual(parseWikiPage(rendered), relationshipPage);
+  assert.throws(
+    () => renderWikiPage({ ...relationshipPage, links: [] }, []),
+    /target must also appear in Wiki page.links/,
+  );
+});
+
+Deno.test("wiki parsing rejects ambiguous or inconsistent Markdown", () => {
+  const rendered = renderWikiPage(page, []);
+  assert.throws(
+    () => parseWikiPage(rendered.replace("# Evidence Map", "# Other title")),
+    /heading does not match/,
+  );
+  assert.throws(
+    () =>
+      parseWikiPage(
+        rendered.replace("type: synthesis", "type: synthesis\ntype: concept"),
+      ),
+    /duplicated/,
+  );
+  assert.throws(
+    () => validateWikiPage({ ...page, body: "Claim.\n\n## Sources\n\nManual" }),
+    /compiler-managed/,
+  );
+  assert.throws(
+    () =>
+      validateWikiPage({
+        ...page,
+        body: `Claim.\n<!-- synthesis-claim:${"a".repeat(64)} -->`,
+      }),
+    /compiler-managed claim citations/,
+  );
+});
+
+Deno.test("wiki sources require valid hashes and HTTP URLs", () => {
+  assert.match(
+    renderWikiPage(page, [{
+      title: "S".repeat(200),
+      contentHash: "a".repeat(64),
+    }]),
+    new RegExp(`- ${"S".repeat(200)}; SHA-256:`),
+  );
+  assert.throws(
+    () =>
+      renderWikiPage(page, [{
+        title: "S".repeat(501),
+        contentHash: "a".repeat(64),
+      }]),
+    /Source title exceeds 500/,
+  );
+  assert.throws(
+    () => renderWikiPage(page, [{ title: "Source", contentHash: "invalid" }]),
+    /SHA-256/,
+  );
+  assert.throws(
+    () =>
+      renderWikiPage(
+        page,
+        [{ title: "Source", contentHash: "a".repeat(64) }],
+        [{ text: page.body, sourceHashes: ["b".repeat(64)] }],
+      ),
+    /must cite sources present/,
+  );
+  assert.throws(
+    () =>
+      renderWikiPage(page, [{
+        title: "Source",
+        url: "file:///private/source.txt",
+        contentHash: "b".repeat(64),
+      }]),
+    /HTTP or HTTPS/,
+  );
+
+  const pageAware = renderWikiPage(page, [{
+    title: "Page-aware report",
+    contentHash: "c".repeat(64),
+    pages: [7, 2, 7],
+  }]);
+  assert.match(pageAware, /Page-aware report; pages: 2, 7; SHA-256:/);
+  assert.deepEqual(
+    findSourceReferencePages(pageAware, "c".repeat(64)),
+    [2, 7],
+  );
+  assert.deepEqual(
+    findSourceReferencePages(
+      pageAware.replace(
+        "; pages: 2, 7; SHA-256:",
+        "; pages: 2, 7;\n  SHA-256:",
+      ),
+      "c".repeat(64),
+    ),
+    [2, 7],
+  );
+  assert.equal(
+    findSourceReferencePages(pageAware, "d".repeat(64)),
+    undefined,
+  );
+  const secondHash = "d".repeat(64);
+  const withMultipleSources = renderWikiPage(page, [{
+    title: "First source",
+    contentHash: "c".repeat(64),
+  }, {
+    title: "Second source",
+    contentHash: secondHash,
+  }]);
+  assert.deepEqual(
+    findSourceReferenceHashes(
+      `${withMultipleSources}
+<!-- synthesis-source:${secondHash} -->
+<!-- synthesis-source:${"E".repeat(64)} -->
+<!-- synthesis-source:invalid -->`,
+    ),
+    ["c".repeat(64), secondHash],
+  );
+  for (const pages of [[], [0], [1.5]]) {
+    assert.throws(
+      () =>
+        renderWikiPage(page, [{
+          title: "Invalid pages",
+          contentHash: "c".repeat(64),
+          pages,
+        }]),
+      /Source pages/,
+    );
+  }
+});
+
+Deno.test("wiki indexes group and sort pages deterministically", () => {
+  assert.equal(
+    renderWikiIndex([
+      {
+        title: "Zeta pathway",
+        type: "concept",
+        summary: "First line.\nSecond line.",
+      },
+      {
+        title: "Alpha trial",
+        type: "entity",
+        summary: "A named clinical trial.",
+      },
+      {
+        title: "Beta pathway",
+        type: "concept",
+        summary: "A biological mechanism.",
+      },
+    ]),
+    `# Synthesis Wiki
+
+This index is maintained automatically from compiled wiki pages.
+
+## Entities
+
+- [[Alpha trial]] — A named clinical trial.
+
+## Concepts
+
+- [[Beta pathway]] — A biological mechanism.
+- [[Zeta pathway]] — First line. Second line.
+`,
+  );
+});
+
+Deno.test("wiki logs use a stable machine-readable format", () => {
+  const hash = "d".repeat(64);
+  assert.equal(
+    renderWikiLogEntry({
+      timestamp: "2026-08-02T12:34:56.789Z",
+      operation: "ingest",
+      subject: "Clinical evidence review",
+      contentHash: hash,
+      changes: [
+        { action: "create", pageTitle: "Alpha trial", pageType: "entity" },
+        {
+          action: "contradict",
+          pageTitle: "Treatment effect",
+          pageType: "concept",
+        },
+      ],
+    }),
+    `## [2026-08-02T12:34:56.789Z] ingest | Clinical evidence review
+- Source SHA-256: \`${hash}\`
+- create entity: [[Alpha trial]]
+- contradict concept: [[Treatment effect]]
+`,
+  );
+
+  assert.throws(
+    () =>
+      renderWikiLogEntry({
+        timestamp: "yesterday",
+        operation: "ingest",
+        subject: "Invalid",
+        changes: [],
+      }),
+    /ISO UTC/,
+  );
+});

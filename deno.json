@@ -1,0 +1,61 @@
+{
+  "name": "synthesis",
+  "version": "0.1.0",
+  "tasks": {
+    "app": "deno task start",
+    "setup": "deno run --allow-all scripts/setup.ts",
+    "migrate": "deno run --allow-all scripts/migrate.ts",
+    "dev": "SYNTHESIS_WATCH=true deno task start",
+    "lint": "deno lint --fix main.ts scripts src && deno fmt README.md docs main.ts scripts src deno.json",
+    "lint:web": "deno lint --no-config web/app.js web/graph_layout.js web/ingest_source.js web/provider_readiness.js web/reader_workspace.js web/review_workflow.js web/search_results.js web/ui_shell.js web/accessibility_test.js web/graph_layout_test.js web/ingest_source_test.js web/provider_readiness_test.js web/reader_workspace_test.js web/review_workflow_test.js web/search_results_test.js web/ui_shell_test.js",
+    "check": "deno check main.ts scripts/browser_interaction_smoke.ts scripts/compile.ts scripts/compiled_smoke.ts scripts/scoped_test_runner.ts scripts/ui_shell_e2e_test.ts && deno check --no-config --import-map=deno.json web/app.js web/graph_layout.js web/provider_readiness.js web/reader_workspace.js web/search_results.js web/ui_shell.js",
+    "start": "deno run --allow-all scripts/start.ts",
+    "compile": "deno run --allow-read=. --allow-write=dist --allow-run scripts/compile.ts --target host",
+    "compile:windows": "deno run --allow-read=. --allow-write=dist --allow-run scripts/compile.ts --target windows",
+    "build": "deno run --allow-all scripts/build.ts",
+    "yt-dlp": "deno run --allow-all scripts/fetch_yt_dlp.ts",
+    "test:unit": "deno test && deno test --no-config --allow-read=web web/",
+    "test:integration": "deno run --allow-all scripts/test.ts",
+    "test:e2e": "deno run --allow-env=TEMP,TMP,TMPDIR --allow-run scripts/scoped_test_runner.ts e2e",
+    "test:browser": "deno run --allow-env=TEMP,TMP,TMPDIR --allow-run scripts/scoped_test_runner.ts browser",
+    "test:compiled": "deno run --allow-env=TEMP,TMP,TMPDIR --allow-run scripts/scoped_test_runner.ts compiled"
+  },
+  "test": {
+    "include": [
+      "src/provider_settings_test.ts",
+      "src/query_test.ts",
+      "src/wiki_test.ts",
+      "src/distil_test.ts",
+      "src/ingest_test.ts",
+      "src/provider_profile_test.ts",
+      "src/provider_profile_store_test.ts",
+      "src/provider_runtime_test.ts",
+      "src/secret_store_test.ts",
+      "src/static_files_test.ts",
+      "src/trusted_batch_test.ts",
+      "scripts/browser_interaction_smoke_test.ts",
+      "scripts/compile_test.ts",
+      "scripts/scoped_test_runner_test.ts"
+    ]
+  },
+  "imports": {
+    "gfm": "jsr:@deno/gfm@0.12.0",
+    "pdfjs": "npm:pdfjs-dist@6.2.108/legacy/build/pdf.mjs",
+    "d3-force": "https://esm.sh/d3-force@3",
+    "d3-selection": "https://esm.sh/d3-selection@3",
+    "d3-drag": "https://esm.sh/d3-drag@3",
+    "d3-zoom": "https://esm.sh/d3-zoom@3",
+    "keyring": "npm:@napi-rs/keyring@1.3.0",
+    "nanoid": "npm:nanoid@3.3.18",
+    "sqlite-vec": "npm:sqlite-vec@^0.1.9"
+  },
+  "exports": "./main.ts",
+  "exclude": [
+    "web/",
+    "dist/",
+    "output/",
+    "output.haca/",
+    "output.mine/",
+    "AGENTS.md"
+  ]
+}

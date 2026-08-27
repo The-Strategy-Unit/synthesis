@@ -1,0 +1,19 @@
+# Temporary files, for example, from tests.
+/tmp/
+/output/
+
+# Ignore database
+*.db*
+
+# Deno cache
+.deno/
+
+# Built distributions
+/dist/
+
+# Bundled binaries
+/bundle/
+web/app.bundle.js
+
+# Desktop build artefacts
+desktop-app/
