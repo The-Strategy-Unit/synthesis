@@ -212,8 +212,8 @@ async function main(): Promise<void> {
     });
     await smokeExecutable(copiedExecutable, join(directory, "trial"), {
       arguments: ["--trial", "--no-open"],
-      pageCount: 5,
-      sourceCount: 3,
+      pageCount: 7,
+      sourceCount: 4,
       verifyPdf: false,
     });
     console.log(

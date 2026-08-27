@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { renderWikiPage, type WikiPage } from "./wiki.ts";
 
 interface TrialSourceSeed {
-  key: "accord" | "sprint" | "step";
+  key: "accord" | "sprint" | "step" | "bproad";
   title: string;
   url: string;
   text: string;
@@ -29,7 +29,7 @@ const TRIAL_SOURCES: TrialSourceSeed[] = [
   {
     key: "accord",
     title: "Curated extract: ACCORD BP (2010)",
-    url: "https://pubmed.ncbi.nlm.nih.gov/20228401/",
+    url: "https://www.nejm.org/doi/full/10.1056/NEJMoa1001286",
     text:
       `Curated trial extract for demonstration; verify against the linked paper.
 
@@ -42,7 +42,7 @@ Citation: ACCORD Study Group. Effects of Intensive Blood-Pressure Control in Typ
   {
     key: "sprint",
     title: "Curated extract: SPRINT (2015)",
-    url: "https://pubmed.ncbi.nlm.nih.gov/26551272/",
+    url: "https://www.nejm.org/doi/full/10.1056/NEJMoa1511939",
     text:
       `Curated trial extract for demonstration; verify against the linked paper.
 
@@ -55,7 +55,7 @@ Citation: SPRINT Research Group. A Randomized Trial of Intensive versus Standard
   {
     key: "step",
     title: "Curated extract: STEP (2021)",
-    url: "https://pubmed.ncbi.nlm.nih.gov/34491661/",
+    url: "https://www.nejm.org/doi/full/10.1056/NEJMoa2111437",
     text:
       `Curated trial extract for demonstration; verify against the linked paper.
 
@@ -63,7 +63,20 @@ STEP randomly assigned 8,511 Chinese adults aged 60 to 80 years with hypertensio
 
 Citation: STEP Study Group. Trial of Intensive Blood-Pressure Control in Older Patients with Hypertension. New England Journal of Medicine. 2021;385:1268-1279. DOI 10.1056/NEJMoa2111437.`,
     summary:
-      "In older Chinese adults with hypertension, STEP found fewer composite cardiovascular events with intensive control and more hypotension.",
+      "In older Chinese adults with hypertension, including participants with and without diabetes, STEP found fewer composite cardiovascular events with intensive control and more hypotension.",
+  },
+  {
+    key: "bproad",
+    title: "Curated extract: BPROAD (2024)",
+    url: "https://www.nejm.org/doi/full/10.1056/NEJMoa2412006",
+    text:
+      `Curated trial extract for demonstration; verify against the linked paper.
+
+BPROAD randomly assigned 12,821 adults aged 50 years or older with type 2 diabetes, elevated systolic blood pressure, and increased cardiovascular risk to a systolic blood-pressure target below 120 mm Hg or below 140 mm Hg. Intensive treatment significantly reduced the primary composite of nonfatal stroke, nonfatal myocardial infarction, treatment or hospitalisation for heart failure, or cardiovascular death. Symptomatic hypotension and hyperkalaemia occurred more often with intensive treatment.
+
+Citation: Bi Y, et al. Intensive Blood-Pressure Control in Patients with Type 2 Diabetes. New England Journal of Medicine. Published online 2024. DOI 10.1056/NEJMoa2412006.`,
+    summary:
+      "In Chinese adults with type 2 diabetes and increased cardiovascular risk, BPROAD found fewer major cardiovascular events with intensive control and more symptomatic hypotension and hyperkalaemia.",
   },
 ];
 
@@ -73,10 +86,33 @@ const TRIAL_PAGES: TrialPageSeed[] = [
     title: "Blood-pressure targets across trials",
     type: "synthesis",
     body:
-      "The three trials do not establish one context-free systolic target. ACCORD BP did not show a significant benefit for its primary composite in adults with type 2 diabetes, although stroke was less frequent. SPRINT and STEP found lower primary composite event rates in different populations without diabetes. Intensive treatment also increased selected harms.\n\nThe apparent conflict becomes more informative when the wiki preserves population, comparator, outcome, and adverse-event differences instead of forcing a single verdict. This demonstration summarises trial-level evidence; it is not clinical guidance.",
+      "These four trials do not establish one context-free systolic target. ACCORD BP did not show a significant benefit for its primary composite in adults with type 2 diabetes, although stroke was less frequent. BPROAD later found a significant primary composite benefit in a larger Chinese population with type 2 diabetes and increased cardiovascular risk. SPRINT found benefit in high-risk adults without diabetes, while STEP found benefit among older Chinese adults with hypertension, including people with and without diabetes and using a different target comparison.\n\nThe wiki resolves the apparent conflict by preserving population, comparator, outcome, follow-up, measurement, and adverse-event differences rather than voting for one study or averaging unlike results into a universal target. Intensive treatment also increased selected harms. This demonstration summarises trial-level evidence; it is not clinical guidance.",
     tags: ["blood-pressure", "evidence-conflict", "trial"],
-    links: ["ACCORD BP", "SPRINT", "STEP", "Intensive-control trade-offs"],
-    sourceKeys: ["accord", "sprint", "step"],
+    links: [
+      "How the evidence conflict evolved",
+      "ACCORD BP",
+      "SPRINT",
+      "STEP",
+      "BPROAD",
+      "Intensive-control trade-offs",
+    ],
+    sourceKeys: ["accord", "sprint", "step", "bproad"],
+  },
+  {
+    fileName: "how-the-evidence-conflict-evolved.md",
+    title: "How the evidence conflict evolved",
+    type: "synthesis",
+    body:
+      "**Act I — a cautious baseline.** ACCORD BP enters the wiki first. Its page records that targeting below 120 mm Hg did not significantly reduce the primary composite in its high-risk type 2 diabetes population, while stroke and treatment-related harms moved in different directions. The review must not inflate that result into “intensive control never works in diabetes”.\n\n**Act II — an apparent contradiction.** SPRINT reports cardiovascular and mortality benefit with a similar target comparison. Because SPRINT excluded diabetes, Synthesis should preserve both findings and narrow the claim by population rather than overwrite ACCORD. STEP then adds benefit in older Chinese adults with hypertension, including people with and without diabetes, but its comparator and population differ again.\n\n**Act III — the hard conflict arrives.** BPROAD directly revisits intensive control in type 2 diabetes and reports a significant primary composite benefit. A good ingest proposal should mark this as a contradiction if the existing wiki generalised ACCORD's null primary result. The human reviewer can inspect both sources and accept a rewrite that keeps both results visible.\n\n**Act IV — resolution without false consensus.** The durable page now says that trial results differ across populations and designs; it does not select a winner or invent a causal explanation for the difference. The answer to “Does below 120 mm Hg improve outcomes?” becomes a structured map—population, comparator, outcome definition, follow-up, and harms—not a context-free yes or no. This is a guided reconstruction of review logic, not a clinical recommendation.",
+    tags: ["blood-pressure", "conflict-resolution", "provenance"],
+    links: [
+      "Blood-pressure targets across trials",
+      "ACCORD BP",
+      "SPRINT",
+      "STEP",
+      "BPROAD",
+    ],
+    sourceKeys: ["accord", "sprint", "step", "bproad"],
   },
   {
     fileName: "accord-bp.md",
@@ -109,13 +145,28 @@ const TRIAL_PAGES: TrialPageSeed[] = [
     title: "STEP",
     type: "entity",
     body:
-      "STEP studied 8,511 Chinese adults aged 60 to 80 years with hypertension. A systolic target of 110 to below 130 mm Hg reduced the primary composite cardiovascular outcome compared with a target of 130 to below 150 mm Hg. Hypotension was more frequent with intensive control.",
+      "STEP studied 8,511 Chinese adults aged 60 to 80 years with hypertension, including participants with and without diabetes. A systolic target of 110 to below 130 mm Hg reduced the primary composite cardiovascular outcome compared with a target of 130 to below 150 mm Hg. Hypotension was more frequent with intensive control.",
     tags: ["blood-pressure", "older-adults", "trial"],
     links: [
       "Blood-pressure targets across trials",
       "Intensive-control trade-offs",
     ],
     sourceKeys: ["step"],
+  },
+  {
+    fileName: "bproad.md",
+    title: "BPROAD",
+    type: "entity",
+    body:
+      "BPROAD studied 12,821 Chinese adults aged 50 years or older with type 2 diabetes and increased cardiovascular risk. A systolic target below 120 mm Hg reduced the primary composite of major cardiovascular events compared with a target below 140 mm Hg. Symptomatic hypotension and hyperkalaemia were more frequent with intensive control.",
+    tags: ["blood-pressure", "diabetes", "trial"],
+    links: [
+      "Blood-pressure targets across trials",
+      "How the evidence conflict evolved",
+      "Intensive-control trade-offs",
+      "ACCORD BP",
+    ],
+    sourceKeys: ["bproad"],
   },
   {
     fileName: "intensive-control-trade-offs.md",
@@ -129,8 +180,9 @@ const TRIAL_PAGES: TrialPageSeed[] = [
       "ACCORD BP",
       "SPRINT",
       "STEP",
+      "BPROAD",
     ],
-    sourceKeys: ["accord", "sprint", "step"],
+    sourceKeys: ["accord", "sprint", "step", "bproad"],
   },
 ];
 
@@ -256,11 +308,12 @@ export async function cleanTrialRun(
 export function printTrialGuide(url: string): void {
   console.log(`Trial vault ready: ${url}
 
-Rehearsal (about 30 seconds):
-  1. Open "Blood-pressure targets across trials".
-  2. Follow ACCORD BP, SPRINT, and STEP to compare population and outcomes.
-  3. Open Sources to inspect the three immutable curated extracts.
-  4. Search for "stroke hypotension mortality" using offline keyword search.
+Guided conflict story (about 60 seconds):
+  1. Open "How the evidence conflict evolved" and begin with ACCORD BP.
+  2. Follow SPRINT and STEP: apparent disagreement becomes population context.
+  3. Open BPROAD: a later diabetes trial creates the harder primary-outcome conflict.
+  4. Open "Blood-pressure targets across trials" to see the reviewed, scoped resolution.
+  5. Inspect the four immutable Sources, then search for "stroke hypotension hyperkalaemia".
 
 This disposable vault is an evidence-synthesis demonstration, not clinical guidance.
 Export it before stopping Synthesis if you want to keep any changes.`);
