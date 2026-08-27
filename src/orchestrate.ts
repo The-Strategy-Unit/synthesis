@@ -717,10 +717,10 @@ async function prepareSingleSourceChanges(
     for (
       const candidate of db.findIntegrationCandidates(
         `${note.title}\n${note.body}`,
-        5,
+        8,
       )
     ) {
-      if (existingById.size >= 24) break;
+      if (existingById.size >= 40) break;
       existingById.set(candidate.id, candidate);
     }
   }
