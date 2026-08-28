@@ -4,7 +4,7 @@
  * Resolves correct paths for the current OS before running tests
  */
 
-import { config } from "../src/config.ts";
+import { config } from "../src/app/config.ts";
 
 const vaultDir = config.vaultDir;
 const tempDir = (() => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { parseCompiledOptions } from "../src/compiled_entry.ts";
+import { parseCompiledOptions } from "../src/app/compiled_entry.ts";
 import {
   assertArtifactSize,
   compileArguments,
@@ -36,7 +36,7 @@ Deno.test("cross-platform compilation is explicit, slim, and QuickJS", () => {
   const args = compileArguments(
     "windows-x86_64",
     "dist/synthesis.exe",
-    "dist/.compile-work/src/compiled_entry.js",
+    "dist/.compile-work/src/app/compiled_entry.js",
     ["dist/.compile-work/web/index.html"],
     ["npm:sqlite-vec@0.1.9"],
   );
@@ -55,6 +55,10 @@ Deno.test("cross-platform compilation is explicit, slim, and QuickJS", () => {
   assert.ok(args.includes("x86_64-pc-windows-msvc"));
   assert.ok(args.includes("npm:sqlite-vec@0.1.9"));
   assert.ok(args.includes("dist/.compile-work/web/index.html"));
+  assert.equal(
+    args.at(-1),
+    "dist/.compile-work/src/app/compiled_entry.js",
+  );
   assert.equal(args.includes("--bundle"), false);
 
   assert.equal(assertArtifactSize(79 * 1024 * 1024), 79);

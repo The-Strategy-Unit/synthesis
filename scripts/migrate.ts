@@ -4,7 +4,7 @@
  * Handles path resolution for different operating systems
  */
 
-import { config } from "../src/config.ts";
+import { config } from "../src/app/config.ts";
 
 const defaultOldDb = "./output/synthesis.db";
 const defaultNewDb = `${config.vaultDir}/synthesis.db`;
@@ -19,7 +19,7 @@ const cmd = new Deno.Command(Deno.execPath(), {
   args: [
     "run",
     "--allow-all",
-    "src/migrate.ts",
+    "src/vault/migrate.ts",
     oldDb,
     newDb,
   ],

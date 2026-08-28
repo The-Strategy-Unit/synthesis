@@ -11,13 +11,13 @@ export type CompileSelection = CompileTarget | "all";
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIRECTORY = join(PROJECT_DIRECTORY, "dist");
 const WORK_DIRECTORY = join(DIST_DIRECTORY, ".compile-work");
+const ENTRY_DIRECTORY = join(WORK_DIRECTORY, "src", "app");
 const UNPATCHED_ENTRY = join(
-  WORK_DIRECTORY,
-  "src",
+  ENTRY_DIRECTORY,
   "compiled_entry.unpatched.js",
 );
-const BUNDLED_ENTRY = join(WORK_DIRECTORY, "src", "compiled_entry.js");
-const PDF_WORKER = join(WORK_DIRECTORY, "src", "pdf.worker.mjs");
+const BUNDLED_ENTRY = join(ENTRY_DIRECTORY, "compiled_entry.js");
+const PDF_WORKER = join(ENTRY_DIRECTORY, "pdf.worker.mjs");
 const WEB_DIRECTORY = join(WORK_DIRECTORY, "web");
 const MAX_ARTIFACT_MIB = 80;
 const PACKAGE_ALIASES = ["keyring", "sqlite-vec"] as const;
@@ -163,7 +163,9 @@ async function prepareCompileWorkspace(): Promise<string[]> {
   await Deno.remove(WORK_DIRECTORY, { recursive: true }).catch((error) => {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
   });
-  await Deno.mkdir(join(WORK_DIRECTORY, "src"), { recursive: true });
+  // Preserve the source entrypoint's depth so bundled import.meta paths still
+  // resolve ../../web to the embedded asset directory.
+  await Deno.mkdir(ENTRY_DIRECTORY, { recursive: true });
   await Deno.mkdir(WEB_DIRECTORY, { recursive: true });
 
   const frontendBundle = join(WEB_DIRECTORY, "app.bundle.js");
@@ -198,7 +200,7 @@ async function prepareCompileWorkspace(): Promise<string[]> {
     "sqlite-vec",
     "--output",
     relative(PROJECT_DIRECTORY, UNPATCHED_ENTRY),
-    "src/compiled_entry.ts",
+    "src/app/compiled_entry.ts",
   ]);
   const patchedEntry = patchPdfCanvasLoader(
     await Deno.readTextFile(UNPATCHED_ENTRY),

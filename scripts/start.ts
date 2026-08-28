@@ -8,12 +8,12 @@ import {
   announceAndOpen,
   environmentBoolean,
   hostPort,
-} from "../src/browser_launcher.ts";
+} from "../src/app/browser_launcher.ts";
 import {
   cleanTrialRun,
   prepareTrialRun,
   printTrialGuide,
-} from "../src/trial_vault.ts";
+} from "../src/app/trial_vault.ts";
 
 if (
   Deno.args.length > 1 || (Deno.args.length === 1 && Deno.args[0] !== "--trial")
@@ -21,7 +21,7 @@ if (
   throw new Error("Usage: scripts/start.ts [--trial]");
 }
 const trial = Deno.args[0] === "--trial" ? await prepareTrialRun() : undefined;
-const { config } = await import("../src/config.ts");
+const { config } = await import("../src/app/config.ts");
 const vaultDir = config.vaultDir;
 const port = config.port;
 const isDev = Deno.env.get("SYNTHESIS_WATCH") === "true";

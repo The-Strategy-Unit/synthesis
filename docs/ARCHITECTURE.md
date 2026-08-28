@@ -5,35 +5,33 @@ Technical overview of Synthesis internals.
 ## Module map
 
 ```
-main.ts                     # Composition root and loopback HTTP server
-├── src/config.ts           # All config + env overrides, path helpers
-├── src/db.ts               # SQLite + sqlite-vec + FTS5: CRUD, embeddings, links, search
-├── src/llm.ts              # Shared chat transport, validation, and bounded structured recovery
-├── src/distil.ts           # Multi-stage LLM pipeline: extract → consolidate → integrate → rewrite
-├── src/ingest.ts           # YouTube transcript fetching (yt-dlp), text wrapping, playlist expansion
-├── src/local_file.ts       # Bounded PDF/Markdown/text parsing and validation
-├── src/ingest_proposal.ts  # Persisted, validated review-proposal format
-├── src/trusted_batch.ts    # Exact-list automatic-ingest validation and confirmation
-├── src/ingest_history.ts   # Durable before-images and accepted-apply manifests
-├── src/ingest_undo.ts      # Hash-guarded last-ingest recovery
-├── src/orchestrate.ts      # Source staging, approval, rollback, and note integration
-├── src/vault_manifest.ts   # Stable vault identity and format version
-├── src/vault_export.ts     # Streaming portable tar export
-├── src/vault_rebuild.ts    # Provider-free catalogue reconstruction
-├── src/semantic_index.ts   # Model-bound bounded/resumable vector rebuild
-├── src/wiki_schema.ts      # Editable vault policy supplied to model workflows
-├── src/wiki_graph.ts       # Explicit-link-first graph and related-page views
-├── src/discovery.ts        # Cross-source synthesis candidates and review lifecycle
-├── src/query.ts            # Context-bounded answers and reviewed write-back
-├── src/wiki_lint.ts        # Provider-free checks and optional AI analysis
-├── src/routes.ts           # Authenticated API, limits, queue, SSE, static files
-├── src/migrate.ts          # Legacy Elixir DB → Deno migration (zettels → notes)
-├── src/rebuild_links.ts    # Standalone link recomputation utility
-└── src/utils.ts            # slugify()
+main.ts                         # Single application entrypoint
+├── src/app/                    # Composition, configuration, launch and trial mode
+├── src/http/                   # HTTP transport and policy
+│   ├── routes.ts               # Small authenticated capability dispatcher
+│   ├── routes/                 # System, review, provider, wiki and ingest routes
+│   ├── core.ts                 # Auth, limits, validation and safe responses
+│   ├── ingest_support.ts       # SSE and bounded ingest request handling
+│   └── wiki_support.ts         # Query and search transport helpers
+├── src/ingest/                 # Extract, distil, stage, review and apply sources
+├── src/wiki/                   # Markdown model, schema, graph, query, lint, discovery
+├── src/vault/                  # Manifest, export, rebuild, history, undo, migration
+├── src/provider/               # LLM/embedding transport, profiles and secrets
+├── src/catalogue/              # Rebuildable SQLite catalogue
+│   ├── db.ts                   # Connection, schema and transaction coordinator
+│   ├── note_store.ts           # Page records and FTS content
+│   ├── source_store.ts         # Sources and page provenance
+│   ├── proposal_store.ts       # Ingest proposal review state
+│   ├── discovery_store.ts      # Discovery review and candidate state
+│   ├── search_store.ts         # Embeddings, links and keyword/semantic search
+│   └── maintenance_store.ts    # Atomic rebuild and undo catalogue mutations
+└── src/shared/                 # Small cross-capability helpers
 ```
 
-Embedding, linking, and search logic all live in `src/db.ts` as methods on the
-`DB` class.
+Tests remain beside their capability as `*_test.ts`. The folders are ordinary ES
+modules under one `deno.json`, not separately versioned workspace packages. `DB`
+owns one SQLite connection and the `BEGIN IMMEDIATE` transaction boundary;
+focused stores share that connection without weakening cross-store atomicity.
 
 ## Data flow
 
@@ -42,19 +40,19 @@ Embedding, linking, and search logic all live in `src/db.ts` as methods on the
 ```
 User submits URL/text or uploads one local PDF/Markdown/text file
   ↓
-src/routes.ts: POST /api/ingest (SSE stream)
+src/http/routes/ingest_routes.ts: POST /api/ingest (SSE stream)
   ↓
-src/ingest.ts
+src/ingest/ingest.ts
   ├── YouTube: yt-dlp --write-auto-sub → VTT → parseVtt() → transcript text
   ├── Text: wrapped directly as transcript
-  └── Local file: bounded multipart bytes → src/local_file.ts
+  └── Local file: bounded multipart bytes → src/ingest/local_file.ts
         ├── UTF-8 Markdown/text: strict decode
         └── PDF: pinned PDF.js → `## PDF page N` text sections
   ↓
 SHA-256 identity check (original bytes for uploads, transcript otherwise)
   → return an existing proposal or applied notes on duplicates
   ↓
-src/distil.ts: distil()
+src/ingest/distil.ts: distil()
   ├── splitTranscript() → chunks (maxChars=12000, overlap=500)
   ├── extractChunk() per chunk (parallel, extractModel, JSON mode)
   │     → substantial topical evidence candidates
@@ -64,7 +62,7 @@ src/distil.ts: distil()
 Persist immutable extracted text + metadata + summary under sources/<sha256>/
   and preserve uploaded bytes as original.pdf/.md/.txt
   ↓
-src/distil.ts: integrate()
+src/ingest/distil.ts: integrate()
   ├── FTS shortlists relevant existing notes
   ├── Compares against their titles and bounded contents
   └── Returns decision: new | merge | contradict (+ existing_id)
@@ -122,12 +120,12 @@ in one transaction.
 GET /api/search?q=...&mode=semantic|keyword
 
 keyword mode:
-  db.searchKeyword(query)
+  db.search.searchKeyword(query)
     → FTS5 MATCH on notes_fts → ranked by FTS rank
 
 semantic mode:
   DB.embedText(query) → embedding
-  db.searchSemantic(qEmb)
+  db.search.searchSemantic(qEmb)
     → sqlite-vec MATCH + kNN → cosine distance → similarity = 1 - distance
 
 Both return descending `[{ id, title, score, matchType }]` results. Semantic
@@ -135,17 +133,17 @@ scores are cosine similarities. Keyword scores negate SQLite FTS rank so that
 higher consistently means more relevant; neither score is a probability.
 ```
 
-The API default is hybrid. `db.ts` has a combined `db.search()` method that
-merges keyword + semantic results with matchType `"both"`. The browser requests
-semantic search only while a provider is ready and the model-bound semantic
-index is complete; otherwise it requests deterministic keyword search. It
-refreshes readiness before each search, states the active method, displays raw
-cosine similarity for semantic results, and displays canonical result order for
-keyword matches. API clients can request hybrid search explicitly. Keyword
-search, browsing, sources, the graph, deterministic lint, export, rebuild, and
-undo do not resolve a provider and remain available offline. Wiki queries seed
-context from FTS, optionally add semantic results, and expand one explicit-link
-hop.
+The API default is hybrid. `SearchStore` has a combined `db.search.search()`
+method that merges keyword + semantic results with matchType `"both"`. The
+browser requests semantic search only while a provider is ready and the
+model-bound semantic index is complete; otherwise it requests deterministic
+keyword search. It refreshes readiness before each search, states the active
+method, displays raw cosine similarity for semantic results, and displays
+canonical result order for keyword matches. API clients can request hybrid
+search explicitly. Keyword search, browsing, sources, the graph, deterministic
+lint, export, rebuild, and undo do not resolve a provider and remain available
+offline. Wiki queries seed context from FTS, optionally add semantic results,
+and expand one explicit-link hop.
 
 ### Export and recovery
 
@@ -372,10 +370,10 @@ the vector index, so benchmark alternatives in a new vault first.
 
 ### Link computation
 
-`db.computeLinksFor(noteIds, k)` performs a complete derived-graph rebuild when
-at least one page changed. A changed embedding can enter or leave another page's
-nearest-neighbour set, so a touched-page-only update would leave stale or
-asymmetric results.
+`db.search.computeLinksFor(noteIds, k)` performs a complete derived-graph
+rebuild when at least one page changed. A changed embedding can enter or leave
+another page's nearest-neighbour set, so a touched-page-only update would leave
+stale or asymmetric results.
 
 1. Validate the bounded neighbour count and clear the derived `links` rows.
 2. For every embedded page, compare against every other embedded page with the
@@ -418,17 +416,17 @@ can promote a relationship into canonical Markdown.
 | Integrate   | `integrateModel`   | `qwen3.5:122b` | 0.1         | 2000       | yes       |
 | Rewrite     | `rewriteModel`     | `qwen3.5:122b` | -           | 2000       | no        |
 
-All LLM calls go through `src/llm.ts`, which constructs OpenAI-compatible
-`/chat/completions` requests and validates provider envelopes. Local Ollama
-receives an explicit `reasoning_effort: "none"`; providers that may not support
-that value do not. Structured workflows retry one validation failure at
-temperature 0, but never retry transport, HTTP, timeout, or truncation failures.
-The current `schema.md` is bounded and included in every model-authored
-knowledge workflow.
+All LLM calls go through `src/provider/llm.ts`, which constructs
+OpenAI-compatible `/chat/completions` requests and validates provider envelopes.
+Local Ollama receives an explicit `reasoning_effort: "none"`; providers that may
+not support that value do not. Structured workflows retry one validation failure
+at temperature 0, but never retry transport, HTTP, timeout, or truncation
+failures. The current `schema.md` is bounded and included in every
+model-authored knowledge workflow.
 
 ## Migration from legacy Elixir DB
 
-`scripts/migrate.ts` wraps `src/migrate.ts`, which:
+`scripts/migrate.ts` wraps `src/vault/migrate.ts`, which:
 
 1. Opens the old SQLite DB (read-only, with sqlite-vec extension)
 2. Reads `zettels` joined with `episodes`
@@ -457,13 +455,14 @@ emits all three. An 80 MiB ceiling catches accidental dependency-tree growth.
 YouTube support remains external through `yt-dlp` beside the executable or on
 `PATH`.
 
-`src/compiled_entry.ts` opens the normal vault by default. `--trial` creates a
-disposable loopback-only vault, writes seven ordinary cited Markdown pages from
-four curated blood-pressure trial extracts, rebuilds the provider-independent
-catalogue, and opens the browser. Its guided story follows an apparent
-population-dependent disagreement into a direct trial-result conflict and a
-scoped, provenance-preserving resolution. The trial makes no provider call and
-uses the same vault format and application routes as ordinary operation.
+`src/app/compiled_entry.ts` opens the normal vault by default. `--trial` creates
+a disposable loopback-only vault, writes seven ordinary cited Markdown pages
+from four curated blood-pressure trial extracts, rebuilds the
+provider-independent catalogue, and opens the browser. Its guided story follows
+an apparent population-dependent disagreement into a direct trial-result
+conflict and a scoped, provenance-preserving resolution. The trial makes no
+provider call and uses the same vault format and application routes as ordinary
+operation.
 
 Run `deno task test:compiled <executable>` on the artefact's target OS. The
 smoke check covers the UI, native SQLite and `sqlite-vec` startup, PDF text

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { renderWikiPage } from "../src/wiki.ts";
+import { renderWikiPage } from "../src/wiki/wiki.ts";
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
