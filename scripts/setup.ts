@@ -6,7 +6,7 @@
  * Run: deno run --allow-all scripts/setup.ts
  */
 
-import { config, configuredModelNames } from "../src/config.ts";
+import { config, configuredModelNames } from "../src/app/config.ts";
 
 const OLLAMA_URL = "https://ollama.com";
 
