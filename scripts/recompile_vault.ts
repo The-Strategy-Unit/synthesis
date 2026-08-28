@@ -5,8 +5,8 @@ import { relative, resolve, sep } from "node:path";
 import {
   ensureRecompileVaultLayout,
   loadArchivedVaultSources,
-} from "../src/vault_archive.ts";
-import type { WikiChange } from "../src/wiki.ts";
+} from "../src/vault/vault_archive.ts";
+import type { WikiChange } from "../src/wiki/wiki.ts";
 
 export interface RecompileArguments {
   source: string;
@@ -190,14 +190,14 @@ async function runRecompile(args: RecompileArguments): Promise<void> {
     { appendWikiLog, rebuildWikiIndex },
     { parseWikiPage },
   ] = await Promise.all([
-    import("../src/config.ts"),
-    import("../src/db.ts"),
-    import("../src/vault_manifest.ts"),
-    import("../src/wiki_schema.ts"),
-    import("../src/orchestrate.ts"),
-    import("../src/provider_runtime.ts"),
-    import("../src/wiki_store.ts"),
-    import("../src/wiki.ts"),
+    import("../src/app/config.ts"),
+    import("../src/catalogue/db.ts"),
+    import("../src/vault/vault_manifest.ts"),
+    import("../src/wiki/wiki_schema.ts"),
+    import("../src/ingest/orchestrate.ts"),
+    import("../src/provider/provider_runtime.ts"),
+    import("../src/wiki/wiki_store.ts"),
+    import("../src/wiki/wiki.ts"),
   ]);
 
   const providers = environmentProviders();
@@ -261,14 +261,14 @@ async function runRecompile(args: RecompileArguments): Promise<void> {
       );
       if (staged.kind === "already-applied") {
         if (!loggedHashes.has(contentHash)) {
-          const storedSource = db.getSourceByHash(contentHash);
+          const storedSource = db.sources.getSourceByHash(contentHash);
           if (!storedSource) {
             throw new Error(
               `Applied source ${contentHash} is missing from the catalogue`,
             );
           }
           const changes: WikiChange[] = [];
-          for (const note of db.getNotesForSource(storedSource.id)) {
+          for (const note of db.sources.getNotesForSource(storedSource.id)) {
             const page = parseWikiPage(
               await Deno.readTextFile(note.file_path),
             );
@@ -306,15 +306,15 @@ async function runRecompile(args: RecompileArguments): Promise<void> {
       );
     }
 
-    const semanticIndex = db.semanticIndexStatus();
+    const semanticIndex = db.search.semanticIndexStatus();
     if (!semanticIndex.complete) {
       throw new Error(
         `Semantic index is incomplete (${semanticIndex.embedded}/${semanticIndex.total} pages)`,
       );
     }
-    const linkCount = db.computeLinks(config.link.k);
+    const linkCount = db.search.computeLinks(config.link.k);
     console.log(
-      `Recompilation complete: ${db.getAllNotes().length} pages, ${linkCount} semantic proximity suggestions.`,
+      `Recompilation complete: ${db.notes.getAllNotes().length} pages, ${linkCount} semantic proximity suggestions.`,
     );
   } finally {
     db.close();
