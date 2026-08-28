@@ -82,7 +82,7 @@ Application validation limits provider API bases to HTTPS endpoints ending in
 
 ## Configuration reference
 
-All config lives in `src/config.ts`. Every value has an environment variable
+All config lives in `src/app/config.ts`. Every value has an environment variable
 override with validation (clamping, enum checks, minimum bounds).
 
 ### Core
@@ -201,7 +201,7 @@ the corrected vector space.
 
 ### Adding a new ingestion source
 
-1. Add a function to `src/ingest.ts` returning `IngestResult`:
+1. Add a function to `src/ingest/ingest.ts` returning `IngestResult`:
    ```typescript
    {
      transcript: string;
@@ -212,12 +212,13 @@ the corrected vector space.
      pageCount?: number;
    }
    ```
-2. Wire it into the `POST /api/ingest` handler in `src/routes.ts`
-3. Preserve immutable-source and note provenance in `src/orchestrate.ts`
+2. Wire it into the `POST /api/ingest` handler in
+   `src/http/routes/ingest_routes.ts`
+3. Preserve immutable-source and page provenance in `src/ingest/orchestrate.ts`
 
 ### Customising the distillation prompt
 
-Edit the prompt constants in `src/distil.ts`:
+Edit the prompt constants in `src/ingest/distil.ts`:
 
 - `EXTRACT_PROMPT` - per-chunk extraction of substantial topical evidence
   candidates
