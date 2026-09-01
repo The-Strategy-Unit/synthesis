@@ -8,6 +8,7 @@ import { NoteStore } from "./note_store.ts";
 import { ProposalStore } from "./proposal_store.ts";
 import { SearchStore } from "./search_store.ts";
 import { SourceStore } from "./source_store.ts";
+import { normaliseCataloguePaths, VaultPathResolver } from "./vault_path.ts";
 
 export { keywordSearchQueries } from "./search_store.ts";
 export type {
@@ -190,9 +191,11 @@ export class DB {
   constructor(dbPath: string) {
     this.connection = new DatabaseSync(dbPath, { allowExtension: true });
     initDatabase(this.connection);
+    const paths = new VaultPathResolver(dbPath);
+    normaliseCataloguePaths(this.connection, paths);
     const transaction = this.withTransaction.bind(this);
-    this.notes = new NoteStore(this.connection);
-    this.sources = new SourceStore(this.connection);
+    this.notes = new NoteStore(this.connection, paths);
+    this.sources = new SourceStore(this.connection, paths);
     this.proposals = new ProposalStore(this.connection);
     this.discoveries = new DiscoveryStore(this.connection, transaction);
     this.search = new SearchStore(this.connection, this.notes, transaction);

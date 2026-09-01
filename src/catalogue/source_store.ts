@@ -1,27 +1,38 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type { SourceRecord } from "./types.ts";
+import type { VaultPathResolver } from "./vault_path.ts";
 
 export class SourceStore {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly paths: VaultPathResolver,
+  ) {}
+
+  private resolveSource<T extends SourceRecord>(source: T): T {
+    return { ...source, file_path: this.paths.resolve(source.file_path) };
+  }
 
   getSourceByHash(contentHash: string): SourceRecord | undefined {
-    return this.db.prepare(
+    const source = this.db.prepare(
       "SELECT * FROM sources WHERE content_hash = ?",
     ).get(contentHash) as SourceRecord | undefined;
+    return source ? this.resolveSource(source) : undefined;
   }
 
   getAllSources(): SourceRecord[] {
-    return this.db.prepare(
+    const sources = this.db.prepare(
       "SELECT * FROM sources ORDER BY created_at DESC, id DESC",
     ).all() as unknown as SourceRecord[];
+    return sources.map((source) => this.resolveSource(source));
   }
 
   getSource(id: number): SourceRecord | undefined {
     if (!Number.isSafeInteger(id) || id < 1) return undefined;
-    return this.db.prepare(
+    const source = this.db.prepare(
       "SELECT * FROM sources WHERE id = ?",
     ).get(id) as SourceRecord | undefined;
+    return source ? this.resolveSource(source) : undefined;
   }
 
   addSource(
@@ -36,7 +47,14 @@ export class SourceStore {
       `INSERT INTO sources
        (content_hash, title, source_url, source_type, file_path, summary)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(contentHash, title, sourceUrl, sourceType, filePath, summary);
+    ).run(
+      contentHash,
+      title,
+      sourceUrl,
+      sourceType,
+      this.paths.store(filePath),
+      summary,
+    );
     return Number(info.lastInsertRowid);
   }
 
@@ -57,7 +75,7 @@ export class SourceStore {
     source_url: string | null;
     action: string;
   }> {
-    return this.db.prepare(
+    const notes = this.db.prepare(
       `SELECT n.id, n.title, n.file_path, n.source_url, ns.action
        FROM note_sources ns
        JOIN notes n ON n.id = ns.note_id
@@ -70,6 +88,10 @@ export class SourceStore {
       source_url: string | null;
       action: string;
     }>;
+    return notes.map((note) => ({
+      ...note,
+      file_path: this.paths.resolve(note.file_path),
+    }));
   }
 
   getSourcesForNotes(noteIds: number[]): SourceRecord[] {
@@ -78,25 +100,27 @@ export class SourceStore {
     );
     if (ids.length === 0) return [];
     const placeholders = ids.map(() => "?").join(", ");
-    return this.db.prepare(
+    const sources = this.db.prepare(
       `SELECT DISTINCT s.*
        FROM sources s
        JOIN note_sources ns ON ns.source_id = s.id
        WHERE ns.note_id IN (${placeholders})
        ORDER BY s.created_at, s.id`,
     ).all(...ids) as unknown as SourceRecord[];
+    return sources.map((source) => this.resolveSource(source));
   }
 
   getSourceProvenanceForNote(
     noteId: number,
   ): Array<SourceRecord & { action: string }> {
     if (!Number.isSafeInteger(noteId) || noteId < 1) return [];
-    return this.db.prepare(
+    const sources = this.db.prepare(
       `SELECT s.*, ns.action
        FROM note_sources ns
        JOIN sources s ON s.id = ns.source_id
        WHERE ns.note_id = ?
        ORDER BY s.created_at, s.id`,
     ).all(noteId) as unknown as Array<SourceRecord & { action: string }>;
+    return sources.map((source) => this.resolveSource(source));
   }
 }
