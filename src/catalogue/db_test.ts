@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 
 import { config } from "../app/config.ts";
-import { DB, keywordSearchQueries } from "./db.ts";
+import { DB, initDatabase, keywordSearchQueries } from "./db.ts";
 
 function dbTest(name: string, fn: () => void | Promise<void>): void {
   Deno.test({
@@ -81,6 +82,125 @@ dbTest("duplicate file paths preserve the original note", async () => {
     });
     assert.equal(db.notes.getAllNotes().length, 1);
   });
+});
+
+dbTest("catalogue paths cannot escape the vault", async () => {
+  await withTempDb((db, dir) => {
+    assert.throws(
+      () => db.notes.addNote("Outside", `${dir}/../outside.md`, null, "text"),
+      /vault-relative/,
+    );
+    assert.throws(
+      () =>
+        db.sources.addSource(
+          "outside-source",
+          "Outside source",
+          null,
+          "text",
+          "../outside.txt",
+          "Outside summary",
+        ),
+      /stay inside the vault/,
+    );
+  });
+});
+
+dbTest("catalogue paths remain valid after a vault is moved", async () => {
+  const root = await Deno.makeTempDir({ prefix: "synthesis-portable-test-" });
+  const originalVault = `${root}/original-vault`;
+  const movedVault = `${root}/moved-vault`;
+  const legacyVault =
+    "/mnt/data/notes/sources/git/synthesis/output.haca.2025.v3";
+  const sourceHash = "a".repeat(64);
+  try {
+    await Deno.mkdir(`${originalVault}/notes`, { recursive: true });
+    await Deno.mkdir(`${originalVault}/sources/${sourceHash}`, {
+      recursive: true,
+    });
+    await Deno.writeTextFile(`${originalVault}/notes/page.md`, "Portable page");
+    await Deno.writeTextFile(
+      `${originalVault}/sources/${sourceHash}/source.txt`,
+      "Portable source",
+    );
+
+    const legacy = new DatabaseSync(`${originalVault}/synthesis.db`, {
+      allowExtension: true,
+    });
+    try {
+      initDatabase(legacy);
+      legacy.prepare(
+        `INSERT INTO notes (title, file_path, source_type)
+         VALUES (?, ?, ?)`,
+      ).run("Portable page", `${legacyVault}/notes/page.md`, "text");
+      legacy.prepare(
+        `INSERT INTO sources
+         (content_hash, title, source_type, file_path, summary)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(
+        sourceHash,
+        "Portable source",
+        "text",
+        `${legacyVault}/sources/${sourceHash}/source.txt`,
+        "Portable summary",
+      );
+    } finally {
+      legacy.close();
+    }
+
+    await Deno.rename(originalVault, movedVault);
+    const db = new DB(`${movedVault}/synthesis.db`);
+    try {
+      const note = db.notes.getNoteByExactTitle("Portable page");
+      const source = db.sources.getSourceByHash(sourceHash);
+      assert.ok(note);
+      assert.ok(source);
+      assert.equal(note.file_path, `${movedVault}/notes/page.md`);
+      assert.equal(
+        source.file_path,
+        `${movedVault}/sources/${sourceHash}/source.txt`,
+      );
+      assert.equal(await Deno.readTextFile(note.file_path), "Portable page");
+      assert.equal(
+        await Deno.readTextFile(source.file_path),
+        "Portable source",
+      );
+
+      await Deno.writeTextFile(`${movedVault}/notes/new-page.md`, "New page");
+      db.notes.addNote(
+        "New page",
+        `${movedVault}/notes/new-page.md`,
+        null,
+        "text",
+      );
+    } finally {
+      db.close();
+    }
+
+    const stored = new DatabaseSync(`${movedVault}/synthesis.db`, {
+      readOnly: true,
+    });
+    try {
+      assert.deepEqual(
+        stored.prepare("SELECT file_path FROM notes ORDER BY id").all().map(
+          (row) => ({ ...row }),
+        ),
+        [
+          { file_path: "notes/page.md" },
+          { file_path: "notes/new-page.md" },
+        ],
+      );
+      assert.deepEqual(
+        stored.prepare("SELECT file_path FROM sources").all().map((row) => ({
+          ...row,
+        })),
+        [{ file_path: `sources/${sourceHash}/source.txt` }],
+      );
+    } finally {
+      stored.close();
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 dbTest(

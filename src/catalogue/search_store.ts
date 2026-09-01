@@ -157,7 +157,7 @@ export class SearchStore {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
       throw new RangeError("Semantic rebuild limit must be between 1 and 100");
     }
-    return this.db.prepare(
+    const notes = this.db.prepare(
       `SELECT n.id, n.title, n.file_path
        FROM notes n
        LEFT JOIN embeddings e ON e.note_id = n.id
@@ -165,6 +165,10 @@ export class SearchStore {
        ORDER BY n.id
        LIMIT ?`,
     ).all(limit) as Array<{ id: number; title: string; file_path: string }>;
+    return notes.map((note) => ({
+      ...note,
+      file_path: this.notes.resolveFilePath(note.file_path),
+    }));
   }
 
   upsertEmbedding(noteId: number, embedding: number[]): void {

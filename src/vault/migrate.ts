@@ -84,7 +84,14 @@ for (const z of zettels) {
 
   await Deno.writeTextFile(filePath, md);
 
-  insertNote.run(z.id, title, filePath, z.ep_url, "youtube", z.created_at);
+  insertNote.run(
+    z.id,
+    title,
+    `notes/${slug}.md`,
+    z.ep_url,
+    "youtube",
+    z.created_at,
+  );
   insertFts.run(Number(z.id), title, body);
 
   // Track sources
