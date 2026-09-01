@@ -74,6 +74,8 @@ Rules:
 - Omit introductions, housekeeping, promotional material, and incidental anecdotes unless they provide durable context for another candidate.
 - Do not refer to "the video", "the speaker", or the extraction process.
 - Only extract what is explicitly stated. Do not invent or speculate.
+- Treat unfamiliar names, organisations, places, and acronyms in transcripts as potentially mistranscribed. Do not create a named-entity page from an ambiguous transcription; use a supported generic subject or omit the uncertain detail instead.
+- Preserve names, dates, quantities, units, scope, attribution, and uncertainty exactly as supported. Do not silently correct them using outside knowledge.
 - Tags: 1-3 lowercase keywords.
 - Links: 0-5 exact titles of other extracted pages that materially help explain this page. Do not link a page to itself.
 - When the source contains "## PDF page N" headings, include "source_pages" with the 1-50 page numbers that directly support the item. Never infer a page number. Otherwise omit "source_pages".
@@ -231,6 +233,7 @@ const CONSOLIDATE_PROMPT =
 Rules:
 - Group candidates that belong to the same entity, concept, method, evidence theme, or comparison into one readable page.
 - Merge near-duplicates, aliases, continuations, and examples into the relevant broader page.
+- Compare meaning as well as wording. Treat abbreviations and plausible spelling or transcription variants as possible aliases, but do not merge distinct subjects merely because their names are similar.
 - Remove redundant, trivial, administrative, promotional, or source-specific items that will not remain useful outside their original setting.
 - Rank final pages from most to least durable and useful.
 - Produce only as many pages as the source supports, usually 1-6. HARD LIMIT: never return more than 8 pages. Do not aim for a quota.
@@ -243,6 +246,7 @@ Rules:
 - Links: 0-8 exact titles of other pages in the final response. Every link target must exist, materially help explain the source page, and must not be a self-link.
 - Preserve and combine "source_pages" from candidates. When candidates cite PDF pages, every final page must include the exact supporting page numbers and no others.
 - Only include information present in the candidates. Do not invent.
+- Do not use outside knowledge to repair a candidate's name or factual detail. Preserve uncertainty or omit a detail that the candidates do not resolve.
 
 Respond with ONLY JSON, no markdown fences:
 {"notes": [{"title": "...", "type": "concept", "body": "...", "tags": ["..."], "links": ["..."], "source_pages": [1]}]}`;
@@ -471,6 +475,8 @@ const INTEGRATE_PROMPT =
 - "new": the note covers a topic not already in the wiki
 - "merge": the note is a refinement/addition to an existing note — provide the existing note's id
 - "contradict": the note contradicts or challenges an existing note — provide the existing note's id
+
+Compare meaning, aliases, abbreviations, and plausible spelling or transcription variants, not only exact titles. Choose "merge" when the supplied text clearly describes the same durable subject. Do not create a near-duplicate because of a minor naming variation, and do not merge distinct subjects merely because their names are similar. Preserve genuine factual disagreement with "contradict".
 
 Every new note includes an "incoming_index". Copy that exact index into its decision. You MUST respond with ONLY a JSON object (no markdown fences, no commentary). The format is:
 

@@ -118,13 +118,12 @@ and enter separate chat and embedding endpoints, models, and API keys. Remote
 providers receive the source and wiki text needed for their calls under their
 own data-handling and retention terms.
 
-The default quality-first Ollama profile uses a smaller model for high-volume
-extraction and a larger model for consolidation, integration, rewriting, and
-cross-source decisions. Override those roles explicitly when the defaults do not
-fit the host; Synthesis reports missing models rather than silently substituting
-another one. See the
-[developer guide](docs/DEVELOPERS.md#configuration-reference) for every model
-and provider setting.
+The default quality-first Ollama profile uses the dense `qwen3.8:27b` model for
+extraction, consolidation, integration, rewriting, and cross-source decisions.
+Override those roles explicitly when the default does not fit the host;
+Synthesis reports missing models rather than silently substituting another one.
+See the [developer guide](docs/DEVELOPERS.md#configuration-reference) for every
+model and provider setting.
 
 ## Everyday workflow
 
@@ -196,7 +195,7 @@ SYNTHESIS_MODEL_TIMEOUT_MS=1800000 deno run \
   --allow-read=. --allow-write=new-vault --allow-ffi \
   scripts/recompile_vault.ts \
   --source old-vault --destination new-vault \
-  --extract-model qwen3.5:9b --editor-model qwen3.5:122b \
+  --extract-model qwen3.8:27b --editor-model qwen3.8:27b \
   --embedding-model nomic-embed-text-v2-moe:latest \
   --confirm "RECOMPILE 66 SOURCES"
 ```
