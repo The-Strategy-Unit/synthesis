@@ -217,6 +217,14 @@ CREATE TABLE notes (
 );
 ```
 
+The `file_path` values in `notes` and `sources` use forward-slash,
+vault-relative paths. Catalogue stores resolve them against the directory that
+contains `synthesis.db` before filesystem I/O. Opening a legacy catalogue
+transactionally normalises recognised absolute `notes/` and `sources/` paths, so
+a closed vault can be moved without retaining its previous host path. Server
+shutdown closes the catalogue connection before process exit, leaving transient
+WAL and shared-memory sidecars out of a clean portable vault.
+
 ### `embeddings` (sqlite-vec virtual table)
 
 ```sql
