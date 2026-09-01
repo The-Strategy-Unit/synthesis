@@ -96,6 +96,10 @@ export interface CatalogueNote {
   filePath: string;
   body: string;
   sourceHashes: string[];
+  sourceActions?: Record<
+    string,
+    "new" | "merge" | "contradict" | "reference"
+  >;
 }
 
 export interface IngestUndoChange {
