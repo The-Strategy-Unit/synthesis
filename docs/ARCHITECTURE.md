@@ -417,20 +417,24 @@ can promote a relationship into canonical Markdown.
 
 ### LLM pipeline stages
 
-| Stage       | Model role         | Default model  | Temperature | Max tokens | JSON mode |
-| ----------- | ------------------ | -------------- | ----------- | ---------- | --------- |
-| Extract     | `extractModel`     | `qwen3.5:9b`   | 0           | 2000       | yes       |
-| Consolidate | `consolidateModel` | `qwen3.5:122b` | 0.1         | 4000       | yes       |
-| Integrate   | `integrateModel`   | `qwen3.5:122b` | 0.1         | 2000       | yes       |
-| Rewrite     | `rewriteModel`     | `qwen3.5:122b` | -           | 2000       | no        |
+| Stage       | Model role         | Default model | Temperature | Max tokens | JSON mode |
+| ----------- | ------------------ | ------------- | ----------- | ---------- | --------- |
+| Extract     | `extractModel`     | `qwen3.8:27b` | 0           | 2000       | yes       |
+| Consolidate | `consolidateModel` | `qwen3.8:27b` | 0.1         | 4000       | yes       |
+| Integrate   | `integrateModel`   | `qwen3.8:27b` | 0.1         | 2000       | yes       |
+| Rewrite     | `rewriteModel`     | `qwen3.8:27b` | -           | 2000       | no        |
 
 All LLM calls go through `src/provider/llm.ts`, which constructs
 OpenAI-compatible `/chat/completions` requests and validates provider envelopes.
 Local Ollama receives an explicit `reasoning_effort: "none"`; providers that may
 not support that value do not. Structured workflows retry one validation failure
 at temperature 0, but never retry transport, HTTP, timeout, or truncation
-failures. The current `schema.md` is bounded and included in every
-model-authored knowledge workflow.
+failures. A mandatory editorial policy is included in every model-authored
+workflow alongside the current bounded `schema.md`. It requires British English
+for Synthesis-authored language, preserves legitimate official wording, and
+instructs models to omit unsupported transcript details or preserve their
+uncertainty. The editable vault schema can add domain policy but cannot remove
+those shared rules.
 
 ## Migration from legacy Elixir DB
 
