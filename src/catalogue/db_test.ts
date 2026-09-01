@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
+import { join } from "node:path";
 
 import { config } from "../app/config.ts";
 import { DB, initDatabase, keywordSearchQueries } from "./db.ts";
@@ -48,7 +49,7 @@ dbTest(
 
 dbTest("duplicate file paths preserve the original note", async () => {
   await withTempDb((db, dir) => {
-    const filePath = `${dir}/shared.md`;
+    const filePath = join(dir, "shared.md");
     const originalId = db.notes.addNote(
       "Original",
       filePath,
@@ -154,10 +155,10 @@ dbTest("catalogue paths remain valid after a vault is moved", async () => {
       const source = db.sources.getSourceByHash(sourceHash);
       assert.ok(note);
       assert.ok(source);
-      assert.equal(note.file_path, `${movedVault}/notes/page.md`);
+      assert.equal(note.file_path, join(movedVault, "notes", "page.md"));
       assert.equal(
         source.file_path,
-        `${movedVault}/sources/${sourceHash}/source.txt`,
+        join(movedVault, "sources", sourceHash, "source.txt"),
       );
       assert.equal(await Deno.readTextFile(note.file_path), "Portable page");
       assert.equal(
@@ -367,17 +368,19 @@ dbTest(
   "source provenance can be added, found, attached, and listed",
   async () => {
     await withTempDb((db, dir) => {
+      const sourcePath = join(dir, "source.md");
+      const notePath = join(dir, "note.md");
       const sourceId = db.sources.addSource(
         "content-hash",
         "Source title",
         "https://youtube.com/watch?v=source",
         "youtube",
-        `${dir}/source.md`,
+        sourcePath,
         "Source summary",
       );
       const noteId = db.notes.addNote(
         "Derived note",
-        `${dir}/note.md`,
+        notePath,
         "https://youtube.com/watch?v=source",
         "youtube",
       );
@@ -390,7 +393,7 @@ dbTest(
         title: "Source title",
         source_url: "https://youtube.com/watch?v=source",
         source_type: "youtube",
-        file_path: `${dir}/source.md`,
+        file_path: sourcePath,
         summary: "Source summary",
         created_at: source.created_at,
       });
@@ -401,7 +404,7 @@ dbTest(
         [{
           id: noteId,
           title: "Derived note",
-          file_path: `${dir}/note.md`,
+          file_path: notePath,
           source_url: "https://youtube.com/watch?v=source",
           action: "new",
         }],
