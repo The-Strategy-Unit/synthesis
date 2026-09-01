@@ -163,6 +163,19 @@ location with `SYNTHESIS_VAULT`:
 SYNTHESIS_VAULT="$PWD/my-vault" deno task app
 ```
 
+For a downloaded Windows executable, set the vault for the current PowerShell
+session, then start Synthesis without `--trial`:
+
+```powershell
+$env:SYNTHESIS_VAULT = 'C:\Users\username\My_folder\myvault'
+.\synthesis-windows-x86_64.exe
+```
+
+After stopping Synthesis, you can move the complete vault directory as one unit.
+Its catalogue stores vault-relative file paths, and older absolute catalogue
+paths are normalised when the moved vault is next opened. A normal shutdown
+closes SQLite and removes its transient WAL and shared-memory sidecars.
+
 Use **Vault tools → Export vault** for a portable tar archive. It excludes the
 rebuildable database and provider credentials. After extracting an export into
 an empty directory, open it with `SYNTHESIS_VAULT`, choose **Rebuild

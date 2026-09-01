@@ -18,6 +18,21 @@ import { createHandler } from "../http/routes.ts";
 import { KeyringSecretStore } from "../provider/secret_store.ts";
 import { ensureWikiSchema } from "../wiki/wiki_schema.ts";
 import { ensureVaultManifest } from "../vault/vault_manifest.ts";
+import { errMsg } from "../shared/utils.ts";
+
+export function closeCatalogueOnServerFinish(
+  server: Pick<Deno.HttpServer, "finished">,
+  db: Pick<DB, "close">,
+): void {
+  const close = () => {
+    try {
+      db.close();
+    } catch (error) {
+      console.error(`Catalogue shutdown failed: ${errMsg(error)}`);
+    }
+  };
+  void server.finished.then(close, close);
+}
 
 export async function startApplication(
   signal?: AbortSignal,
@@ -46,11 +61,18 @@ export async function startApplication(
     // state is retained and will be revalidated when a provider is configured.
   }
 
-  return Deno.serve(
-    { hostname: config.host, port: config.port, signal },
-    createHandler(db, resolveProviders, {
-      profiles: profileStore,
-      secrets: KeyringSecretStore.create,
-    }),
-  );
+  try {
+    const server = Deno.serve(
+      { hostname: config.host, port: config.port, signal },
+      createHandler(db, resolveProviders, {
+        profiles: profileStore,
+        secrets: KeyringSecretStore.create,
+      }),
+    );
+    closeCatalogueOnServerFinish(server, db);
+    return server;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 }

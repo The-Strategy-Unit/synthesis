@@ -1,7 +1,20 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import type { VaultPathResolver } from "./vault_path.ts";
+
 export class NoteStore {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly paths: VaultPathResolver,
+  ) {}
+
+  private resolveRow<T extends { file_path: string }>(row: T): T {
+    return { ...row, file_path: this.paths.resolve(row.file_path) };
+  }
+
+  resolveFilePath(storedPath: string): string {
+    return this.paths.resolve(storedPath);
+  }
 
   addNote(
     title: string,
@@ -12,7 +25,12 @@ export class NoteStore {
     const stmt = this.db.prepare(
       "INSERT INTO notes (title, file_path, source_url, source_type) VALUES (?, ?, ?, ?)",
     );
-    const info = stmt.run(title, filePath, sourceUrl, sourceType);
+    const info = stmt.run(
+      title,
+      this.paths.store(filePath),
+      sourceUrl,
+      sourceType,
+    );
     return Number(info.lastInsertRowid);
   }
 
@@ -24,7 +42,7 @@ export class NoteStore {
     source_type: string | null;
     created_at: string;
   } | undefined {
-    return this.db.prepare(
+    const row = this.db.prepare(
       `SELECT * FROM notes
        WHERE title = ? COLLATE NOCASE
        ORDER BY id
@@ -37,6 +55,7 @@ export class NoteStore {
       source_type: string | null;
       created_at: string;
     } | undefined;
+    return row ? this.resolveRow(row) : undefined;
   }
 
   indexNote(noteId: number, title: string, content: string): void {
@@ -51,7 +70,7 @@ export class NoteStore {
   getAllNotes(): Array<
     { id: number; title: string; file_path: string; source_url: string | null }
   > {
-    return this.db.prepare(
+    const rows = this.db.prepare(
       "SELECT id, title, file_path, source_url FROM notes ORDER BY created_at DESC",
     ).all() as Array<
       {
@@ -61,6 +80,7 @@ export class NoteStore {
         source_url: string | null;
       }
     >;
+    return rows.map((row) => this.resolveRow(row));
   }
 
   getNote(
@@ -72,7 +92,7 @@ export class NoteStore {
     source_url: string | null;
     source_type: string | null;
   } | undefined {
-    return this.db.prepare("SELECT * FROM notes WHERE id = ?").get(id) as
+    const row = this.db.prepare("SELECT * FROM notes WHERE id = ?").get(id) as
       | {
         id: number;
         title: string;
@@ -81,6 +101,7 @@ export class NoteStore {
         source_type: string | null;
       }
       | undefined;
+    return row ? this.resolveRow(row) : undefined;
   }
 
   getNoteByFilePath(
@@ -92,8 +113,8 @@ export class NoteStore {
     source_url: string | null;
     source_type: string | null;
   } | undefined {
-    return this.db.prepare("SELECT * FROM notes WHERE file_path = ?").get(
-      filePath,
+    const row = this.db.prepare("SELECT * FROM notes WHERE file_path = ?").get(
+      this.paths.store(filePath),
     ) as
       | {
         id: number;
@@ -103,6 +124,7 @@ export class NoteStore {
         source_type: string | null;
       }
       | undefined;
+    return row ? this.resolveRow(row) : undefined;
   }
 
   deleteNote(id: number): void {
