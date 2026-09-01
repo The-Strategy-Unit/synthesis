@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 
 import { config } from "../app/config.ts";
 import { DB } from "../catalogue/db.ts";
@@ -294,7 +295,10 @@ Deno.test({
       );
       assert.deepEqual(
         notesAfterFirst.map((note) => note.file_path).sort(),
-        [`${dir}/notes/shared-title.md`, `${dir}/notes/supporting-context.md`],
+        [
+          join(dir, "notes", "shared-title.md"),
+          join(dir, "notes", "supporting-context.md"),
+        ],
       );
 
       const firstHash = await sha256(firstSource.transcript);
@@ -683,7 +687,10 @@ Deno.test({
       );
       const thirdSourceRecord = db.sources.getSourceByHash(thirdHash);
       assert.ok(thirdSourceRecord, "the source record must remain for retry");
-      assert.equal(thirdSourceRecord.file_path, `${thirdSourceDir}/source.txt`);
+      assert.equal(
+        thirdSourceRecord.file_path,
+        join(thirdSourceDir, "source.txt"),
+      );
       assert.equal(
         thirdSourceRecord.summary,
         "Key findings: Shared title retry — A failed update must never remain indexed.",

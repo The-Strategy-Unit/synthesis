@@ -4,7 +4,7 @@
 // writes a new note file or rewrites an existing one (merge/contradict),
 // indexing and embedding as it goes.
 
-import { dirname } from "node:path";
+import { dirname, relative } from "node:path";
 
 import { notesDir, sourcesDir } from "../app/config.ts";
 import { errMsg, slugify } from "../shared/utils.ts";
@@ -108,6 +108,10 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 
 function normalisedTitle(title: string): string {
   return title.toLocaleLowerCase("en-GB");
+}
+
+function isSameFilePath(left: string, right: string): boolean {
+  return relative(left, right) === "";
 }
 
 function sourceReferencesForRewrite(
@@ -409,7 +413,7 @@ async function appliedSourceResult(
     source.source_type,
     source.summary,
   );
-  if (persisted.rawPath !== source.file_path) {
+  if (!isSameFilePath(persisted.rawPath, source.file_path)) {
     throw new Error(`Source ${contentHash} has a conflicting file path`);
   }
   const notes = db.sources.getNotesForSource(source.id);
@@ -703,7 +707,7 @@ async function prepareSingleSourceChanges(
   const sourceId = db.withTransaction(() => {
     const existing = db.sources.getSourceByHash(contentHash);
     if (existing) {
-      if (existing.file_path !== persistedSource.rawPath) {
+      if (!isSameFilePath(existing.file_path, persistedSource.rawPath)) {
         throw new Error(`Source ${contentHash} has a conflicting file path`);
       }
       return existing.id;
