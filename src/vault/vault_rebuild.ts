@@ -3,6 +3,11 @@ import { relative } from "node:path";
 import { notesDir, sourcesDir } from "../app/config.ts";
 import type { CatalogueNote, CatalogueSource, DB } from "../catalogue/db.ts";
 import { errMsg } from "../shared/utils.ts";
+import {
+  historyDir,
+  type IngestHistoryAction,
+  validateIngestHistoryManifest,
+} from "./ingest_history.ts";
 import { ensureVaultManifest } from "./vault_manifest.ts";
 import {
   findSourceReferenceHashes,
@@ -19,6 +24,8 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 interface PreparedNote extends CatalogueNote {
   page: WikiPage;
 }
+
+type HistoryActions = Map<string, Map<string, IngestHistoryAction>>;
 
 export interface VaultRebuildResult {
   sourceCount: number;
@@ -211,6 +218,66 @@ async function readSources(): Promise<CatalogueSource[]> {
   return sources;
 }
 
+async function readHistoryActions(): Promise<HistoryActions> {
+  let root: Deno.FileInfo;
+  try {
+    root = await Deno.lstat(historyDir());
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return new Map();
+    throw error;
+  }
+  if (root.isSymlink || !root.isDirectory) {
+    throw new Error("Vault history must be a regular directory");
+  }
+
+  const directoryNames: string[] = [];
+  for await (const entry of Deno.readDir(historyDir())) {
+    if (!entry.isDirectory || entry.isSymlink) {
+      throw new Error(`Vault history entry ${entry.name} must be a directory`);
+    }
+    directoryNames.push(entry.name);
+  }
+  directoryNames.sort((left, right) => left.localeCompare(right, "en-GB"));
+
+  const actions: HistoryActions = new Map();
+  for (const directoryName of directoryNames) {
+    const manifestPath = `${historyDir()}/${directoryName}/manifest.json`;
+    await regularFile(manifestPath, `History ${directoryName} manifest`);
+    let value: unknown;
+    try {
+      value = JSON.parse(
+        await readUtf8(manifestPath, `History ${directoryName} manifest`),
+      );
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error(
+          `History ${directoryName} manifest contains invalid JSON`,
+        );
+      }
+      throw error;
+    }
+    if (
+      !value || typeof value !== "object" || Array.isArray(value) ||
+      (value as Record<string, unknown>).operation !== "ingest"
+    ) {
+      continue;
+    }
+    const manifest = validateIngestHistoryManifest(value);
+    for (const change of manifest.changes) {
+      const sourceActions = actions.get(change.notePath) ?? new Map();
+      const existing = sourceActions.get(manifest.sourceHash);
+      if (existing !== undefined && existing !== change.action) {
+        throw new Error(
+          `History records conflicting actions for ${change.notePath} and source ${manifest.sourceHash}`,
+        );
+      }
+      sourceActions.set(manifest.sourceHash, change.action);
+      actions.set(change.notePath, sourceActions);
+    }
+  }
+  return actions;
+}
+
 async function collectNoteFiles(
   directory: string,
   files: string[],
@@ -240,6 +307,7 @@ async function collectNoteFiles(
 
 async function readNotes(
   sourceHashes: ReadonlySet<string>,
+  historyActions: HistoryActions,
 ): Promise<PreparedNote[]> {
   const files: string[] = [];
   await collectNoteFiles(notesDir(), files);
@@ -280,6 +348,12 @@ async function readNotes(
       filePath,
       body: page.body,
       sourceHashes: provenance,
+      sourceActions: Object.fromEntries(
+        provenance.map((hash) => [
+          hash,
+          historyActions.get(`notes/${archivePath}`)?.get(hash) ?? "reference",
+        ]),
+      ),
       page,
     });
   }
@@ -334,8 +408,10 @@ export async function rebuildVaultCatalogue(
     await ensureVaultManifest();
     await ensureWikiSchema();
     sources = await readSources();
+    const historyActions = await readHistoryActions();
     notes = await readNotes(
       new Set(sources.map((source) => source.contentHash)),
+      historyActions,
     );
   } catch (error) {
     throw new VaultRebuildError(`Vault preflight failed: ${errMsg(error)}`);
