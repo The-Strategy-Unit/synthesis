@@ -204,6 +204,14 @@ async function main(): Promise<void> {
     if (Deno.build.os !== "windows") {
       await Deno.chmod(copiedExecutable, 0o755);
     }
+    const help = await new Deno.Command(copiedExecutable, {
+      args: ["--help"],
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    assert.equal(help.success, true);
+    assert.match(new TextDecoder().decode(help.stdout), /Usage: synthesis/);
+    assert.equal(new TextDecoder().decode(help.stderr), "");
     await smokeExecutable(copiedExecutable, join(directory, "normal"), {
       arguments: ["--no-open"],
       pageCount: 0,
