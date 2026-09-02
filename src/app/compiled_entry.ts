@@ -7,19 +7,36 @@ import {
 } from "./trial_vault.ts";
 
 export interface CompiledOptions {
+  help: boolean;
   trial: boolean;
   openBrowser: boolean;
 }
 
+const COMPILED_USAGE = "Usage: synthesis [--trial] [--no-open] [--help]";
+
+export function compiledHelpText(): string {
+  return [
+    "Synthesis - local-first knowledge compiler",
+    "",
+    COMPILED_USAGE,
+    "",
+    "Options:",
+    "  --trial    Start with a disposable, provider-free demonstration vault.",
+    "  --no-open  Start without opening a browser.",
+    "  --help     Show this help and exit.",
+  ].join("\n");
+}
+
 export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
-  const allowed = new Set(["--trial", "--no-open"]);
+  const allowed = new Set(["--trial", "--no-open", "--help"]);
   if (
     args.some((argument) => !allowed.has(argument)) ||
     new Set(args).size !== args.length
   ) {
-    throw new Error("Usage: synthesis [--trial] [--no-open]");
+    throw new Error(COMPILED_USAGE);
   }
   return {
+    help: args.includes("--help"),
     trial: args.includes("--trial"),
     openBrowser: !args.includes("--no-open"),
   };
@@ -27,6 +44,10 @@ export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
 
 async function main(): Promise<void> {
   const options = parseCompiledOptions(Deno.args);
+  if (options.help) {
+    console.log(compiledHelpText());
+    return;
+  }
   // The compiled app uses PDF.js only for server-side text extraction. Its
   // Node build still loads a rendering canvas, so the narrow compile-time
   // patch points that loader at this deliberately non-rendering facade.
