@@ -61,8 +61,8 @@ when the published asset names already match exactly.
 To release, update and commit `deno.json`, then push its matching annotated tag:
 
 ```bash
-git tag -a v0.1.0 -m "Synthesis v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Synthesis v0.2.0"
+git push origin v0.2.0
 ```
 
 ### Permissions
@@ -127,12 +127,21 @@ override with validation (clamping, enum checks, minimum bounds).
 
 ### Model roles
 
-| Variable                      | Default        | Used by                        |
-| ----------------------------- | -------------- | ------------------------------ |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.5:9b`   | Per-chunk extraction           |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.5:122b` | Source-level consolidation     |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.5:122b` | new/merge/contradict decisions |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.5:122b` | Rewriting existing notes       |
+| Variable                      | Default       | Used by                        |
+| ----------------------------- | ------------- | ------------------------------ |
+| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.8:27b` | Per-chunk extraction           |
+| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.8:27b` | Source-level consolidation     |
+| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.8:27b` | new/merge/contradict decisions |
+| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.8:27b` | Rewriting existing notes       |
+
+The defaults are a quality floor for the bundled Ollama setup, not a model-name
+allowlist. Provider profiles may select a different model because parameter
+counts and capabilities cannot be inferred reliably from arbitrary hosted model
+identifiers. Every model-authored workflow also receives Synthesis' mandatory
+editorial policy: Synthesis-authored language uses British English, official
+names and quotations are preserved, and uncertain transcript details must not be
+silently repaired or invented. A custom vault schema may add stricter domain
+rules but cannot remove this shared policy.
 
 ### LLM tuning
 

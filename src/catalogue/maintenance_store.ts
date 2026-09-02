@@ -71,7 +71,11 @@ export class MaintenanceStore {
               `Catalogue note "${note.title}" references unknown source ${sourceHash}`,
             );
           }
-          this.sources.attachNoteSource(noteId, sourceId, "reference");
+          this.sources.attachNoteSource(
+            noteId,
+            sourceId,
+            note.sourceActions?.[sourceHash] ?? "reference",
+          );
         }
       }
     });
