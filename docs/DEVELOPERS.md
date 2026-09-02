@@ -176,8 +176,8 @@ the corrected vector space.
 
 | Variable                            | Default                            | Notes                   |
 | ----------------------------------- | ---------------------------------- | ----------------------- |
-| `SYNTHESIS_MAX_CHARS`               | `12000`                            | min 1000; chunk size    |
-| `SYNTHESIS_CHUNK_OVERLAP`           | `500`                              | clamped 0–2000          |
+| `SYNTHESIS_MAX_CHARS`               | `12000`                            | min 1000; input ceiling |
+| `SYNTHESIS_CHUNK_OVERLAP`           | `500`                              | structural; max 2000    |
 | `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                         | clamped 1–100 MiB       |
 | `SYNTHESIS_MAX_PDF_PAGES`           | `500`                              | clamped 1–5000          |
 | `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                            | clamped 1 second–5 mins |
