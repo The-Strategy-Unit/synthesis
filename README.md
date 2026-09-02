@@ -225,8 +225,8 @@ demonstration/private-beta artefacts and test them on their target OS.
 Releases are tag-driven. Update `deno.json` and push its matching annotated tag:
 
 ```bash
-git tag -a v0.2.0 -m "Synthesis v0.2.0"
-git push origin v0.2.0
+git tag -a v0.2.1 -m "Synthesis v0.2.1"
+git push origin v0.2.1
 ```
 
 GitHub Actions verifies the tag, runs native compiled smoke tests on Linux,
