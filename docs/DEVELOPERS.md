@@ -61,8 +61,8 @@ when the published asset names already match exactly.
 To release, update and commit `deno.json`, then push its matching annotated tag:
 
 ```bash
-git tag -a v0.2.0 -m "Synthesis v0.2.0"
-git push origin v0.2.0
+git tag -a v0.2.1 -m "Synthesis v0.2.1"
+git push origin v0.2.1
 ```
 
 ### Permissions
