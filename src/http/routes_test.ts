@@ -2704,10 +2704,12 @@ routeTest(
 );
 
 routeTest(
-  "semantic index rebuild requires confirmation and resumes bounded work",
+  "semantic index rebuild resumes bounded work without consuming search quota",
   async () => {
     const originalFetch = globalThis.fetch;
+    const originalSearchLimit = config.security.semanticSearchesPerMinute;
     try {
+      config.security.semanticSearchesPerMinute = 1;
       await withTempHandler(async (_defaultHandler, db, dir) => {
         for (let index = 0; index < 2; index++) {
           const path = `${dir}/semantic-${index + 1}.md`;
@@ -2796,6 +2798,7 @@ routeTest(
       });
     } finally {
       globalThis.fetch = originalFetch;
+      config.security.semanticSearchesPerMinute = originalSearchLimit;
     }
   },
 );
