@@ -180,7 +180,8 @@ Use **Vault tools → Export vault** for a portable tar archive. It excludes the
 rebuildable database and provider credentials. After extracting an export into
 an empty directory, open it with `SYNTHESIS_VAULT`, choose **Rebuild
 catalogue**, then build or resume the semantic index if semantic search is
-required.
+required. One click continues through the whole wiki in bounded 20-page batches;
+choose **Stop after current batch** to pause safely and resume later.
 
 ### Recompile archived sources
 

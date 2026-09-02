@@ -53,6 +53,7 @@ import {
   searchResultMetric,
   sortSearchResults,
 } from "./search_results.js";
+import { buildCompleteSemanticIndex } from "./semantic_index.js";
 import { initialShellState, queueBadge, reduceShellState } from "./ui_shell.js";
 
 // --- Config (fetched from backend) ---
@@ -333,6 +334,35 @@ const rebuildCatalogueButton = document.getElementById(
   "rebuild-catalogue-btn",
 );
 const rebuildSemanticButton = document.getElementById("rebuild-semantic-btn");
+let semanticRebuildActive = false;
+let semanticRebuildStopRequested = false;
+
+function renderSemanticRebuildButton() {
+  if (semanticRebuildActive) {
+    rebuildSemanticButton.disabled = semanticRebuildStopRequested;
+    rebuildSemanticButton.textContent = semanticRebuildStopRequested
+      ? "Stopping after current batch..."
+      : "Stop after current batch";
+    rebuildSemanticButton.title = semanticRebuildStopRequested
+      ? "Semantic indexing will stop when the current bounded batch finishes"
+      : "Stop semantic indexing after the current bounded batch";
+    return;
+  }
+
+  const semanticIndex = providerState.semanticIndex;
+  rebuildSemanticButton.disabled = !providerCapabilities(
+    providerState.phase,
+    semanticIndex,
+  ).modelActions;
+  rebuildSemanticButton.textContent = semanticIndex?.complete
+    ? "Semantic index ready"
+    : semanticIndex?.embedded > 0
+    ? "Resume semantic index"
+    : "Build semantic index";
+  rebuildSemanticButton.title = semanticIndex?.complete
+    ? "Semantic search and connection state cover the whole wiki"
+    : "Build or resume semantic search and connection state for the whole wiki";
+}
 
 async function rebuildCatalogue() {
   const confirmed = globalThis.confirm(
@@ -370,45 +400,58 @@ async function rebuildCatalogue() {
 rebuildCatalogueButton.addEventListener("click", rebuildCatalogue);
 
 async function rebuildSemanticIndex() {
+  if (semanticRebuildActive) {
+    semanticRebuildStopRequested = true;
+    renderSemanticRebuildButton();
+    return;
+  }
+
   const confirmed = globalThis.confirm(
-    "Build or resume the semantic index using the explicitly configured embedding provider? Relevant wiki text will be sent to that provider. Up to 20 pages are processed in this batch.",
+    "Build or resume the semantic index for the whole wiki using the explicitly configured embedding provider? Relevant wiki text will be sent to that provider. Synthesis works in safe batches of up to 20 pages; use Stop after current batch to pause.",
   );
   if (!confirmed) return;
 
-  rebuildSemanticButton.disabled = true;
-  rebuildSemanticButton.textContent = "Building semantic index...";
+  semanticRebuildActive = true;
+  semanticRebuildStopRequested = false;
+  renderSemanticRebuildButton();
   const finishOperation = beginOperation(
     "Building the semantic index…",
   );
   try {
-    const data = await api("semantic-index/rebuild", {
-      method: "POST",
-      body: JSON.stringify({
-        confirm: "REBUILD SEMANTIC INDEX",
-        limit: 20,
-      }),
+    const result = await buildCompleteSemanticIndex(async (limit) => {
+      const current = providerState.semanticIndex;
+      const progress = current?.total > 0
+        ? `Indexed ${current.embedded} of ${current.total} wiki pages; continuing…`
+        : "Building the semantic index…";
+      const data = await api("semantic-index/rebuild", {
+        method: "POST",
+        body: JSON.stringify({
+          confirm: "REBUILD SEMANTIC INDEX",
+          limit,
+        }),
+        progress: { message: progress },
+      });
+      return data.semanticIndex;
+    }, {
+      shouldStop: () => semanticRebuildStopRequested,
+      onProgress: (status) => {
+        providerState = { ...providerState, semanticIndex: status };
+      },
     });
-    const status = data.semanticIndex;
+    const status = result.status;
     await Promise.all([refreshProviderMode(), loadGraph()]);
     globalThis.alert(
       status.complete
         ? `Semantic index ready for ${status.total} wiki pages; ${status.links} mutual proximity links were rebuilt.`
-        : `Indexed ${status.embedded} of ${status.total} wiki pages. Choose Resume semantic index to process the remaining ${status.remaining}.`,
+        : `Stopped safely after indexing ${status.embedded} of ${status.total} wiki pages. Choose Resume semantic index to continue with the remaining ${status.remaining}.`,
     );
   } catch (error) {
     globalThis.alert(error.message);
   } finally {
     finishOperation();
-    const semanticIndex = providerState.semanticIndex;
-    rebuildSemanticButton.disabled = !providerCapabilities(
-      providerState.phase,
-      semanticIndex,
-    ).modelActions;
-    rebuildSemanticButton.textContent = semanticIndex?.complete
-      ? "Semantic index ready"
-      : semanticIndex?.embedded > 0
-      ? "Resume semantic index"
-      : "Build semantic index";
+    semanticRebuildActive = false;
+    semanticRebuildStopRequested = false;
+    renderSemanticRebuildButton();
   }
 }
 
@@ -1879,12 +1922,7 @@ function renderProviderState(nextState) {
   lintAnalyse.disabled = !capabilities.modelActions;
   ingestButton.disabled = !capabilities.modelActions ||
     activeIngestController !== null;
-  rebuildSemanticButton.disabled = !capabilities.modelActions;
-  rebuildSemanticButton.textContent = providerState.semanticIndex?.complete
-    ? "Semantic index ready"
-    : providerState.semanticIndex?.embedded > 0
-    ? "Resume semantic index"
-    : "Build semantic index";
+  renderSemanticRebuildButton();
   const emptyState = providerEmptyState(providerState.phase);
   readerAddSourceButton.textContent = emptyState.label;
   readerAddSourceButton.title = capabilities.modelActions
@@ -3152,7 +3190,7 @@ async function loadGraph() {
       similarity: l.similarity,
       relationships: l.relationships,
     })).sort((left, right) =>
-      Number(left.kind === "semantic") - Number(right.kind === "semantic") ||
+      Number(left.kind === "explicit") - Number(right.kind === "explicit") ||
       left.source - right.source || left.target - right.target
     ),
   };

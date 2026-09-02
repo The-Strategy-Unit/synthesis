@@ -976,8 +976,6 @@ body {
 }
 
 #graph .link {
-  stroke: var(--text-faint);
-  stroke-opacity: 0.45;
   transition: stroke-opacity 120ms ease, stroke-width 120ms ease;
 }
 
