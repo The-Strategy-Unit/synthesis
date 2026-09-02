@@ -53,9 +53,11 @@ SHA-256 identity check (original bytes for uploads, transcript otherwise)
   → return an existing proposal or applied notes on duplicates
   ↓
 src/ingest/distil.ts: distil()
-  ├── splitTranscript() → chunks (maxChars=12000, overlap=500)
+  ├── splitTranscript() → balanced chunks at structural boundaries
+  │     (configurable input ceiling; bounded structural overlap)
   ├── extractChunk() per chunk (parallel, extractModel, JSON mode)
-  │     → substantial topical evidence candidates
+  │     → zero or more substantial topical evidence candidates
+  │       (the complete source must still produce at least one)
   └── consolidateCandidates() (consolidateModel, single call)
         → a small set of coherent source-level wiki pages + summary
   ↓

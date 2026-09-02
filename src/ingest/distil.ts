@@ -42,23 +42,127 @@ function splitTranscript(
 ): string[] {
   if (text.length <= maxChars) return [text];
 
+  const effectiveOverlap = Math.min(
+    Math.max(0, overlap),
+    Math.floor(maxChars / 2),
+  );
+  const coreBudget = maxChars - effectiveOverlap;
+  const chunkCount = Math.ceil(
+    (text.length - effectiveOverlap) / coreBudget,
+  );
+  const boundaries = semanticBoundaries(text);
   const chunks: string[] = [];
-  let pos = 0;
-  while (pos < text.length) {
-    const end = Math.min(pos + maxChars, text.length);
-    let chunk = text.slice(pos, end);
-    if (pos > 0 && /^## PDF page \d+\n\n/.test(text)) {
-      const activePage = text.slice(0, pos).match(/^## PDF page (\d+)$/gm)
+  let coreStart = 0;
+  for (let index = 0; index < chunkCount; index++) {
+    const remainingChunks = chunkCount - index;
+    const coreEnd = remainingChunks === 1 ? text.length : balancedBoundary(
+      text,
+      boundaries,
+      coreStart,
+      text.length,
+      index === 0 ? maxChars : coreBudget,
+      coreBudget,
+      remainingChunks,
+    );
+    const chunkStart = index === 0
+      ? 0
+      : semanticOverlapStart(boundaries, coreStart, effectiveOverlap);
+    let chunk = text.slice(chunkStart, coreEnd);
+    if (chunkStart > 0 && /^## PDF page \d+\n\n/.test(text)) {
+      const activePage = text.slice(0, chunkStart).match(
+        /^## PDF page (\d+)$/gm,
+      )
         ?.at(-1)?.match(/\d+/)?.[0];
       if (activePage && !/^## PDF page \d+/.test(chunk)) {
         chunk = `## PDF page ${activePage} (continued)\n\n${chunk}`;
       }
     }
     chunks.push(chunk);
-    if (end === text.length) break;
-    pos = end - overlap;
+    coreStart = coreEnd;
   }
   return chunks;
+}
+
+function semanticBoundaries(text: string): number[] {
+  const result = new Set<number>();
+  const patterns = [/\n[ \t]*\n+/g, /[.!?]["')\]]*\s+/g, /\n+/g];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const index = (match.index ?? 0) + match[0].length;
+      if (match[0].startsWith("\n")) {
+        const lineEnd = match.index ?? 0;
+        const lineStart = text.lastIndexOf("\n", lineEnd - 1) + 1;
+        const precedingLine = text.slice(lineStart, lineEnd).trim();
+        if (/^## PDF page \d+(?: \(continued\))?$/.test(precedingLine)) {
+          continue;
+        }
+      }
+      if (index > 0 && index < text.length) result.add(index);
+    }
+  }
+  return [...result].sort((a, b) => a - b);
+}
+
+function nearestWhitespace(
+  text: string,
+  ideal: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const centre = Math.max(minimum, Math.min(maximum, Math.round(ideal)));
+  const radius = Math.max(centre - minimum, maximum - centre);
+  for (let offset = 0; offset <= radius; offset++) {
+    const after = centre + offset;
+    if (after <= maximum && /\s/.test(text[after - 1] ?? "")) return after;
+    const before = centre - offset;
+    if (before >= minimum && /\s/.test(text[before - 1] ?? "")) return before;
+  }
+  return centre;
+}
+
+function balancedBoundary(
+  text: string,
+  boundaries: number[],
+  start: number,
+  end: number,
+  currentBudget: number,
+  coreBudget: number,
+  remainingChunks: number,
+): number {
+  const remainingLength = end - start;
+  const ideal = start + remainingLength / remainingChunks;
+  const minimum = Math.max(
+    start + 1,
+    end - (remainingChunks - 1) * coreBudget,
+  );
+  const maximum = Math.min(
+    start + currentBudget,
+    end - (remainingChunks - 1),
+  );
+  let selected: number | undefined;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const boundary of boundaries) {
+    if (boundary < minimum) continue;
+    if (boundary > maximum) break;
+    const candidateDistance = Math.abs(boundary - ideal);
+    if (candidateDistance < distance) {
+      selected = boundary;
+      distance = candidateDistance;
+    }
+  }
+  return selected ?? nearestWhitespace(text, ideal, minimum, maximum);
+}
+
+function semanticOverlapStart(
+  boundaries: number[],
+  coreStart: number,
+  overlap: number,
+): number {
+  if (overlap === 0) return coreStart;
+  const minimum = coreStart - overlap;
+  return boundaries.find((boundary) =>
+    boundary >= minimum && boundary < coreStart
+  ) ?? coreStart;
 }
 
 // --- Stage 1: Extract (small model, runs in parallel per chunk) ---
@@ -67,7 +171,7 @@ const EXTRACT_PROMPT =
   `You are preparing evidence for a persistent knowledge wiki. Read the text and extract durable topical candidates that a later editor can compose into coherent wiki pages.
 
 Rules:
-- Extract 2-8 substantial candidates. Group claims that explain the same topic; do not split every fact, quotation, or example into its own item.
+- Extract 0-8 substantial candidates. Return an empty items array when this chunk contains no durable evidence. Group claims that explain the same topic; do not split every fact, quotation, or example into its own item.
 - Each title: 2-10 words, descriptive, unique, and suitable as a stable wiki heading.
 - Type each page as "concept", "entity", or "synthesis". Use "entity" for a specific person, organisation, place, product, drug, disease, study, or named system. Use "concept" for a reusable idea, finding, method, process, or caution. Use "synthesis" only for a comparison or conclusion that connects multiple ideas in this source.
 - Each body: a self-contained evidence brief that preserves the important context, mechanism, qualifications, examples, and quantities available for that topic. Prefer a few connected paragraphs over isolated sentences, but do not pad thin evidence.
@@ -161,11 +265,12 @@ function parseNoteArray(
   context: string,
   maxItems: number,
   resolveLinks = true,
+  minItems = 1,
 ): DistilNote[] {
   if (!Array.isArray(value)) throw new Error(`${context} must be an array`);
-  if (value.length === 0 || value.length > maxItems) {
+  if (value.length < minItems || value.length > maxItems) {
     throw new Error(
-      `${context} must contain 1-${maxItems} notes; received ${value.length}`,
+      `${context} must contain ${minItems}-${maxItems} notes; received ${value.length}`,
     );
   }
   const notes = value.map((note, index) =>
@@ -220,6 +325,7 @@ async function extractChunk(
         "Extraction response.items",
         MAX_ITEMS_PER_CHUNK,
         false,
+        0,
       );
     },
   );

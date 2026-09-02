@@ -235,9 +235,9 @@ Deno.test("LLM output is validated before integration or consolidation", async (
     };
     await assert.rejects(
       distil("Source text", apiBase, "test-key"),
-      /items must contain 1-8 notes/,
+      /Extraction produced 0 candidates; expected 1-256/,
     );
-    assert.equal(fetchCalls, 2, "empty extraction retries exactly once");
+    assert.equal(fetchCalls, 1, "an evidence-free source must not consolidate");
 
     fetchCalls = 0;
     globalThis.fetch = () => {
@@ -859,6 +859,66 @@ Deno.test("distil bounds extraction concurrency and preserves chunk order", asyn
       await Promise.resolve();
     }
     await run?.catch(() => undefined);
+    globalThis.fetch = originalFetch;
+    config.ingest.maxChars = originalMaxChars;
+    config.ingest.overlap = originalOverlap;
+  }
+});
+
+Deno.test("distil balances semantic chunks and permits an empty chunk", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalMaxChars = config.ingest.maxChars;
+  const originalOverlap = config.ingest.overlap;
+  const extractionChunks: string[] = [];
+  const transcript = "Operational demand varies across the working day. "
+    .repeat(300).slice(0, 12_040);
+
+  try {
+    config.ingest.maxChars = 12_000;
+    config.ingest.overlap = 500;
+    globalThis.fetch = (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as {
+        messages: Array<{ content: string }>;
+      };
+      const [system, user] = request.messages.map((message) => message.content);
+      if (system.includes("preparing evidence")) {
+        extractionChunks.push(user);
+        return Promise.resolve(chatResponse(JSON.stringify({
+          items: extractionChunks.length === 1
+            ? [{
+              title: "Demand and capacity",
+              type: "concept",
+              body: "Queues expose mismatches between demand and capacity.",
+              tags: ["flow"],
+              links: [],
+            }]
+            : [],
+        })));
+      }
+      return Promise.resolve(chatResponse(JSON.stringify({
+        notes: [{
+          title: "Demand and capacity",
+          type: "concept",
+          body: "Queues expose mismatches between demand and capacity.",
+          tags: ["flow"],
+          links: [],
+        }],
+      })));
+    };
+
+    const result = await distil(
+      transcript,
+      "http://stub.invalid/v1",
+      "test-key",
+    );
+    assert.equal(extractionChunks.length, 2);
+    assert.ok(extractionChunks.every((chunk) => chunk.length <= 12_000));
+    const chunkLengths = extractionChunks.map((chunk) => chunk.length);
+    assert.ok(extractionChunks.every((chunk) => chunk.length > 5_000));
+    assert.ok(Math.max(...chunkLengths) - Math.min(...chunkLengths) < 1_000);
+    assert.ok(extractionChunks[0].trimEnd().endsWith("."));
+    assert.equal(result.notes.length, 1);
+  } finally {
     globalThis.fetch = originalFetch;
     config.ingest.maxChars = originalMaxChars;
     config.ingest.overlap = originalOverlap;
