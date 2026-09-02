@@ -433,6 +433,13 @@ async function run(): Promise<void> {
       ),
       "true",
     );
+    assert.equal(
+      await client.evaluate<string>(
+        "getComputedStyle(document.querySelector('#graph .link-explicit')).stroke",
+      ),
+      "rgb(123, 184, 255)",
+      "Reviewed wiki links were not rendered blue",
+    );
     await client.evaluate("document.querySelector('#graph-fit').click()");
     await waitFor(
       () =>

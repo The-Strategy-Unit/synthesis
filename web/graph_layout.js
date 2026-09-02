@@ -46,10 +46,12 @@ export function semanticNeighbourLinks(nodes, links, neighboursPerPage) {
   }
 
   return [
-    ...explicit,
     ...links.filter((link) =>
       link.kind === "semantic" && selected.has(linkKey(link))
     ),
+    // SVG paints later elements on top. Keep reviewed links above proximity
+    // suggestions where unrelated edges cross.
+    ...explicit,
   ];
 }
 
@@ -124,7 +126,11 @@ export function graphFitTransform(
   const boundsHeight = Math.max(1, maxY - minY);
   const k = Math.max(
     minScale,
-    Math.min(maxScale, availableWidth / boundsWidth, availableHeight / boundsHeight),
+    Math.min(
+      maxScale,
+      availableWidth / boundsWidth,
+      availableHeight / boundsHeight,
+    ),
   );
 
   return {

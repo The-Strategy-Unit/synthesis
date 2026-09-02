@@ -326,7 +326,10 @@ configured embedding provider, and processes 1-100 missing pages. Each vector is
 committed only if its page stayed unchanged. Repeating the request resumes from
 missing pages; semantic search remains unavailable and links remain empty until
 coverage is complete. Completion rebuilds positive mutual cross-source
-nearest-neighbour links.
+nearest-neighbour links. The browser automatically repeats 20-page requests to
+cover the whole wiki, with a stop control that takes effect between batches.
+Rebuild batches use the serial job gate but do not consume the interactive
+semantic-search-per-minute allowance.
 
 ### `POST /api/discoveries/generate`
 
