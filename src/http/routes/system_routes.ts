@@ -29,7 +29,6 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
     path,
     req,
     resolveProviders,
-    semanticSearchGate,
   } = context;
 
   if (path === "/api/config" && method === "GET") {
@@ -108,7 +107,6 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
     } catch (error) {
       throw new ApiError(400, "INVALID_INPUT", errMsg(error));
     }
-    semanticSearchGate.check(identity);
     const release = await ingestGate.acquire(identity, req.signal, {
       countTowardsQuota: false,
     });

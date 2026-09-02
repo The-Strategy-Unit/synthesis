@@ -158,7 +158,9 @@ semantic links are empty after rebuild. A separately confirmed, provider-backed
 `POST /api/semantic-index/rebuild` processes missing page embeddings in bounded
 resumable batches and recreates links only after complete coverage. Proposals,
 discovery candidate coverage, and discoveries are cleared because their
-numeric-ID review state is not yet represented as durable vault files.
+numeric-ID review state is not yet represented as durable vault files. The
+browser repeats bounded 20-page requests until the whole wiki is covered or the
+user asks it to stop after the current batch.
 
 `POST /api/ingest/undo` selects the newest not-yet-undone history manifest. All
 current affected pages must match their recorded approved hashes. The operation

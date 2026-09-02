@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 import {
   graphFitTransform,
+  graphFocusNodeIds,
   graphLinkDistance,
   graphLinkStrength,
-  graphFocusNodeIds,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighbourLinks,
@@ -33,10 +33,13 @@ Deno.test("graph fit transform centres every positioned node with padding", () =
 Deno.test("graph fit transform handles missing positions and invalid viewports", () => {
   assert.deepEqual(graphFitTransform([{}], 800, 600), { x: 0, y: 0, k: 1 });
   assert.throws(() => graphFitTransform([], 0, 600), /width must be positive/);
-  assert.throws(() => graphFitTransform([], 800, -1), /height must be positive/);
+  assert.throws(
+    () => graphFitTransform([], 800, -1),
+    /height must be positive/,
+  );
 });
 
-Deno.test("semantic neighbour breadth is local, deterministic, and keeps explicit links", () => {
+Deno.test("semantic neighbour breadth keeps reviewed links painted last", () => {
   const nodes = [1, 2, 3, 4].map((id) => ({ id }));
   const links = [
     { source: 1, target: 4, kind: "explicit" },
@@ -48,11 +51,12 @@ Deno.test("semantic neighbour breadth is local, deterministic, and keeps explici
 
   assert.deepEqual(semanticNeighbourLinks(nodes, links, 0), [links[0]]);
   assert.deepEqual(semanticNeighbourLinks(nodes, links, 1), [
-    links[0],
     links[1],
     links[2],
     links[4],
+    links[0],
   ]);
+  assert.equal(semanticNeighbourLinks(nodes, links, 1).at(-1).kind, "explicit");
   assert.throws(
     () => semanticNeighbourLinks(nodes, links, -1),
     /must be non-negative/,
