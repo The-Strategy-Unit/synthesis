@@ -5,6 +5,7 @@ import {
   DEFAULT_WIKI_SCHEMA,
   ensureWikiSchema,
   loadWikiSchema,
+  promptWithWikiSchema,
   saveWikiSchema,
   validateWikiSchema,
   wikiSchemaPath,
@@ -80,4 +81,22 @@ Deno.test("wiki schema rejects unsafe or unstructured text", () => {
     () => validateWikiSchema(`# Huge\n\n${"x".repeat(16_001)}`),
     /must not exceed 16000 characters/,
   );
+});
+
+Deno.test("model prompts always include the mandatory editorial policy", () => {
+  const customSchema = validateWikiSchema(
+    `# Custom research schema\n\n## Purpose\n\n${
+      "Preserve domain-specific evidence and uncertainty. ".repeat(8)
+    }`,
+  );
+  const prompt = promptWithWikiSchema(
+    "Summarise the supplied evidence.",
+    customSchema,
+  );
+
+  assert.match(prompt, /British English/);
+  assert.match(prompt, /potentially mistranscribed/);
+  assert.match(prompt, /Do not fill gaps from background knowledge/);
+  assert.match(prompt, /plausible spelling or transcription variants/);
+  assert.match(prompt, /# Custom research schema/);
 });

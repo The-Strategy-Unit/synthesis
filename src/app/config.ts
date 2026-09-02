@@ -224,12 +224,12 @@ export const config = {
     apiBase: env("SYNTHESIS_API_BASE", "http://localhost:11434/v1"),
     apiKey: env("SYNTHESIS_API_KEY", "ollama"),
 
-    // Keep bulk extraction responsive while using the quality-first model for
-    // editorial and cross-source synthesis decisions.
-    extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.5:9b"),
-    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.5:122b"),
-    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.5:122b"),
-    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.5:122b"),
+    // Keep every knowledge-authoring role on the quality floor by default.
+    // Operators can still select another compatible provider model explicitly.
+    extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.8:27b"),
+    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.8:27b"),
+    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.8:27b"),
+    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.8:27b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
     extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),
@@ -334,7 +334,7 @@ export const config = {
   },
 
   build: {
-    version: "0.1.0",
+    version: "0.2.0",
   },
 };
 

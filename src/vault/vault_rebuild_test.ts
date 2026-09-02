@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { config } from "../app/config.ts";
 import { DB } from "../catalogue/db.ts";
+import { writeIngestHistory } from "./ingest_history.ts";
 import { rebuildVaultCatalogue } from "./vault_rebuild.ts";
 import { renderWikiPage } from "../wiki/wiki.ts";
 
@@ -104,6 +105,19 @@ Deno.test({
       );
       await Deno.writeTextFile(`${dir}/notes/index.md`, "stale index\n");
       await Deno.writeTextFile(`${dir}/notes/log.md`, "preserved log\n");
+      const alphaMarkdown = await Deno.readTextFile(`${dir}/notes/alpha.md`);
+      await writeIngestHistory({
+        proposalId: 1,
+        sourceHash: textHash,
+        sourceTitle: "Pasted evidence",
+        changes: [{
+          action: "contradict",
+          pageTitle: "Alpha mechanism",
+          filePath: `${dir}/notes/alpha.md`,
+          beforeContent: alphaMarkdown.replace("retained", "reported"),
+          afterContent: alphaMarkdown,
+        }],
+      });
 
       const staleSourceId = db.sources.addSource(
         "stale-source",
@@ -149,6 +163,12 @@ Deno.test({
       const beta = db.notes.getNoteByExactTitle("Beta observation");
       assert.ok(alpha);
       assert.ok(beta);
+      assert.equal(
+        db.sources.getSourceProvenanceForNote(alpha.id).find((source) =>
+          source.content_hash === textHash
+        )?.action,
+        "contradict",
+      );
       assert.deepEqual(
         db.search.searchKeyword("searchable").map((item) => item.id),
         [alpha.id],
