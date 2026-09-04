@@ -82,15 +82,37 @@ Deno.test("the pinned PDF.js canvas loader is patched narrowly", () => {
   assert.throws(() => patchPdfCanvasLoader("const untouched = true;"));
 });
 
-Deno.test("compiled trial flags are bounded and order-independent", () => {
+Deno.test("compiled vault and trial flags are bounded and order-independent", () => {
   assert.deepEqual(parseCompiledOptions([]), {
     trial: false,
     openBrowser: true,
+    vaultPath: null,
   });
   assert.deepEqual(parseCompiledOptions(["--no-open", "--trial"]), {
     trial: true,
     openBrowser: false,
+    vaultPath: null,
   });
+  assert.deepEqual(
+    parseCompiledOptions(["--no-open", "--vault", "HACA vault"]),
+    {
+      trial: false,
+      openBrowser: false,
+      vaultPath: "HACA vault",
+    },
+  );
+  assert.throws(
+    () => parseCompiledOptions(["--trial", "--vault", "vault"]),
+    /Usage/,
+  );
+  assert.throws(
+    () => parseCompiledOptions(["--vault"]),
+    /Usage/,
+  );
+  assert.throws(
+    () => parseCompiledOptions(["--vault", "first", "--vault", "second"]),
+    /Usage/,
+  );
   assert.throws(() => parseCompiledOptions(["--unknown"]), /Usage/);
   assert.throws(() => parseCompiledOptions(["--trial", "--trial"]), /Usage/);
 });

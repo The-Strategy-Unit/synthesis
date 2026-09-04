@@ -458,12 +458,13 @@ those shared rules.
 experimental QuickJS backend. It first bundles and minifies the application
 while leaving `sqlite-vec` and the credential-store addon as target-native npm
 packages. It embeds exactly `index.html`, `style.css`, and the generated browser
-bundle instead of the source, tests, docs, or local demo material. Native addons
-require the self-extracting layout. Because the pinned PDF.js Node build assumes
-a rendering canvas and sibling worker, compilation replaces exactly its two
-canvas loaders with a non-rendering text-extraction facade and embeds a minified
-worker at the expected path. The patch fails closed if that upstream shape
-changes.
+bundle instead of the source, tests, docs, or demo vault. Release archives place
+the tracked HACA 2025 vault beside the executable rather than embedding it in
+the binary. Native addons require the self-extracting layout. Because the pinned
+PDF.js Node build assumes a rendering canvas and sibling worker, compilation
+replaces exactly its two canvas loaders with a non-rendering text-extraction
+facade and embeds a minified worker at the expected path. The patch fails closed
+if that upstream shape changes.
 
 `deno task compile` targets the current host. The target-specific tasks emit
 Linux x86_64, macOS ARM64, or Windows x86_64 executables; `deno task build`
@@ -471,14 +472,15 @@ emits all three. An 80 MiB ceiling catches accidental dependency-tree growth.
 YouTube support remains external through `yt-dlp` beside the executable or on
 `PATH`.
 
-`src/app/compiled_entry.ts` opens the normal vault by default. `--trial` creates
-a disposable loopback-only vault, writes seven ordinary cited Markdown pages
-from four curated blood-pressure trial extracts, rebuilds the
-provider-independent catalogue, and opens the browser. Its guided story follows
-an apparent population-dependent disagreement into a direct trial-result
-conflict and a scoped, provenance-preserving resolution. The trial makes no
-provider call and uses the same vault format and application routes as ordinary
-operation.
+`src/app/compiled_entry.ts` opens the normal vault by default. `--vault <path>`
+opens an existing vault explicitly, including the `haca-2025-vault` shipped in
+release archives. `--trial` creates a disposable loopback-only vault, writes
+seven ordinary cited Markdown pages from four curated blood-pressure trial
+extracts, rebuilds the provider-independent catalogue, and opens the browser.
+Its guided story follows an apparent population-dependent disagreement into a
+direct trial-result conflict and a scoped, provenance-preserving resolution. The
+trial makes no provider call and uses the same vault format and application
+routes as ordinary operation.
 
 Run `deno task test:compiled <executable>` on the artefact's target OS. The
 smoke check covers the UI, native SQLite and `sqlite-vec` startup, PDF text
@@ -489,6 +491,7 @@ The same workflow is the release boundary. Pull requests and manual dispatches
 retain read-only repository permissions and upload CI artefacts. A pushed `v*`
 tag adds a dependent release job with narrowly scoped `contents: write`
 permission. It verifies the tag against `deno.json`, waits for all native smoke
-tests, packages each executable with the licence, generates SHA-256 checksums,
-and creates the GitHub Release. Published assets are treated as immutable;
-reruns accept an exact existing asset set and fail closed on any mismatch.
+tests, packages each executable with the licence and tracked HACA 2025 vault,
+generates SHA-256 checksums, and creates the GitHub Release. Published assets
+are treated as immutable; reruns accept an exact existing asset set and fail
+closed on any mismatch.
