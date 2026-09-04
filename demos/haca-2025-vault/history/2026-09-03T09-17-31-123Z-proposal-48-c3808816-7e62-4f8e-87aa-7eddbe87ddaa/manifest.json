@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "c3808816-7e62-4f8e-87aa-7eddbe87ddaa",
+  "operation": "ingest",
+  "proposalId": 48,
+  "sourceHash": "6074b87b81456f8da43cfd610ca8a058430002913f24251c8b22e46f2a35ccbc",
+  "sourceTitle": "HACA 2025 - Day 1 - Main Stage- Penny Dash",
+  "appliedAt": "2026-09-03T09:17:31.123Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Evolution of data use in the NHS",
+      "notePath": "notes/evolution-of-data-use-in-the-nhs.md",
+      "afterHash": "3228b2ce0841e12d404c38fd1ec2ba18a876ec29e9165227b0e9529025e2ea10"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Barriers to effective NHS data utilization",
+      "notePath": "notes/barriers-to-effective-nhs-data-utilization.md",
+      "afterHash": "dcad2d20208dfbdaf6d05a66cc34dc13b1ec7479e00cb26ffa16a63ed2596db5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Leadership and data literacy in healthcare",
+      "notePath": "notes/leadership-and-data-literacy-in-healthcare.md",
+      "afterHash": "0379697fdc27d1334b97ed3870d890e0ca03d58a629db5fb6b696cd26607d5ab"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Emerging technologies and operational methodologies",
+      "notePath": "notes/emerging-technologies-and-operational-methodologies.md",
+      "afterHash": "656c82934b14513f335bbbe1603e8af3e0973f257b3eac08f3bd173beb6c4425"
+    }
+  ]
+}

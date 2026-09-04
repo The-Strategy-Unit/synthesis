@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "historyId": "9bcc17e2-c5db-4cf0-a8d8-4de34bd0b23f",
+  "operation": "ingest",
+  "proposalId": 50,
+  "sourceHash": "c694f5302fdd7d6358cd12f1dcd947fd2f6dea83d2185f30fbbb2653d4850f90",
+  "sourceTitle": "HACA 2025 - Hubilo platform support drop in session for presenters",
+  "appliedAt": "2026-09-03T09:50:34.378Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Hacker Conference for Health and Care Analysts",
+      "notePath": "notes/hacker-conference-for-health-and-care-analysts.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "ca2ed67cb9fd441c92c9b10cf4f88b7ec86772d5a28a0ba8ff6649a9e2bc7d4e",
+      "afterHash": "5030294e96f173a8e68d4458fdbb1b9d544c3fc4cc365b71280359f72c79b778"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Virtual Event Backstage Interface",
+      "notePath": "notes/virtual-event-backstage-interface.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "5e15794eb83a7e017abcfe973128dead6091d938bbb3b7f91d1af178b5c7fc50",
+      "afterHash": "bebb9ec9c89a299bcfeda04e9d0fe48bc9317d4868c5496bce28a7c52c0034d8"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Virtual Presentation Best Practices",
+      "notePath": "notes/virtual-presentation-best-practices.md",
+      "afterHash": "7e28d676af2400c45868ee49c1c6abc37f95ea78dae285a1055f8bfd88f7c47d"
+    }
+  ]
+}

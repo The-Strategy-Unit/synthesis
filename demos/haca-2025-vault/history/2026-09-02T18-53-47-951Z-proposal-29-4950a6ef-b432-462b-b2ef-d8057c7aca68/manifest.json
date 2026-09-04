@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "4950a6ef-b432-462b-b2ef-d8057c7aca68",
+  "operation": "ingest",
+  "proposalId": 29,
+  "sourceHash": "4253f4ae7cd5f5f018429aa3c0eebb5639339c9d3ac0157d799fafcab9691968",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:53:47.951Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "The Woodyard Model for Business Intelligence",
+      "notePath": "notes/the-woodyard-model-for-business-intelligence.md",
+      "afterHash": "10f5b022c0085b3aed4031cabf77d31320d994b52561ea8c72cbb29632b14b3f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Waste Normalization in Data Teams",
+      "notePath": "notes/waste-normalization-in-data-teams.md",
+      "afterHash": "0e0ecce31871f4eab2b56f4ec27cf91e346a5f84136db7571c7a38784e93ca01"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Kent and Medway ICB Woodyard Implementation",
+      "notePath": "notes/kent-and-medway-icb-woodyard-implementation.md",
+      "afterHash": "2b7b51876062f903b14b9b21dd144e930aaa9b9deb36b3dfd61e917c1cc5885e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Siobhan Ligorish",
+      "notePath": "notes/siobhan-ligorish.md",
+      "afterHash": "59e140efc245270f9afcb08773abe92668234e12643e8332131761a6dc6fe33d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Upfront Data Mapping and Modeling",
+      "notePath": "notes/upfront-data-mapping-and-modeling.md",
+      "afterHash": "d1fc0bbdfeca9c2d55b7f37e536e6d38b000cd72a5824e559e3240b9c1a5d350"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Psychological Safety in Data Analytics Teams",
+      "notePath": "notes/psychological-safety-in-data-analytics-teams.md",
+      "afterHash": "648c640b1a4d31dab6c03aa36fcaabe7a207b69cfcdda4e890d68c68809a16db"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Stakeholder Communication in Data Projects",
+      "notePath": "notes/stakeholder-communication-in-data-projects.md",
+      "afterHash": "7d822a153b4fc7528efbe70bee3e9b166f62b3e3438f48ad1cbf4405429c0d6f"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "historyId": "dc736aa9-f45d-46d7-b3e6-f9fa3c7748df",
+  "operation": "ingest",
+  "proposalId": 39,
+  "sourceHash": "343441530949e0e495d05089019a63bf1f23cf8d513a355754c37edbe733aa97",
+  "sourceTitle": "HACA2025 - Day 1- Improving System Flow",
+  "appliedAt": "2026-09-02T20:05:25.684Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "The Woodyard Model for Business Intelligence",
+      "notePath": "notes/the-woodyard-model-for-business-intelligence.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "10f5b022c0085b3aed4031cabf77d31320d994b52561ea8c72cbb29632b14b3f",
+      "afterHash": "7881f4bd86e0ec074e4e1b2b8f835ecc920e3fc0a00506dad335a0c66666baec"
+    },
+    {
+      "action": "new",
+      "pageTitle": "GP Resilience Matrix Overview",
+      "notePath": "notes/gp-resilience-matrix-overview.md",
+      "afterHash": "259afcb77dfdea959f1ad5c17c3d7d8740c6bf2d4808787d5d90b0e991f4e39f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "GP Resilience Scoring Methodology",
+      "notePath": "notes/gp-resilience-scoring-methodology.md",
+      "afterHash": "8dee3f11ee919ba80a77a6bc4a5af68132747e57052e1b17a24ea33a0e16932b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "PowerBI for Population Health Management",
+      "notePath": "notes/powerbi-for-population-health-management.md",
+      "afterHash": "3021cab7428510234a3702031bb979551285df307195b588e6d68dc1327bc236"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Stakeholder Engagement in Health Data",
+      "notePath": "notes/stakeholder-engagement-in-health-data.md",
+      "afterHash": "7364e19861282039a9b634b14871c81e91ce4f8196ecff206a1f48ff37059deb"
+    }
+  ]
+}

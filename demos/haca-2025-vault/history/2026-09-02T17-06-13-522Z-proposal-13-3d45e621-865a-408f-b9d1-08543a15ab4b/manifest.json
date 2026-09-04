@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "3d45e621-865a-408f-b9d1-08543a15ab4b",
+  "operation": "ingest",
+  "proposalId": 13,
+  "sourceHash": "c58a3c91b72e979fe0a029e84b6a0b7e4d6313653d3821e31ea33252ab81c556",
+  "sourceTitle": "HACA 2025 - Day 1 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:06:13.522Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Custom CSS for Shiny application trust and design",
+      "notePath": "notes/custom-css-for-shiny-application-trust-and-design.md",
+      "afterHash": "636e6d7dcf61a6d52a3958d16f34a6652f6f971619027d8106714ddc2368c8a2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Learning and troubleshooting CSS in Shiny apps",
+      "notePath": "notes/learning-and-troubleshooting-css-in-shiny-apps.md",
+      "afterHash": "8d0b42801151609494aac6983a801dd2e8b58799bdbdfe4f8671dcbcd880c348"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Responsive layout techniques for Shiny dashboards",
+      "notePath": "notes/responsive-layout-techniques-for-shiny-dashboards.md",
+      "afterHash": "a73ab52464ffef264f74ee3ee76438461fb2bc7a4f0b7cbf565e9a71e49b67fc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Accessibility testing for Shiny applications",
+      "notePath": "notes/accessibility-testing-for-shiny-applications.md",
+      "afterHash": "e0396ef815561f95596fb1ccba2f2520bd8e86676fbd9b23c6755156de42992c"
+    }
+  ]
+}

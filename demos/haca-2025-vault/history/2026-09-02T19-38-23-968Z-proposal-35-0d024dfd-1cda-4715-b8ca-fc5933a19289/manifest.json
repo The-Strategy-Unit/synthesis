@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "0d024dfd-1cda-4715-b8ca-fc5933a19289",
+  "operation": "ingest",
+  "proposalId": 35,
+  "sourceHash": "6b82bd315b24dc6ec27c4ac7f0b6c4df7fb555fc0bf5aff704f875e8958e90af",
+  "sourceTitle": "HACA2025- Day 1- Improving System Flow",
+  "appliedAt": "2026-09-02T19:38:23.968Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Virtual Fracture Clinic Implementation at North Middlesex Hospital",
+      "notePath": "notes/virtual-fracture-clinic-implementation-at-north-middlesex-hospital.md",
+      "afterHash": "0ac609f1754827f728fe155971f4ff42ff781d0e61867e7297b81c47836aaf7d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Baseline Performance of Face-to-Face Fracture Clinic",
+      "notePath": "notes/baseline-performance-of-face-to-face-fracture-clinic.md",
+      "afterHash": "e71828e7196f7839bfcf34ec52ff84ee29c8424351e1853e8853df910d3322e9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Outcomes of Virtual Fracture Clinic Implementation",
+      "notePath": "notes/outcomes-of-virtual-fracture-clinic-implementation.md",
+      "afterHash": "0ab7a1bbc9b049b0ff7dabad8f4c76ac6c160bd139e5ee495938157b60719919"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Virtual Fracture Clinic Operational Efficiency and Attendance",
+      "notePath": "notes/virtual-fracture-clinic-operational-efficiency-and-attendance.md",
+      "afterHash": "db1c67aca654bd8617a71105192f0374ca76f465bd6e1a4892ee7566692a2bdd"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Virtual Fracture Clinic Workflow and Platform",
+      "notePath": "notes/virtual-fracture-clinic-workflow-and-platform.md",
+      "afterHash": "e3e30849cdafc405157c3cc0537cd2322630b6826f8aa44190112ae7e2f98adf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Virtual Fracture Clinic Triage and Patient Communication",
+      "notePath": "notes/virtual-fracture-clinic-triage-and-patient-communication.md",
+      "afterHash": "064bff9d71d935e1bf95ed201a37089403f5931afa1b38f4fcc58a519dea67c3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Virtual Fracture Clinic Challenges and Mitigations",
+      "notePath": "notes/virtual-fracture-clinic-challenges-and-mitigations.md",
+      "afterHash": "b15dae68ff2a721d6f8fa87c6af8f2a8c4e145b778d8ad6542c1416ec978075f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "British Orthopaedic Association Standards for Trauma Compliance",
+      "notePath": "notes/british-orthopaedic-association-standards-for-trauma-compliance.md",
+      "afterHash": "9f7469c37425a9ee2e2510f474254e7c07ac7b20648b18cc9e054135257e403a"
+    }
+  ]
+}

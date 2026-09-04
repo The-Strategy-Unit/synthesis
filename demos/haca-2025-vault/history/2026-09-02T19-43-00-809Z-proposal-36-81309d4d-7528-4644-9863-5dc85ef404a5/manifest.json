@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "81309d4d-7528-4644-9863-5dc85ef404a5",
+  "operation": "ingest",
+  "proposalId": 36,
+  "sourceHash": "522f92c51507a75fac0864487c96e46ca17eec831e993f6c011925f70f6cebf3",
+  "sourceTitle": "HACA2025 - Day 1- Improving System Flow",
+  "appliedAt": "2026-09-02T19:43:00.809Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Semi-automated MAT reporting workflow",
+      "notePath": "notes/semi-automated-mat-reporting-workflow.md",
+      "afterHash": "24a593554c156159b89f8d9d385d4414f9f4c4970a544b9c4de6163173a56bf3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Lothian MAT reporting tools",
+      "notePath": "notes/nhs-lothian-mat-reporting-tools.md",
+      "afterHash": "bbe8779998f4d39622f24205fbfd4cc2d054a2bc8104c9830ae9ae712da8f456"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Scotland Medication Assisted Treatment standards",
+      "notePath": "notes/scotland-medication-assisted-treatment-standards.md",
+      "afterHash": "dcc19940c91d2c11ef28ed1d0d16572ae48010ff48f67e2ffa13648d338bbc9d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Challenges in automated health data workflows",
+      "notePath": "notes/challenges-in-automated-health-data-workflows.md",
+      "afterHash": "77240bbcb17e832d5608d782ee0634e4087eeaeb74ac1c53715fa4520e91b5ea"
+    }
+  ]
+}

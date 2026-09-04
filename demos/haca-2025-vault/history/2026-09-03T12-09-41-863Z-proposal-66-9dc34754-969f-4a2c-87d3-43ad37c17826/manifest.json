@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "historyId": "9dc34754-969f-4a2c-87d3-43ad37c17826",
+  "operation": "ingest",
+  "proposalId": 66,
+  "sourceHash": "462e1b7c937bee80530079d9cfec328c13c9c50a5e7d24ff27179950b7a436f4",
+  "sourceTitle": "HACA2025 - Day 2 - Main Stage   Sam Riley",
+  "appliedAt": "2026-09-03T12:09:41.863Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Making Data Count Methodology",
+      "notePath": "notes/making-data-count-methodology.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "5116e5bdda80771ad7ea392319829d33aef6109248db91d230f56915b90e9d03",
+      "afterHash": "1a7be75ca0f3742f89b324ff78a2cb5bb7bb02e1e8ffe852f41cf58f426cee0e"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Raising the Analyst Voice",
+      "notePath": "notes/raising-the-analyst-voice.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "38eff11a116be3a83df6a153207707e1037fdf1e2d223e94cc09930672e8d743",
+      "afterHash": "3ce060e362c1af8b5baef874bc26a4b1ece9847ae6f52d6be275f07e65e8980a"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Informal Authority of Data Analysts",
+      "notePath": "notes/informal-authority-of-data-analysts.md",
+      "beforeRevision": "before/002.md",
+      "beforeHash": "5407bd039c42b87082597398c231f93ee4c6af28c54ce96d72f294f0309a10c7",
+      "afterHash": "eeeb64a6a4868a03d60c2b230d0495a784a8080a0dc6b62447dfc65e0eba4c28"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Narrative-Driven Statistical Analysis",
+      "notePath": "notes/narrative-driven-statistical-analysis.md",
+      "beforeRevision": "before/003.md",
+      "beforeHash": "1cca7964b945ec8c01d27c53a015b2471d433717141c59091f269cf82c395bc4",
+      "afterHash": "c3c4784288b9ed9a45fb5c4b0e232079c467850549bc932c4abd9322f51929d2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Rag Reporting Limitations",
+      "notePath": "notes/rag-reporting-limitations.md",
+      "afterHash": "11bf6092af40d7b19e384b85f135453ad84ebcee0cf2929a2c419db6ecb00027"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "historyId": "d53750a6-7d85-46d2-b907-aa87b4805387",
+  "operation": "ingest",
+  "proposalId": 23,
+  "sourceHash": "6c37c814b6b27db28c3e407e9fa6fd486e790401392f1420766891a2603ba813",
+  "sourceTitle": "HACA2025 - Day 2- Improving System Flow",
+  "appliedAt": "2026-09-02T18:12:39.307Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Data quality gaps in waiting list analysis",
+      "notePath": "notes/data-quality-gaps-in-waiting-list-analysis.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "1c5ef30db0d0b3a3ee9c22c5868c47a68a2ee435f26171aa81368bf53781946a",
+      "afterHash": "97986374e7b38e914a3373e2e82523baa66839b5acd087e9b5fd3517c0d2d72a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS waiting list reduction targets and scale",
+      "notePath": "notes/nhs-waiting-list-reduction-targets-and-scale.md",
+      "afterHash": "2188c12a28c13aefba4a780fbed8be84b3b95388691f9b6cc6571dd9ec517b39"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS waiting list analytics tools",
+      "notePath": "notes/nhs-waiting-list-analytics-tools.md",
+      "afterHash": "e06ef1e0d32dc576ae6c403d93d8b7677cc81c07bcb4e5ed4158b1d0bec18886"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Queuing theory metrics for waiting lists",
+      "notePath": "notes/queuing-theory-metrics-for-waiting-lists.md",
+      "afterHash": "92f463a395151e2b7a8942719d59dd266be870f442f7c75134d14449e2f7318c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Case studies in NHS waiting list performance",
+      "notePath": "notes/case-studies-in-nhs-waiting-list-performance.md",
+      "afterHash": "2f2e927c3b2884766bd2ab84acf48cef9602a7fa113a09ecc3294bca0ae59dc1"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "a34880e7-146a-4608-a8d3-a228985d802e",
+  "operation": "ingest",
+  "proposalId": 37,
+  "sourceHash": "e40025cc033d58ebc7da13c61995ba03b5fdae23b6fc51313fc734870f34a5b2",
+  "sourceTitle": "HACA2025 - Day 1- Improving System Flow",
+  "appliedAt": "2026-09-02T19:52:51.787Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS Industrial Action Timeline 2022-2024",
+      "notePath": "notes/nhs-industrial-action-timeline-2022-2024.md",
+      "afterHash": "081b2a90bcdaec0e204fb94236a20205a02bc28f5a2c7500d81d112f62ff0703"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Impact of Strikes on Emergency Department Durations",
+      "notePath": "notes/impact-of-strikes-on-emergency-department-durations.md",
+      "afterHash": "fe682b0d6532246ef1e6bbd7afe24d4cb624983bcb9ef7b57b35d0298f628819"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Causal Mediation Analysis of ED Flow",
+      "notePath": "notes/causal-mediation-analysis-of-ed-flow.md",
+      "afterHash": "b3e5010aa77d5242d96c3c31547adc22b351dd4124befaedf0bb49c38b847b6d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Theorized Mechanisms for ED Duration Changes",
+      "notePath": "notes/theorized-mechanisms-for-ed-duration-changes.md",
+      "afterHash": "4ec5e868f7b0a791bac2172ad1e95b0e7fbc1c4734378965f7ca2eb62c599953"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Exit Block Theory Support from Strike Data",
+      "notePath": "notes/exit-block-theory-support-from-strike-data.md",
+      "afterHash": "03c6f18f787bf97f4d9f585feecf7432406a2bb754d0d250645e725836c5d9a7"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Overall Findings on Planned Care and ED Durations",
+      "notePath": "notes/overall-findings-on-planned-care-and-ed-durations.md",
+      "afterHash": "6a21c68d930e0536f70dd9049d85d45d746600e90b331359eb38634ef4a737b2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Unexplained Reduction in ED Durations During Resident Strikes",
+      "notePath": "notes/unexplained-reduction-in-ed-durations-during-resident-strikes.md",
+      "afterHash": "c71d8dac29a5d3121ccdf9adfa7689e68849ef698c94058b0c6f652bc90cd57c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Performance Management and Crowding Hypotheses",
+      "notePath": "notes/performance-management-and-crowding-hypotheses.md",
+      "afterHash": "6fe2be245315c56b1069e42fac0fe52c6b0bbd1d47fe6c10d05c29f536a18a81"
+    }
+  ]
+}

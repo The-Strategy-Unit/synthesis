@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "e1ee270a-f753-4a92-ae03-e216a9031efe",
+  "operation": "ingest",
+  "proposalId": 59,
+  "sourceHash": "c2fc6deca39f4b466dbd18d3fe6888281756ba5be01daa2a97732d1b2b71ce56",
+  "sourceTitle": "HACA2025 - Day 1 - Improving System Flow",
+  "appliedAt": "2026-09-03T11:03:00.148Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS England COVID-19 Vaccine Forecasting System",
+      "notePath": "notes/nhs-england-covid-19-vaccine-forecasting-system.md",
+      "afterHash": "9fbd345ffc468a4afabc52386da467707f3341bc30c0954c7b0d4d318bfb74f5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Target Deployment Model for NHS Vaccines",
+      "notePath": "notes/target-deployment-model-for-nhs-vaccines.md",
+      "afterHash": "66da5289f1192598fe73b58051accddb3e0d963938ff55fee1f8728a7e10bb96"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Hybrid Forecasting Deployment Strategy",
+      "notePath": "notes/hybrid-forecasting-deployment-strategy.md",
+      "afterHash": "5411400091c876d34eb89107f4c97f16785f2c04f34284528054764a54a4c98d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "LightGBM Optimization and Zero-Inflation Handling",
+      "notePath": "notes/lightgbm-optimization-and-zero-inflation-handling.md",
+      "afterHash": "9e059045f76f823fc07ea16f364e673978e9346757342dbfd33fd27559ab0f76"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Vaccination Forecasting Bias and Environmental Drift",
+      "notePath": "notes/vaccination-forecasting-bias-and-environmental-drift.md",
+      "afterHash": "52f13088842ce69dadb66a65a3080ba5db2fd0498f107bad375eed3d0f07e3eb"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Quantifying Vaccine Waste Reduction",
+      "notePath": "notes/quantifying-vaccine-waste-reduction.md",
+      "afterHash": "6eac69e5e61c9404daaad2a3ed83cb054d64fe88d8a6c1ece38110a480126c08"
+    }
+  ]
+}

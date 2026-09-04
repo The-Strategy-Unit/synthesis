@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "33c29e95-12e5-497a-8b44-a6fdffffbdf5",
+  "operation": "ingest",
+  "proposalId": 16,
+  "sourceHash": "c20d69fb3874b6e7d7721df48153d079c195a3c9ecbacaf32f4cceaab68feb46",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:25:23.823Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Manchester University Foundation Trust sustainability profile",
+      "notePath": "notes/manchester-university-foundation-trust-sustainability-profile.md",
+      "afterHash": "12b8708bc951925d01fac517daf5dcc58b7e076e2cee3aae0407805a6513f118"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Digital transformation of sustainability data management",
+      "notePath": "notes/digital-transformation-of-sustainability-data-management.md",
+      "afterHash": "3aff7c4a107558159257357695dcdcb62ea50ccd6cf34af114098746b6cfee9d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Waste data consolidation and efficiency gains",
+      "notePath": "notes/waste-data-consolidation-and-efficiency-gains.md",
+      "afterHash": "0ddf39cd04f0557b80ce199dccff1574b9fdf9c6dcd8a99054810d911a09ff43"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Clinical waste segregation targets and carbon savings",
+      "notePath": "notes/clinical-waste-segregation-targets-and-carbon-savings.md",
+      "afterHash": "7d0d43103b523fdf06f798c1dd479e5b9b2146c1fe3604fff9514c95f09d7166"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Net Zero Commitment and Strategic Alignment",
+      "notePath": "notes/nhs-net-zero-commitment-and-strategic-alignment.md",
+      "afterHash": "8e6b92c20027df117c3a67aea80e4523b8e8ed546ff95534550df3fbbb5984a2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Iterative dashboard development methodology",
+      "notePath": "notes/iterative-dashboard-development-methodology.md",
+      "afterHash": "8f7c468fed769e264181bc2c62dcbd033c09068567bff32ded5f4c62e518d360"
+    },
+    {
+      "action": "new",
+      "pageTitle": "AI integration for PDF data extraction",
+      "notePath": "notes/ai-integration-for-pdf-data-extraction.md",
+      "afterHash": "4e1b3be090bfcf69534faaf6cc7f080b800f5574a685976fb358dc558c440c3b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Supplier data provision and relationship building",
+      "notePath": "notes/supplier-data-provision-and-relationship-building.md",
+      "afterHash": "4ab94a3e1e56d2c1e0f98b219f61d586e2db1a293a46462f1d310147508060ee"
+    }
+  ]
+}

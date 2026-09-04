@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "3c5312af-c54a-465a-8a56-a81dffb90465",
+  "operation": "ingest",
+  "proposalId": 43,
+  "sourceHash": "3e767760010e8518f1327843b9a281548b349b9105e696daa282966089349ec5",
+  "sourceTitle": "HACA 2025:Hubilo Platform Support Team Walkthrough",
+  "appliedAt": "2026-09-03T08:42:05.752Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Virtual Event Backstage Interface",
+      "notePath": "notes/virtual-event-backstage-interface.md",
+      "afterHash": "5e15794eb83a7e017abcfe973128dead6091d938bbb3b7f91d1af178b5c7fc50"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Host-Speaker Coordination and Stream Management",
+      "notePath": "notes/host-speaker-coordination-and-stream-management.md",
+      "afterHash": "cdab435c14b24b6bbb5b0c897c0c8cca8a22e3405bcf8609eec63199bec29bdd"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Technical Pre-Flight Checks and Support",
+      "notePath": "notes/technical-pre-flight-checks-and-support.md",
+      "afterHash": "cd24219466db4bc2759fad0a5d8ce9da5de7a5c16ecbbbc1c3f83793bed2501c"
+    }
+  ]
+}

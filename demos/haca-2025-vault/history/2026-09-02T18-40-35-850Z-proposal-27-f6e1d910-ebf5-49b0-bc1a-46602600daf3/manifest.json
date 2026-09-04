@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "f6e1d910-ebf5-49b0-bc1a-46602600daf3",
+  "operation": "ingest",
+  "proposalId": 27,
+  "sourceHash": "5f8a9f3001c62fc9f77b34cbb0c04528e28f8cfec304bc928b00befef68d8a6a",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:40:35.850Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Compartmental ODE modeling for endoscopy capacity",
+      "notePath": "notes/compartmental-ode-modeling-for-endoscopy-capacity.md",
+      "afterHash": "8e22e6dc2c57cc78841744ad49a15a7260895543809d0e48a7571defd1c4fe18"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Endoscopy capacity mismatch scenarios",
+      "notePath": "notes/endoscopy-capacity-mismatch-scenarios.md",
+      "afterHash": "14bc9a9a8d38b4f64363f3a2605b92bc1701d75a34c8fd65ed07131b089423d4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS endoscopy service challenges post-pandemic",
+      "notePath": "notes/nhs-endoscopy-service-challenges-post-pandemic.md",
+      "afterHash": "bb16ba590b86439ce2a365b3b0d01b93ad8d404e6e15268d0ce848eef62e6245"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of short-term endoscopy demand models",
+      "notePath": "notes/limitations-of-short-term-endoscopy-demand-models.md",
+      "afterHash": "1b331ffdbe637c50011a588dfa5a81f660ed8a0e49358db7b51f6459897f24bf"
+    }
+  ]
+}

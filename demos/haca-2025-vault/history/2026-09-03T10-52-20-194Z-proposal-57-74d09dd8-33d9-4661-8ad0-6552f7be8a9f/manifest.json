@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "74d09dd8-33d9-4661-8ad0-6552f7be8a9f",
+  "operation": "ingest",
+  "proposalId": 57,
+  "sourceHash": "745847cc6c3f79e0a10b45acead91a1380e28da9e4f6fa61470a8171e806bc68",
+  "sourceTitle": "HACA 2025: Shift to Community: Design a model for community pharmacy workforce with open source data",
+  "appliedAt": "2026-09-03T10:52:20.194Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Community Pharmacy Workforce Planning Model",
+      "notePath": "notes/community-pharmacy-workforce-planning-model.md",
+      "afterHash": "22b1b8e2be5177cd94938ba2fcf7e1b96a48d1886ee3dea9d19a8168b63391df"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Public Data Sources for Pharmacy Workforce",
+      "notePath": "notes/public-data-sources-for-pharmacy-workforce.md",
+      "afterHash": "5df3951ae0d8e5f813abd284e646369c2be272835a1fa9c728be1baed346d6d9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Python Data Pipeline for Pharmacy Data",
+      "notePath": "notes/python-data-pipeline-for-pharmacy-data.md",
+      "afterHash": "99998d3ef75d5a71b0ebde0af4179a3e4c6644edb54fb7b0e9fa8c0af782721f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHSPSA Open API Data Retrieval",
+      "notePath": "notes/nhspsa-open-api-data-retrieval.md",
+      "afterHash": "a633da1bc6e61d0412dfb463aed9b5ca09fe8c13a89745dbdf798dafc33a2662"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Human-in-the-Loop AI Coding Practices",
+      "notePath": "notes/human-in-the-loop-ai-coding-practices.md",
+      "afterHash": "c5e9500c32e0010473c7db87c8649090b7d9379dfe3b32a5983981fc874973f7"
+    },
+    {
+      "action": "new",
+      "pageTitle": "GitHub Version Control for Data Pipelines",
+      "notePath": "notes/github-version-control-for-data-pipelines.md",
+      "afterHash": "493cd508b06df028cb2c4851fe45f5e91d719bfd49d905fa3a436235a86d85fa"
+    },
+    {
+      "action": "new",
+      "pageTitle": "AI-Assisted Transition from Excel to Python",
+      "notePath": "notes/ai-assisted-transition-from-excel-to-python.md",
+      "afterHash": "f606e9f428e08d1e126bf2b50bb2f5765e55e2e77f71b12d152755648febbebc"
+    }
+  ]
+}

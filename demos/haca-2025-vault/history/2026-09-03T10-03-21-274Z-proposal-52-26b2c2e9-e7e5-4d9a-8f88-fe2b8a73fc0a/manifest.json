@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "26b2c2e9-e7e5-4d9a-8f88-fe2b8a73fc0a",
+  "operation": "ingest",
+  "proposalId": 52,
+  "sourceHash": "fd6bd80928c4b0c65306fd738a5cff8f39a0d82390b819f775bd611aca450729",
+  "sourceTitle": "HACA2025-Day 2 - Main Stage",
+  "appliedAt": "2026-09-03T10:03:21.274Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Enabling patient choice in end-of-life care",
+      "notePath": "notes/enabling-patient-choice-in-end-of-life-care.md",
+      "afterHash": "ed28b4dac51e340121887f2f554419bac8ffded1a364ce3a60bef4b9714f8fbf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Patient priorities and agency in palliative care",
+      "notePath": "notes/patient-priorities-and-agency-in-palliative-care.md",
+      "afterHash": "79502aaffa88539875e15607aa0be299f337e565dd9308ed5ddba8bd3027f5d7"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Barriers to preferred place of death",
+      "notePath": "notes/barriers-to-preferred-place-of-death.md",
+      "afterHash": "b1e5cc0042640e5f8e0042f6b33a01480b42d76e157abfd3b762c4e8e130c587"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Operational and workforce constraints in community care",
+      "notePath": "notes/operational-and-workforce-constraints-in-community-care.md",
+      "afterHash": "2209752aec75f0da105f71af1a2e5ed8df51dcfa569c0a9cffa3517f93bf1aa2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data limitations and geographic inequity in palliative care",
+      "notePath": "notes/data-limitations-and-geographic-inequity-in-palliative-care.md",
+      "afterHash": "c2961ed0f565048926ebc906ca1b5ce02ca0a57700d4f6e986329fe136b08e22"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Trends in home deaths in Scotland",
+      "notePath": "notes/trends-in-home-deaths-in-scotland.md",
+      "afterHash": "aad94c92cd4baebe282663142f64ed44e98488fbdc65a4445bdeca29a9fcdd6f"
+    }
+  ]
+}

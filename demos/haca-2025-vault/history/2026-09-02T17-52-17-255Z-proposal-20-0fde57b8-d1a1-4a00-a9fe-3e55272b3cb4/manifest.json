@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "0fde57b8-d1a1-4a00-a9fe-3e55272b3cb4",
+  "operation": "ingest",
+  "proposalId": 20,
+  "sourceHash": "cc3c8486a20e7c58736f1bad4677ed5c7215584db61e9f8140c5082bac08a0c0",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/Advancing Analytics",
+  "appliedAt": "2026-09-02T17:52:17.255Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "The triple threat analyst model",
+      "notePath": "notes/the-triple-threat-analyst-model.md",
+      "afterHash": "298bb59212c1ff2fb35de91e12b603dd149124f29790bfcfdcab8378e6eb7330"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Knowledge to Action cycle",
+      "notePath": "notes/knowledge-to-action-cycle.md",
+      "afterHash": "fb36f8a54d0d3b4a10427cd3a52053797af6db7c67ce67918a3889b53f675fcc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Analyst professional development strategies",
+      "notePath": "notes/analyst-professional-development-strategies.md",
+      "afterHash": "66eeea1bef45570abe133740c3b47ffb2e921943b8975a68e6bc59317873ee08"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Multi-level culture for analytical workforce development",
+      "notePath": "notes/multi-level-culture-for-analytical-workforce-development.md",
+      "afterHash": "75baedc55872f71d634bdf58c8625c646d65cad435139912520dc09dcc77a6af"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Bridging technical and client language gaps",
+      "notePath": "notes/bridging-technical-and-client-language-gaps.md",
+      "afterHash": "277fa0e17988a9c8fb2360b17560a28f426b937d1cb6857c87e981f1586a5eb9"
+    }
+  ]
+}

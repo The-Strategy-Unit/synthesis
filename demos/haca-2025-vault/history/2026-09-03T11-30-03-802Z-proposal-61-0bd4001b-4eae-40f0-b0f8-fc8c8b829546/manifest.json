@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "0bd4001b-4eae-40f0-b0f8-fc8c8b829546",
+  "operation": "ingest",
+  "proposalId": 61,
+  "sourceHash": "1ab79c84705d8722748abea67f7a8bc9e66033b5c3850661b91d70fd081b5656",
+  "sourceTitle": "HACA 2025 - Day 2 - Main Stage -  Minal Bahai",
+  "appliedAt": "2026-09-03T11:30:03.802Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "National Neighbourhood Health Implementation Programme",
+      "notePath": "notes/national-neighbourhood-health-implementation-programme.md",
+      "afterHash": "0bc4e0a375724b0c9359609a0bd87d517668c3e03aa5509b0155a9c04f7f1ede"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Dr Manal Bakai and NHS Primary Care Leadership",
+      "notePath": "notes/dr-manal-bakai-and-nhs-primary-care-leadership.md",
+      "afterHash": "3b38566bf94ce1cd281c7cf89272ef141f8863c9bea970b6847aa1e48b2a3525"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Healthcare Funding Imbalances and Workforce Trends",
+      "notePath": "notes/healthcare-funding-imbalances-and-workforce-trends.md",
+      "afterHash": "199543fb4b4d9ad8f4d2a9f30b7739797fc3be10a5af57c1adb39811b120c03e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Financial Sustainability and Workforce Wellbeing",
+      "notePath": "notes/nhs-financial-sustainability-and-workforce-wellbeing.md",
+      "afterHash": "d89dc871575513ed41629025ea4f9b199a28ffbe52418af99ec7e5c3b13eca52"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Whole Person Outcomes and Strength-Based Care",
+      "notePath": "notes/whole-person-outcomes-and-strength-based-care.md",
+      "afterHash": "4fd8e931540d9d0c9f1e441767f6ed2478e60b7ddf5278b43c768ea4075c26e9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Multimorbidity, Social Determinants, and Community Workers",
+      "notePath": "notes/multimorbidity-social-determinants-and-community-workers.md",
+      "afterHash": "83e632815dc921590c64b4c0014959592bfb59b280b4da32c18548d77d8fcdfe"
+    },
+    {
+      "action": "new",
+      "pageTitle": "High-Impact Actions and Implementation Models",
+      "notePath": "notes/high-impact-actions-and-implementation-models.md",
+      "afterHash": "a8643b95750d3cde52350eeb96104eb778632078a7714c1292db56f101fb6744"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Lessons from Past Healthcare Change Initiatives",
+      "notePath": "notes/lessons-from-past-healthcare-change-initiatives.md",
+      "afterHash": "ec9fde789438df699ae53b1830b7df1da0eda8e0685ffe348bc5bf0bd23782fd"
+    }
+  ]
+}

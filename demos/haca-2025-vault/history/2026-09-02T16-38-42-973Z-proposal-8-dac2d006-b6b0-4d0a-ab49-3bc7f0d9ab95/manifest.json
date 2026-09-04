@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "dac2d006-b6b0-4d0a-ab49-3bc7f0d9ab95",
+  "operation": "ingest",
+  "proposalId": 8,
+  "sourceHash": "709e547f8fa6aef75ab7c7a19d39358d2b068a13055e48854f5f03b236c49d6e",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T16:38:42.973Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Mental Health Rough Sleepers Programme",
+      "notePath": "notes/mental-health-rough-sleepers-programme.md",
+      "afterHash": "8f829e58a07ccccb80284218059bc15b4845849ad5513f778d5a45caa5158c54"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Evaluation of Mental Health Rough Sleepers Programme",
+      "notePath": "notes/evaluation-of-mental-health-rough-sleepers-programme.md",
+      "afterHash": "a3881a93c6cd5127372db44fc808af794c3247488b2f52a3e063c921cebad43a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Synthetic Difference-in-Differences for Non-Normal Outcomes",
+      "notePath": "notes/synthetic-difference-in-differences-for-non-normal-outcomes.md",
+      "afterHash": "67b0a419fba64daf5081b2863475d49b9c5b1f97dd5f600b23209528bc214961"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of Classic Synthetic Difference-in-Differences",
+      "notePath": "notes/limitations-of-classic-synthetic-difference-in-differences.md",
+      "afterHash": "893c396b5888f73456deba75a5bf5ab27382c8c185756ded2e7e6c4b5c283130"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Generalised Synthetic Control for Non-Normal Data",
+      "notePath": "notes/generalised-synthetic-control-for-non-normal-data.md",
+      "afterHash": "4ca3052b60864560a26ccb574cdc8904fd0537b26ff338483fb13dfb62d2245e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Uncertainty Estimation via Placebo Testing",
+      "notePath": "notes/uncertainty-estimation-via-placebo-testing.md",
+      "afterHash": "b09df7974c9bcf61e250c0784dacaa4f4db95cfdef7c522415a9ac9f709ba7dc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Statistical Challenges in Small Control Unit Analysis",
+      "notePath": "notes/statistical-challenges-in-small-control-unit-analysis.md",
+      "afterHash": "b7f3e9fc189565d3d53d0d76c6dc090ebe83985253a34b20500441e9d11142d2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Implicit Adjustment for Supporting Services in Synthetic Controls",
+      "notePath": "notes/implicit-adjustment-for-supporting-services-in-synthetic-controls.md",
+      "afterHash": "04e45f8f6574f9112544f56b58a8c55c1f6de0e432ed547d10d61f2eaf9520d3"
+    }
+  ]
+}

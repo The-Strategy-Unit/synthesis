@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "historyId": "fdf93017-a496-41f8-b646-ab67a2cf57e4",
+  "operation": "ingest",
+  "proposalId": 64,
+  "sourceHash": "a8eab1152ce43a4f7b61c07e957e4e57fc4e55508cca1575b3a6e913d30aa33a",
+  "sourceTitle": "HACA 2025: Shift to Community: A model is for life, not just for Christmas...",
+  "appliedAt": "2026-09-03T11:55:01.727Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Demand and capacity modeling for acute care",
+      "notePath": "notes/demand-and-capacity-modeling-for-acute-care.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "60c893f514d659dffc2c06aef3a30c4a039f155a5de4cf89fa90dc5559924cfd",
+      "afterHash": "0e21e5be321d21342425cd7fa9f7b482222a7a24fc235821df1e105f13e1d0fa"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Operationalizing Data Model Delivery",
+      "notePath": "notes/operationalizing-data-model-delivery.md",
+      "afterHash": "cab00a7076c25afc1ed10f11edaa6d6e18e677ad5a7ef7f88f01f6ca2ba2b6bf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Tripartite Leadership Team for Model Rollout",
+      "notePath": "notes/tripartite-leadership-team-for-model-rollout.md",
+      "afterHash": "ea3bf4907c882940fc221902cd5ef6cfd65b263787b993fd464d6db1889b1488"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Multidisciplinary Prioritization in Complex Projects",
+      "notePath": "notes/multidisciplinary-prioritization-in-complex-projects.md",
+      "afterHash": "2da3fbf2ca5c366573d2e4ece65363d602ae4796a2c5dc2815dd2072345d9fbc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Compassionate Leadership in Complex Change",
+      "notePath": "notes/compassionate-leadership-in-complex-change.md",
+      "afterHash": "d734496becf7a6b63050c74b2fa8245055aaca67b8af8586dce08b46dbd8bbab"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Resource Constraints in Data Science Initiatives",
+      "notePath": "notes/resource-constraints-in-data-science-initiatives.md",
+      "afterHash": "e0b6cc03c5b92dd7eccc73b0c107de2ad5a724df5aa04b51bc1a69f770126f2e"
+    }
+  ]
+}

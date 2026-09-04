@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "f6bbba3d-48b1-44be-addd-b82dc78b9f63",
+  "operation": "ingest",
+  "proposalId": 30,
+  "sourceHash": "c9cef846d25d9e678eac83035bbd9d3f1a365a538945efc70b8839edab1e8d1a",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:59:12.019Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Brent Adult Social Care Multi-State Transition Model",
+      "notePath": "notes/brent-adult-social-care-multi-state-transition-model.md",
+      "afterHash": "c8a76ff0ab312dfc13fa19c542d3f3e1bdd329e5dc2472e2fb1f7bcdcf6d1b3e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Social Care Transition Probabilities and Demographics",
+      "notePath": "notes/social-care-transition-probabilities-and-demographics.md",
+      "afterHash": "277fbaa8bb07eb6754a60d0734fbd921d310c9a80242dd5eacd4d66c586a8bc1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of Brent Social Care Transition Model",
+      "notePath": "notes/limitations-of-brent-social-care-transition-model.md",
+      "afterHash": "ac6247214684a36d11682d412054d466b13479c3772c360da197ba69348f3434"
+    }
+  ]
+}

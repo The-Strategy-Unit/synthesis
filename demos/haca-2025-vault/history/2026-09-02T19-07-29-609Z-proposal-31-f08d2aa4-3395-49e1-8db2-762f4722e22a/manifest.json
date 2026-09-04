@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "f08d2aa4-3395-49e1-8db2-762f4722e22a",
+  "operation": "ingest",
+  "proposalId": 31,
+  "sourceHash": "8278ef9eb6c1f477ce53d510d40b7ae59ff0f46981e766407a5a529526daa3a4",
+  "sourceTitle": "HACA2025 - Day 2 -  Improving System Flow",
+  "appliedAt": "2026-09-02T19:07:29.609Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Medical patient boarding and its systemic impacts",
+      "notePath": "notes/medical-patient-boarding-and-its-systemic-impacts.md",
+      "afterHash": "65384dbac68fb2681f0065b4b78d99630c277b5cb335ff913f66ddc5fa23dfbe"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Statistical modeling of boarding-related harm",
+      "notePath": "notes/statistical-modeling-of-boarding-related-harm.md",
+      "afterHash": "8d1e545ca0ca8eb3ff29c82e5be0911fe357a8aac3d72cb63132dc68dcb87852"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Continuous flow model in hospital operations",
+      "notePath": "notes/continuous-flow-model-in-hospital-operations.md",
+      "afterHash": "3cacf34c76f866dad428afa7cf2b54319691c4a2ead199c61d67463c937a5c57"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Excess Impacts dashboard for ED monitoring",
+      "notePath": "notes/excess-impacts-dashboard-for-ed-monitoring.md",
+      "afterHash": "ff5b01de021c383940355fcdc514bb38385139098055735ac178bd4f194da74c"
+    }
+  ]
+}
