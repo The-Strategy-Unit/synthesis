@@ -53,6 +53,33 @@ Blue edges are reviewed links stored in Markdown. Grey edges are mutual
 nearest-neighbour suggestions derived from embeddings: useful for exploration,
 but neither confirmed relationships nor confidence scores.
 
+## Explore the HACA 2025 vault
+
+Release archives include a ready-to-use knowledge vault compiled from 66
+recordings from the 2025 Health and Care Analytics Conference. Download and
+extract the archive for your platform from the
+[latest release](https://github.com/The-Strategy-Unit/synthesis/releases/latest),
+then run:
+
+```bash
+# Linux
+chmod +x synthesis-linux-x86_64
+./synthesis-linux-x86_64 --vault haca-2025-vault
+
+# macOS ARM64
+chmod +x synthesis-macos-aarch64
+./synthesis-macos-aarch64 --vault haca-2025-vault
+
+# Windows PowerShell
+.\synthesis-windows-x86_64.exe --vault haca-2025-vault
+```
+
+The included catalogue is already built, with 344 wiki pages and their
+precomputed graph, so reading, cited evidence, keyword search, and graph
+exploration do not need an AI provider. See the vault's own
+[`README.md`](demos/haca-2025-vault/README.md) for its provenance, AI models,
+publication review, and limitations.
+
 ## Try the guided conflict demo
 
 The disposable trial needs no model and makes no provider call. It shows how a
@@ -162,12 +189,16 @@ location with `SYNTHESIS_VAULT`:
 SYNTHESIS_VAULT="$PWD/my-vault" deno task app
 ```
 
-For a downloaded Windows executable, set the vault for the current PowerShell
-session, then start Synthesis without `--trial`:
+Downloaded executables accept an existing vault path directly:
+
+```bash
+./synthesis-linux-x86_64 --vault /path/to/my-vault
+```
+
+On Windows PowerShell:
 
 ```powershell
-$env:SYNTHESIS_VAULT = 'C:\Users\username\My_folder\myvault'
-.\synthesis-windows-x86_64.exe
+.\synthesis-windows-x86_64.exe --vault 'C:\Users\username\My_folder\myvault'
 ```
 
 After stopping Synthesis, you can move the complete vault directory as one unit.
@@ -175,12 +206,15 @@ Its catalogue stores vault-relative file paths, and older absolute catalogue
 paths are normalised when the moved vault is next opened. A normal shutdown
 closes SQLite and removes its transient WAL and shared-memory sidecars.
 
-Use **Vault tools → Export vault** for a portable tar archive. It excludes the
-rebuildable database and provider credentials. After extracting an export into
-an empty directory, open it with `SYNTHESIS_VAULT`, choose **Rebuild
-catalogue**, then build or resume the semantic index if semantic search is
-required. One click continues through the whole wiki in bounded 20-page batches;
-choose **Stop after current batch** to pause safely and resume later.
+`vault.json`, `schema.md`, `notes/`, `sources/`, and `history/` are
+authoritative. `synthesis.db` and its temporary `-wal` and `-shm` sidecars are
+derived. Use **Vault tools → Export vault** for a portable tar archive; it
+excludes the database and provider credentials. To reconstruct the database,
+extract an export into an empty directory, open it with `SYNTHESIS_VAULT`, then
+choose **Rebuild catalogue**. Build or resume the semantic index separately if
+semantic search is required. One click continues through the whole wiki in
+bounded 20-page batches; choose **Stop after current batch** to pause safely and
+resume later.
 
 ### Recompile archived sources
 
@@ -230,8 +264,8 @@ git push origin v0.2.1
 ```
 
 GitHub Actions verifies the tag, runs native compiled smoke tests on Linux,
-macOS, and Windows, then publishes the platform archives, generated notes, and
-`SHA256SUMS`.
+macOS, and Windows, then publishes platform archives containing the executable,
+licence, and HACA 2025 vault, together with generated notes and `SHA256SUMS`.
 
 ## Documentation
 

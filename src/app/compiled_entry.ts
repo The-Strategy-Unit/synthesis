@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+
 import { announceAndOpen, environmentBoolean } from "./browser_launcher.ts";
 import {
   cleanTrialRun,
@@ -9,20 +11,41 @@ import {
 export interface CompiledOptions {
   trial: boolean;
   openBrowser: boolean;
+  vaultPath: string | null;
 }
 
 export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
-  const allowed = new Set(["--trial", "--no-open"]);
-  if (
-    args.some((argument) => !allowed.has(argument)) ||
-    new Set(args).size !== args.length
-  ) {
-    throw new Error("Usage: synthesis [--trial] [--no-open]");
+  const usage = "Usage: synthesis [--trial | --vault <path>] [--no-open]";
+  let trial = false;
+  let openBrowser = true;
+  let vaultPath: string | null = null;
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    if (argument === "--trial") {
+      if (trial) throw new Error(usage);
+      trial = true;
+      continue;
+    }
+    if (argument === "--no-open") {
+      if (!openBrowser) throw new Error(usage);
+      openBrowser = false;
+      continue;
+    }
+    if (argument === "--vault") {
+      const value = args[++index];
+      if (
+        vaultPath !== null || !value || value.startsWith("--") ||
+        value.length > 4_096 || /\p{Cc}/u.test(value)
+      ) {
+        throw new Error(usage);
+      }
+      vaultPath = value;
+      continue;
+    }
+    throw new Error(usage);
   }
-  return {
-    trial: args.includes("--trial"),
-    openBrowser: !args.includes("--no-open"),
-  };
+  if (trial && vaultPath !== null) throw new Error(usage);
+  return { trial, openBrowser, vaultPath };
 }
 
 async function main(): Promise<void> {
@@ -53,7 +76,20 @@ async function main(): Promise<void> {
     : ["SIGINT", "SIGTERM"];
   for (const signal of signals) Deno.addSignalListener(signal, stop);
   try {
-    if (options.trial) trial = await prepareTrialRun();
+    if (options.trial) {
+      trial = await prepareTrialRun();
+    } else if (options.vaultPath !== null) {
+      const vaultPath = resolve(options.vaultPath);
+      const manifest = await Deno.stat(join(vaultPath, "vault.json")).catch(
+        () => null,
+      );
+      if (!manifest?.isFile) {
+        throw new Error(
+          `Vault ${vaultPath} does not contain a regular vault.json file`,
+        );
+      }
+      Deno.env.set("SYNTHESIS_VAULT", vaultPath);
+    }
     const [{ config }, { startApplication }] = await Promise.all([
       import("./config.ts"),
       import("./application.ts"),

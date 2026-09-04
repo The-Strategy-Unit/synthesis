@@ -4,6 +4,7 @@
 
 # Ignore database
 *.db*
+!demos/haca-2025-vault/synthesis.db
 
 # Deno cache
 .deno/
