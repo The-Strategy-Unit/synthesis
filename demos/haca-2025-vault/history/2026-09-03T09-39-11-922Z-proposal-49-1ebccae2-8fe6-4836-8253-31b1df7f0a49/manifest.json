@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "historyId": "1ebccae2-8fe6-4836-8253-31b1df7f0a49",
+  "operation": "ingest",
+  "proposalId": 49,
+  "sourceHash": "878c759035593edfbf9a4fe3d587310c1d127c7c1540b73f575cdc664487302e",
+  "sourceTitle": "HACA2025 - Day 1 - Main Stage - Panel Discussion",
+  "appliedAt": "2026-09-03T09:39:11.922Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "NHS Analytical Strategy and Workforce Challenges",
+      "notePath": "notes/nhs-analytical-strategy-and-workforce-challenges.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "94a460f033a57e65a37a34a025f46c14562a67df3854a800249241250287dcd6",
+      "afterHash": "d9a39c4f3caad662c3df6aa9e601114fbd63c16739ce1d013bbd7cd91a0b58b6"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Leadership and data literacy in healthcare",
+      "notePath": "notes/leadership-and-data-literacy-in-healthcare.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "0379697fdc27d1334b97ed3870d890e0ca03d58a629db5fb6b696cd26607d5ab",
+      "afterHash": "7a97dc69006cc0ab46c008322cf93366fe58c288f6397028f68d87c48b1868ca"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Network Data Lab and Discover dataset",
+      "notePath": "notes/network-data-lab-and-discover-dataset.md",
+      "beforeRevision": "before/002.md",
+      "beforeHash": "7272137816ed4d861d4055578938387d53f42df25b16c04775ab62cfe76b5405",
+      "afterHash": "afe5e48f83aad466a6624b6fb017b8c5605ca916d2d235d0d9e2fb379cbabc73"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Multi-level culture for analytical workforce development",
+      "notePath": "notes/multi-level-culture-for-analytical-workforce-development.md",
+      "beforeRevision": "before/003.md",
+      "beforeHash": "75baedc55872f71d634bdf58c8625c646d65cad435139912520dc09dcc77a6af",
+      "afterHash": "7e17e7f98341ea9df6877cee8d9b55d0b47dd807c173239a25e81aebdb14d576"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Strategic commissioning and clinician engagement",
+      "notePath": "notes/strategic-commissioning-and-clinician-engagement.md",
+      "afterHash": "6cf9a8ee80cd3283b17dfe09f80f3047173e8cefba49c6e8bdfbb330a01e3713"
+    }
+  ]
+}

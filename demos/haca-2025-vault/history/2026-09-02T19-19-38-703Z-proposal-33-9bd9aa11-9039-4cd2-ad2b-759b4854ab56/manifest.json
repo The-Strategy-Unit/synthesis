@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "9bd9aa11-9039-4cd2-ad2b-759b4854ab56",
+  "operation": "ingest",
+  "proposalId": 33,
+  "sourceHash": "cae16bb3e36bdf003fdecd4acce2217a0bba233bd3863533a894059d8a570340",
+  "sourceTitle": "HACA 2025- Day 1 - Improving System Flow",
+  "appliedAt": "2026-09-02T19:19:38.703Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Right Care Right Person initiative in Suffolk",
+      "notePath": "notes/right-care-right-person-initiative-in-suffolk.md",
+      "afterHash": "ec1efa1a3733a4af7cb26de37782f574a78e74a2e1fe43ba9712a9bb0778b767"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Evaluation of Right Care Right Person impact",
+      "notePath": "notes/evaluation-of-right-care-right-person-impact.md",
+      "afterHash": "d70ebfbebe4edc310eeccad6a7e273840efbe1a69e56287621c4bcb91c3d16e6"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data integration in multi-agency health analysis",
+      "notePath": "notes/data-integration-in-multi-agency-health-analysis.md",
+      "afterHash": "924a0c806b9cc6404ef5715ff34596d24c30ba468aa74e5c246772b85d9d56d4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Qualitative evaluation of service impact",
+      "notePath": "notes/qualitative-evaluation-of-service-impact.md",
+      "afterHash": "a82999ba68a791252250fcf4e3a784985662d30c290da1c0b18b04e3f53450e1"
+    }
+  ]
+}

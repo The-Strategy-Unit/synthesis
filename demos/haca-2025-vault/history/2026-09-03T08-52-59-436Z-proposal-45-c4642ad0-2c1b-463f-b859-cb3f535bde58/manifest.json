@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "historyId": "c4642ad0-2c1b-463f-b859-cb3f535bde58",
+  "operation": "ingest",
+  "proposalId": 45,
+  "sourceHash": "1b306da78ea7930c26da492fe36287265a4856641dfefaf95517f7fec5cdfea6",
+  "sourceTitle": "HACA 2025 - Day 1-Main Stage - Closing Session",
+  "appliedAt": "2026-09-03T08:52:59.436Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Professor Ben Goldacre's 2022 Report on NHS Analytics",
+      "notePath": "notes/professor-ben-goldacre-s-2022-report-on-nhs-analytics.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "295455dfe41be6726c5ea98bbc30227f44534e6cfcf63c76ef51b88cb8f57731",
+      "afterHash": "c3eb102c8d02091a777e85f05b5c7fafa46220411636cec824fc5be1cedc9b21"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Structuring the NHS Analytic Community",
+      "notePath": "notes/structuring-the-nhs-analytic-community.md",
+      "afterHash": "2ab67f2b45113ac1649b9c26956b8ce672928adb3410680f74d2ce9f0e8e11ce"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Data Infrastructure and Documentation",
+      "notePath": "notes/nhs-data-infrastructure-and-documentation.md",
+      "afterHash": "fc92959a5f9e90a63e364fc6283407b39956d4af0b90c2c3c585de1c89d3a430"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Practical Analytics vs AI in NHS Care",
+      "notePath": "notes/practical-analytics-vs-ai-in-nhs-care.md",
+      "afterHash": "70a279412afadac303472a8fd4117ebda0745ce30121ba4fa927e7be04f4a684"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Propositional Approach to NHS Data Progress",
+      "notePath": "notes/propositional-approach-to-nhs-data-progress.md",
+      "afterHash": "1caf15be8dc8d4731b99a04ecbf376ba610eb9defe6c1736c3c4d701c44b90cf"
+    }
+  ]
+}

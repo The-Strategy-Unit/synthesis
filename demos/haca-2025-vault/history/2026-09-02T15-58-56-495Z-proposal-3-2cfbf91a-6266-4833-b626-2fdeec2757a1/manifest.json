@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "2cfbf91a-6266-4833-b626-2fdeec2757a1",
+  "operation": "ingest",
+  "proposalId": 3,
+  "sourceHash": "71f4c5acee41bdee5399e2f867de00b3e342b95e0611fc1f264907572c5ccddd",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/Advancing Analytics",
+  "appliedAt": "2026-09-02T15:58:56.495Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "A&E waiting time inequality and multivariate analysis",
+      "notePath": "notes/a-e-waiting-time-inequality-and-multivariate-analysis.md",
+      "afterHash": "af34936045fcff1b45f5b2747a135ae8f3a3e0ef65ef74582de5c21e44be7f1a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Machine learning models for A&E waiting time prediction",
+      "notePath": "notes/machine-learning-models-for-a-e-waiting-time-prediction.md",
+      "afterHash": "528042dd08ce6a0a17d2cea0a30082e6c2cedb4a5acff105d1f47d4824bd7142"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Feature importance in A&E waiting times",
+      "notePath": "notes/feature-importance-in-a-e-waiting-times.md",
+      "afterHash": "8a70a9392031c5273ab457a79b854f0a7b06a6b54979e6dfb442ea5e8cca3877"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of A&E predictive modelling",
+      "notePath": "notes/limitations-of-a-e-predictive-modelling.md",
+      "afterHash": "e6ec0a113cc6208ff453546f757e1adb47f0d1db6469a4c5cfe971838ddf1021"
+    },
+    {
+      "action": "new",
+      "pageTitle": "In-house machine learning application in healthcare",
+      "notePath": "notes/in-house-machine-learning-application-in-healthcare.md",
+      "afterHash": "0990bb16c08682a594b9298d6c722e5158edfc119626a707288756d3b145407e"
+    }
+  ]
+}

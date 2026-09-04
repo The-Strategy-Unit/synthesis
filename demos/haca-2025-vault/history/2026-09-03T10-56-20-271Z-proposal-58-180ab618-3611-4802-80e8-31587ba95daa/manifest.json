@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "historyId": "180ab618-3611-4802-80e8-31587ba95daa",
+  "operation": "ingest",
+  "proposalId": 58,
+  "sourceHash": "204d6c951898b5b785555c434bb05f80b85099c35b3e036a6960311a00467afe",
+  "sourceTitle": "HACA2025 - DAY 2 - Main Stage - Opening Session",
+  "appliedAt": "2026-09-03T10:56:20.271Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Hacker Conference for Health and Care Analysts",
+      "notePath": "notes/hacker-conference-for-health-and-care-analysts.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "5030294e96f173a8e68d4458fdbb1b9d544c3fc4cc365b71280359f72c79b778",
+      "afterHash": "e54360540f56c60214532a059aed087886a164bb935e4054f84f8ed391df93be"
+    },
+    {
+      "action": "new",
+      "pageTitle": "The value of data analytics in healthcare",
+      "notePath": "notes/the-value-of-data-analytics-in-healthcare.md",
+      "afterHash": "b49ab32b00aaf15c1cef25f9f5a6b445272a2ab16772b3bb1491c7f29b63af00"
+    },
+    {
+      "action": "new",
+      "pageTitle": "AI efficiency versus equity and nuance",
+      "notePath": "notes/ai-efficiency-versus-equity-and-nuance.md",
+      "afterHash": "8a0db15352514939cb21f034b6a3d5eedfab137e283579fa2bceec8512a7fc38"
+    }
+  ]
+}

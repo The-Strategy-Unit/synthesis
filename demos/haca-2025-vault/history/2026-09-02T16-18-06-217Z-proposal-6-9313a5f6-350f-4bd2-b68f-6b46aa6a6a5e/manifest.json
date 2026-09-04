@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "9313a5f6-350f-4bd2-b68f-6b46aa6a6a5e",
+  "operation": "ingest",
+  "proposalId": 6,
+  "sourceHash": "24100735e7b6329ee0c8d8ec37fc223b3f94d00d7586674455fdb73bfa4bf9b1",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/Advancing  Analytics",
+  "appliedAt": "2026-09-02T16:18:06.217Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Product versus delivery mindset in data science",
+      "notePath": "notes/product-versus-delivery-mindset-in-data-science.md",
+      "afterHash": "801642bbc53da62be96b2fb8f6a5ffc33f039b1ecad43dee694da7a14aca633a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "User-centric design in analytics",
+      "notePath": "notes/user-centric-design-in-analytics.md",
+      "afterHash": "4eedb456ddb5d5c040ea88299b61760a8f9e63aada427278a3ab6df1dc9a3c51"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Agile adaptation in data science",
+      "notePath": "notes/agile-adaptation-in-data-science.md",
+      "afterHash": "e316366410f69e340e993be724f9b85444b7fef989c059d5026691c8f3dcad3b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Demand and capacity modeling for acute care",
+      "notePath": "notes/demand-and-capacity-modeling-for-acute-care.md",
+      "afterHash": "3241a1524ed9286231b286f6cc13be047e1b12c40fd8f12d4aa871580aeaabce"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Career progression for non-technical roles in data science",
+      "notePath": "notes/career-progression-for-non-technical-roles-in-data-science.md",
+      "afterHash": "2297a8ff7887339ba133a87dd6bae5fd9b65750ffc4cea946090a0fd76a459f3"
+    }
+  ]
+}

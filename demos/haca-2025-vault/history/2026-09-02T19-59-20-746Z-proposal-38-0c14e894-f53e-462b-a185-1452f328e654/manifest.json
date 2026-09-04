@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "0c14e894-f53e-462b-a185-1452f328e654",
+  "operation": "ingest",
+  "proposalId": 38,
+  "sourceHash": "25c434c030749082931259480e71effbdabe36d3fe2688d6f4e1e7319b419dcb",
+  "sourceTitle": "HACA2025 - Day 1-  Improving System Flow",
+  "appliedAt": "2026-09-02T19:59:20.746Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS 111 call volume and digital diversion",
+      "notePath": "notes/nhs-111-call-volume-and-digital-diversion.md",
+      "afterHash": "23ffb70d696f84970b0a7244fd7edb72123f0fbecf22e4d95c2b4a59e33de24c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Behavioral messaging in NHS 111 trials",
+      "notePath": "notes/behavioral-messaging-in-nhs-111-trials.md",
+      "afterHash": "a0319728d57fdd9199acbc1dcb7ef52bedb0a206aec74cd760f83cd8b0213829"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS 111 operational efficiency",
+      "notePath": "notes/nhs-111-operational-efficiency.md",
+      "afterHash": "0442fe35517aee819b57c595fa53b3ec59401f7e90dfd21c8943dc69065a1601"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Caller motivation and messaging effectiveness",
+      "notePath": "notes/caller-motivation-and-messaging-effectiveness.md",
+      "afterHash": "f8b419a757195601c7f5c237e694dc6c769fb90620bea8a905c5a7f8a23bf47e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Interdisciplinary teams in health innovation",
+      "notePath": "notes/interdisciplinary-teams-in-health-innovation.md",
+      "afterHash": "313f5b238e451451754a7a2fcff6ac25af0086588968c35b80589a75fc0a7339"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "753f3e69-ca87-46ad-beff-a1217dc722bc",
+  "operation": "ingest",
+  "proposalId": 56,
+  "sourceHash": "038c8d6e858f8fd5a0c376a7ea92df05d90109b5bfdceb49b57fbf35e61aab15",
+  "sourceTitle": "HACA 2025: Shift to Community: Emergency department attendances: Intersectionality, demography...",
+  "appliedAt": "2026-09-03T10:46:11.034Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "University Hospitals of Leicester Emergency Department",
+      "notePath": "notes/university-hospitals-of-leicester-emergency-department.md",
+      "afterHash": "3c215497d664ee8eb08ca38bbafbaad79c2a7e7af961f5d32a5f67b78e16eb6a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Demographic drivers of emergency department attendance",
+      "notePath": "notes/demographic-drivers-of-emergency-department-attendance.md",
+      "afterHash": "90b2614f88a26f767e36fa6be2cfed927a213eca4dee6fd46fb6d41d6bbcfbb5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Waiting time inequalities in emergency care",
+      "notePath": "notes/waiting-time-inequalities-in-emergency-care.md",
+      "afterHash": "59630df28c766f81549fcf27404a6d0cc2265b5384c80047c9820baeb3224507"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Case mix and upstream interventions in emergency care",
+      "notePath": "notes/case-mix-and-upstream-interventions-in-emergency-care.md",
+      "afterHash": "b7c33e710d9dcbefbc352aef2c31e3fe79557381d5bfdabf43827d8e13cfb62a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data quality in emergency care analytics",
+      "notePath": "notes/data-quality-in-emergency-care-analytics.md",
+      "afterHash": "db94d80ab1c979aed8de4ddbc6a81c3fce69fdec6dd1947323959f50f3d40b95"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Integration of demand analysis with neighborhood teams",
+      "notePath": "notes/integration-of-demand-analysis-with-neighborhood-teams.md",
+      "afterHash": "6d0b4beda8b276cdeb6ce2e40bdc7d82d2400764eed98bb3d24e20b9b3e25c69"
+    }
+  ]
+}

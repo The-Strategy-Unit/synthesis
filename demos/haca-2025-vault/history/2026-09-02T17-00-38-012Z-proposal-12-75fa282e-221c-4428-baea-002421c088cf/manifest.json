@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "75fa282e-221c-4428-baea-002421c088cf",
+  "operation": "ingest",
+  "proposalId": 12,
+  "sourceHash": "2856e20550e7fd027a811640ae5126eb2ba265aac99f5fdc56c48a6d52534f6e",
+  "sourceTitle": "HACA 2025 - Day 1 - Targeting care / Advancing analytics",
+  "appliedAt": "2026-09-02T17:00:38.012Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS Health Check barriers and uptake in Birmingham",
+      "notePath": "notes/nhs-health-check-barriers-and-uptake-in-birmingham.md",
+      "afterHash": "2e260dda67d3b1234d8972a080a717a8e0656233da40bc0c65a532756a31c9f1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Birmingham health inequality context",
+      "notePath": "notes/birmingham-health-inequality-context.md",
+      "afterHash": "af2bfabd3b605f938bb2e5a5c50916422558ee8120288b1f162cb6259374893d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Participatory mixed-methods study on NHS Health Checks",
+      "notePath": "notes/participatory-mixed-methods-study-on-nhs-health-checks.md",
+      "afterHash": "bf8c5b3f9761962a8afc00e5278fdd982f32de13231a100577d231061028da8b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Culturally competent communication strategies",
+      "notePath": "notes/culturally-competent-communication-strategies.md",
+      "afterHash": "74daef02bee85d143aca1f870820e0a4118cf8a848cc61cd41279903870c2602"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Building trust through community gatekeepers",
+      "notePath": "notes/building-trust-through-community-gatekeepers.md",
+      "afterHash": "246682f4f8b06c4aab4bd7dc3d3e301579b225a4194cc284edeecb423831bc44"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Community co-creation of knowledge",
+      "notePath": "notes/community-co-creation-of-knowledge.md",
+      "afterHash": "8bf33fb2348c366bf947b2ab00714a1699ed674086af7bb5b6939bb6df5f3952"
+    }
+  ]
+}

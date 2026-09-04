@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "0f5fd0ee-c5ef-40e0-a3c4-70deb42bd25c",
+  "operation": "ingest",
+  "proposalId": 28,
+  "sourceHash": "49835e4e2411cb2fb51194d7423c7ead6138308501c13fcaadf2018636dd9a39",
+  "sourceTitle": "HACA 2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:46:53.072Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Predictors and drivers of delayed discharge in day surgery",
+      "notePath": "notes/predictors-and-drivers-of-delayed-discharge-in-day-surgery.md",
+      "afterHash": "4281379cda4d2061d062fc896006d3a06cb2a4ee10c573cde25f66def47de708"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Opioid prescribing and discharge outcomes",
+      "notePath": "notes/opioid-prescribing-and-discharge-outcomes.md",
+      "afterHash": "0d6b206e6b55bc6f575629446c6c012d6aff58fa75764054edfcfe732161ccca"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Operational interventions for day surgery efficiency",
+      "notePath": "notes/operational-interventions-for-day-surgery-efficiency.md",
+      "afterHash": "9b948c4ada68b5af9393e301b1d50a52aa4eef901d384c106e1bd5e1491f46c5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Collaborative data analysis in healthcare",
+      "notePath": "notes/collaborative-data-analysis-in-healthcare.md",
+      "afterHash": "9b0d6b6f7913e6b8c351f9d363de8f78964b09ab81f0b35754a48235e27a01f0"
+    }
+  ]
+}

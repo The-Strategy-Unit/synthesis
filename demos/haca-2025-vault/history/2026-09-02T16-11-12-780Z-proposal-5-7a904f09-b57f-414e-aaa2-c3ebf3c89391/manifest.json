@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "7a904f09-b57f-414e-aaa2-c3ebf3c89391",
+  "operation": "ingest",
+  "proposalId": 5,
+  "sourceHash": "62e25e9809382f62b0eff024fa7ff130ffbc06c437c45f9f61ae9393812f5241",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T16:11:12.780Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS cost reduction targets and strategic shifts",
+      "notePath": "notes/nhs-cost-reduction-targets-and-strategic-shifts.md",
+      "afterHash": "def08eb44c622f1867386b7af1ecea5804650af23c0392feb6c2b013e559c0d6"
+    },
+    {
+      "action": "new",
+      "pageTitle": "AI-assisted evidence screening methodology",
+      "notePath": "notes/ai-assisted-evidence-screening-methodology.md",
+      "afterHash": "bf3b43274e8ff21c4ae5584d6f7674bb51a0c19c8e10801983dd8388becc4b06"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Performance and refinement of AI screening",
+      "notePath": "notes/performance-and-refinement-of-ai-screening.md",
+      "afterHash": "93531fd9837f58fb5e7b6cb84197dc164f48d3cfe9b42c0a18019ee999c0ddec"
+    }
+  ]
+}

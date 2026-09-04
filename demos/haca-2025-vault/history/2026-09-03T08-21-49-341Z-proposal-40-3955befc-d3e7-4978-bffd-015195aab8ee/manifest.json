@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "3955befc-d3e7-4978-bffd-015195aab8ee",
+  "operation": "ingest",
+  "proposalId": 40,
+  "sourceHash": "3e74b9f01ab66754015d2456e824b9565827cc83bceaea6282c800b3e326a93c",
+  "sourceTitle": "HACA2025 - Day 1 -  Improving System",
+  "appliedAt": "2026-09-03T08:21:49.341Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Shropshire UEC Performance Dashboard",
+      "notePath": "notes/shropshire-uec-performance-dashboard.md",
+      "afterHash": "e371088f2fbd27da4c688c2eaf6b52daba8d3e3db6bdc5026f5d9c24cf9ea1f5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Real-Time Intelligence in Urgent Care",
+      "notePath": "notes/real-time-intelligence-in-urgent-care.md",
+      "afterHash": "48ce3d7ab5a67325d4cad7bcc222f1ada20db14f36345fe8d1b2e0e90cb6a32f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Making Data Count Methodology",
+      "notePath": "notes/making-data-count-methodology.md",
+      "afterHash": "5116e5bdda80771ad7ea392319829d33aef6109248db91d230f56915b90e9d03"
+    },
+    {
+      "action": "new",
+      "pageTitle": "UEC Core Performance Measures",
+      "notePath": "notes/uec-core-performance-measures.md",
+      "afterHash": "f66767d813d7f2b9f090d2c98e316a5f8d5a68eba77537a82ca7c05b176a3cbf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Freshness and Quality Monitoring",
+      "notePath": "notes/data-freshness-and-quality-monitoring.md",
+      "afterHash": "2b65fd214c1b36edb53f52abdd1e07ad9707d3525ae1f579cb08ef854e5ab17a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "UEC Dashboard Technical Architecture",
+      "notePath": "notes/uec-dashboard-technical-architecture.md",
+      "afterHash": "3284dfdcbaaf9b776948a81532deb8d4a0b1945d5bacbb8b05a3c9154750e273"
+    },
+    {
+      "action": "new",
+      "pageTitle": "UEC Dashboard Operational Use",
+      "notePath": "notes/uec-dashboard-operational-use.md",
+      "afterHash": "4345ad3a0497b46e6f2ed75eb244942fe556f6b401302e196f63e98f0d9ce4a0"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Validation and Sharing Limitations",
+      "notePath": "notes/data-validation-and-sharing-limitations.md",
+      "afterHash": "70e9c2eb1907ec650ed67e6cd6ee756239b50312421069a6a42f7d7a7fdfbded"
+    }
+  ]
+}

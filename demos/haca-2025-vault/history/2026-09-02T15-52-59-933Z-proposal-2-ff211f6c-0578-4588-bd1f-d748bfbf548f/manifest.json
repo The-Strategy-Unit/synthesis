@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "ff211f6c-0578-4588-bd1f-d748bfbf548f",
+  "operation": "ingest",
+  "proposalId": 2,
+  "sourceHash": "622065d79291e303ca41a3f64ff400aba73e69350f914002192174b6c920602e",
+  "sourceTitle": "HACA 2025- Day 2 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T15:52:59.933Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS National Competency Framework Overview",
+      "notePath": "notes/nhs-national-competency-framework-overview.md",
+      "afterHash": "557fb49d10f9c467611c22c389025815fd10feb3bc4f0227ec9ab3263efcfb4a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Version 3 Updates to NHS Competency Framework",
+      "notePath": "notes/version-3-updates-to-nhs-competency-framework.md",
+      "afterHash": "884b9036f99b3241009b80c0ccb58df4349ef07b1e539c0fee99baa371a687f9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Competency Framework Design Principles",
+      "notePath": "notes/nhs-competency-framework-design-principles.md",
+      "afterHash": "8bc51c954837393ef10a0d8f6f4202f36c1cc7e2346f93883ac2102a75f54cca"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Integration of BI and Analysis Roles in NCF",
+      "notePath": "notes/integration-of-bi-and-analysis-roles-in-ncf.md",
+      "afterHash": "2ce4051980943a72df3e4c775f750575a68f60a01afd6963b809d0d5dbac78e9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Analyst X Tool and Training Ecosystem",
+      "notePath": "notes/analyst-x-tool-and-training-ecosystem.md",
+      "afterHash": "75510cc7c0a92d5905858bca641d31840a14ba0b2d38611c4b86e52920914e50"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Ardan and Gem CSU Competency Framework Case Study",
+      "notePath": "notes/ardan-and-gem-csu-competency-framework-case-study.md",
+      "afterHash": "7b2d20aaacec3abd3c0124c628bb0029f5500c3de2b8ed380dd12c49de4874a6"
+    }
+  ]
+}

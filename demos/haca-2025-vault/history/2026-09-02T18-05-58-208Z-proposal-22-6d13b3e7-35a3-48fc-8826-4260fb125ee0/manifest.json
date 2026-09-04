@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "6d13b3e7-35a3-48fc-8826-4260fb125ee0",
+  "operation": "ingest",
+  "proposalId": 22,
+  "sourceHash": "d163a22873200507a89e932d6550004ec0b91d7cc4363b94adea988dc732986a",
+  "sourceTitle": "HACA2025 - Day 2 -  Improving System Flow",
+  "appliedAt": "2026-09-02T18:05:58.208Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Financial analysis of lower limb surgery at Royal Free Hospital",
+      "notePath": "notes/financial-analysis-of-lower-limb-surgery-at-royal-free-hospital.md",
+      "afterHash": "995e27e3aa0a8eea183925092bd69b67f421a87dc4761e79f35165102a13d071"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Cost drivers in lower limb surgery",
+      "notePath": "notes/cost-drivers-in-lower-limb-surgery.md",
+      "afterHash": "d6da67e0ece8699870881a9ffe6d0881297e048e987e73b2ee1c0921fb104170"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS tariff imbalance in lower limb surgery",
+      "notePath": "notes/nhs-tariff-imbalance-in-lower-limb-surgery.md",
+      "afterHash": "5abadd76dd60f92d4c622b148e19d67086ff65f60dad493bbae948c14e845c40"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Impact of theater cancellations on fixed costs",
+      "notePath": "notes/impact-of-theater-cancellations-on-fixed-costs.md",
+      "afterHash": "c4860c222591ff23b489ec4d0b48a67353351af80e5fc32b1e9f50b52391d637"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Strategies for surgical financial sustainability",
+      "notePath": "notes/strategies-for-surgical-financial-sustainability.md",
+      "afterHash": "ac8ae0d26f123e42935a2d2844a9add9cd4f0fb71e1c4f6e85b61a4b953d48d4"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "formatVersion": 1,
+  "historyId": "3f1e12e9-c8c5-4ed3-afb6-789d10891d75",
+  "operation": "ingest",
+  "proposalId": 54,
+  "sourceHash": "ff50dc9d5a170f1cc8d5127f2f2d654ef5d671fc9bb28139786214851b574265",
+  "sourceTitle": "HACA 2025: Shift to Community: Data-driven winter support for older people across an ICS",
+  "appliedAt": "2026-09-03T10:25:24.103Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Dorset Insight and Intelligence Service (DICE)",
+      "notePath": "notes/dorset-insight-and-intelligence-service-dice.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "65f8f95c147e2c2d16b27469d93abe30541a141729b097733f3990cded102289",
+      "afterHash": "27c84cd32c75ae6423bbbd6f83522c576b510f98520de92f11529066bbc7b175"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Federated Data Platform in Dorset",
+      "notePath": "notes/federated-data-platform-in-dorset.md",
+      "afterHash": "3fa5d6ed6472caa1fb72f8f66c57716565885466df00ebcdb52e10d24b543657"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Winter Support for Vulnerable Pensioners",
+      "notePath": "notes/winter-support-for-vulnerable-pensioners.md",
+      "afterHash": "b21d791ada94cebf92473a0ba3b81602ad5f2796415df75f9c0d340f8a4e93ce"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Financial Vulnerability Assessment Methods",
+      "notePath": "notes/financial-vulnerability-assessment-methods.md",
+      "afterHash": "af37ddb1ddfa9b0d1ee323e7a506c855c17c8b870c1a84e7412437e19ed0a4f0"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Dorset Integrated Care System Collaborative Model",
+      "notePath": "notes/dorset-integrated-care-system-collaborative-model.md",
+      "afterHash": "5885b97c652fe4c23bcfdc053c375e52f6e90c247155dd994b85a38d30b02fef"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Proactive Outreach in Dorset",
+      "notePath": "notes/proactive-outreach-in-dorset.md",
+      "afterHash": "57c2672cc9ad4031a24b274c239928a03f45b5971f45527e8b1dcd60608e09d5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Evaluation Outcomes of Dorset Project",
+      "notePath": "notes/evaluation-outcomes-of-dorset-project.md",
+      "afterHash": "1ec4dcd8fe8cfee40e8830acb66a1ef78bfcfcb460fcf78abcccad061a7693d3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Co-design versus Co-production in Healthcare",
+      "notePath": "notes/co-design-versus-co-production-in-healthcare.md",
+      "afterHash": "459c8160af58c3c0589e618be6c1f90a557be1cbd8c1ec9b2cc3e10aab006ba9"
+    }
+  ]
+}

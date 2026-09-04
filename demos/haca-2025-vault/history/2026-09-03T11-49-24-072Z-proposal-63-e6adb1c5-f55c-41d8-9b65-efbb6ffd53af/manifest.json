@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "e6adb1c5-f55c-41d8-9b65-efbb6ffd53af",
+  "operation": "ingest",
+  "proposalId": 63,
+  "sourceHash": "2dc66f67c8245a60dea26bb599bc905749cfcdfe51bd4a15b2f81a66560350b6",
+  "sourceTitle": "HACA2025 - Day 2 - Main Stage - Alastair McAlpine",
+  "appliedAt": "2026-09-03T11:49:24.072Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Ali McAlpine and Scottish Government Statistics",
+      "notePath": "notes/ali-mcalpine-and-scottish-government-statistics.md",
+      "afterHash": "68dc3ff9f37bcb163677861a1ba9ead4c3b7b8f339c81bc88b04361294a8421d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Scottish Index of Multiple Deprivation",
+      "notePath": "notes/scottish-index-of-multiple-deprivation.md",
+      "afterHash": "45efecae10d83783f9fcb803f2e3343a453c1fcbe2d438e92cb68b394dfa01bf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Narrative-Driven Statistical Analysis",
+      "notePath": "notes/narrative-driven-statistical-analysis.md",
+      "afterHash": "1cca7964b945ec8c01d27c53a015b2471d433717141c59091f269cf82c395bc4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Trust in Official Statistics",
+      "notePath": "notes/trust-in-official-statistics.md",
+      "afterHash": "6fe671910b6c4456cd63b1b640b8d83e45233ea514b112123698422a48230258"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Community Engagement in Data Analysis",
+      "notePath": "notes/community-engagement-in-data-analysis.md",
+      "afterHash": "2c18a0885433f96da4ec28ad6ea841a44a0a47ecf194bbf59026df456f7484a5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Linking and Infrastructure Challenges",
+      "notePath": "notes/data-linking-and-infrastructure-challenges.md",
+      "afterHash": "aa28d77cea767eb86faee51135f93da7b9883248446d964e2484918b97b66529"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Automation and AI in Statistical Work",
+      "notePath": "notes/automation-and-ai-in-statistical-work.md",
+      "afterHash": "a4f3ee760e174e147bd848cac55db36992e05127f8d3bdeff5fea8aa6e0c7a9c"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "3282df37-c949-4150-9a32-38e76b193d90",
+  "operation": "ingest",
+  "proposalId": 47,
+  "sourceHash": "5893a3a5d04acb23986f248cde88d079a1856ebd72852e6daffcd86ced004061",
+  "sourceTitle": "HACA 2025: Shift to Community: Enhancing patient flow: Real-time prediction at a Swedish emergency..",
+  "appliedAt": "2026-09-03T09:09:28.228Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Real-time prediction of emergency department patient flow",
+      "notePath": "notes/real-time-prediction-of-emergency-department-patient-flow.md",
+      "afterHash": "1b0b877663df7771bb31ddc02dca615bd3ad24e51bc19f713884a8fe65a7f346"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Sahlgrenska University Hospital ED prediction project",
+      "notePath": "notes/sahlgrenska-university-hospital-ed-prediction-project.md",
+      "afterHash": "fb19b63ec7ffdeb9a039401d297d57d5662360ee9e2a9872d21a2e93f066dc68"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Open-source Python package for hospital admission prediction",
+      "notePath": "notes/open-source-python-package-for-hospital-admission-prediction.md",
+      "afterHash": "ac0e55b37662a2fd27eef5c3d75f3b57035f97e1b8780034f3ac3f0335bd9b7f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "International transferability of NHS ED capacity models",
+      "notePath": "notes/international-transferability-of-nhs-ed-capacity-models.md",
+      "afterHash": "95d48f8d0108316cf2f74140443aebc87b3eb45b101c638dce0d74d9676e081f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Role of open source in healthcare data sharing",
+      "notePath": "notes/role-of-open-source-in-healthcare-data-sharing.md",
+      "afterHash": "7bb05832572b292e621ab3250cb31a7a16a3a45dcee85af0d47d01899061549f"
+    }
+  ]
+}

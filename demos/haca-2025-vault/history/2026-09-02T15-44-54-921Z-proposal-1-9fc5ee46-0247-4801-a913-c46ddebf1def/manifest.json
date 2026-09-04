@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "9fc5ee46-0247-4801-a913-c46ddebf1def",
+  "operation": "ingest",
+  "proposalId": 1,
+  "sourceHash": "be3d7a727aba2e600d4425f0d39db221f3a30fce637eeb13e13b982ffef91a4d",
+  "sourceTitle": "HACA 2025 - Day 1 Opening Session",
+  "appliedAt": "2026-09-02T15:44:54.921Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Hacker Conference for Health and Care Analysts",
+      "notePath": "notes/hacker-conference-for-health-and-care-analysts.md",
+      "afterHash": "ca2ed67cb9fd441c92c9b10cf4f88b7ec86772d5a28a0ba8ff6649a9e2bc7d4e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Professor Ben Goldacre's 2022 Report on NHS Analytics",
+      "notePath": "notes/professor-ben-goldacre-s-2022-report-on-nhs-analytics.md",
+      "afterHash": "295455dfe41be6726c5ea98bbc30227f44534e6cfcf63c76ef51b88cb8f57731"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS Analytical Strategy and Workforce Challenges",
+      "notePath": "notes/nhs-analytical-strategy-and-workforce-challenges.md",
+      "afterHash": "94a460f033a57e65a37a34a025f46c14562a67df3854a800249241250287dcd6"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Critique of Whole Population Risk Stratification",
+      "notePath": "notes/critique-of-whole-population-risk-stratification.md",
+      "afterHash": "45541022e7e0cf94636ec7a1bc266dfe0255f4587127458573f46d32f633be33"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Strategy Unit and Conference Funding",
+      "notePath": "notes/strategy-unit-and-conference-funding.md",
+      "afterHash": "f54dde23c607e84594a28d88dc3390e69ffec7f72febdb9f443975f53514d86c"
+    }
+  ]
+}

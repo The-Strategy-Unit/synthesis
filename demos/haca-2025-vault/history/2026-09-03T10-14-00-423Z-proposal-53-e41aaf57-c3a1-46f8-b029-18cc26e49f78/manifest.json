@@ -1,0 +1,53 @@
+{
+  "formatVersion": 1,
+  "historyId": "e41aaf57-c3a1-46f8-b029-18cc26e49f78",
+  "operation": "ingest",
+  "proposalId": 53,
+  "sourceHash": "bc5fb5d2ffabdba416a6c6e3708b8d68917bfdaf68a7fa259a80ba7abb6adcfe",
+  "sourceTitle": "HACA2025 - Day 1- Main Stage - Sally Gainsbury",
+  "appliedAt": "2026-09-03T10:14:00.423Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Hospital Demand Drivers: Demographic and Non-Demographic",
+      "notePath": "notes/hospital-demand-drivers-demographic-and-non-demographic.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "fde5c6807e80c9cc9577a7eb93985e5b29d636615c93a9ab435c56a0f180328e",
+      "afterHash": "25cc86cfe98f76e9a22507fbfb0b12df4656c238657b98dcc55605128166504e"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Patient priorities and agency in palliative care",
+      "notePath": "notes/patient-priorities-and-agency-in-palliative-care.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "79502aaffa88539875e15607aa0be299f337e565dd9308ed5ddba8bd3027f5d7",
+      "afterHash": "b8e552f69a2152f14962cb346ca8f06e2dcf5ba826964098f159bf0a08b7c14b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS shift to community care and financial drivers",
+      "notePath": "notes/nhs-shift-to-community-care-and-financial-drivers.md",
+      "afterHash": "9a3b855c82c82a02588dca2623f92fe00b646eda47de47e3951400282fe42c04"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Assumptions about preemptive community care",
+      "notePath": "notes/assumptions-about-preemptive-community-care.md",
+      "afterHash": "06a97f52cd57bfc51c445fa14c49779acfdbf8a554daa356356f82ac032fede2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Patient expectations and defensive medicine",
+      "notePath": "notes/patient-expectations-and-defensive-medicine.md",
+      "afterHash": "f6639e01a8e9f5853ffda336610dfa9cb9c18a1d018a77963541c74c9db8738f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Continuity of care and urgent demand",
+      "notePath": "notes/continuity-of-care-and-urgent-demand.md",
+      "afterHash": "a4a4a93a16385cf3bbdf20a01a5786b93f28a6bacf722fae41fec96b32159766"
+    }
+  ]
+}

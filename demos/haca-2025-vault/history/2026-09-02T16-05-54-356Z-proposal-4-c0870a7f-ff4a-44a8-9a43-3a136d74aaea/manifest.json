@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "historyId": "c0870a7f-ff4a-44a8-9a43-3a136d74aaea",
+  "operation": "ingest",
+  "proposalId": 4,
+  "sourceHash": "d53f9a84f652ab515a3f17430fbe1487d6591881fa8369df030fc6bea4047a77",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T16:05:54.356Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NATCAN Data Collection and Audit Structure",
+      "notePath": "notes/natcan-data-collection-and-audit-structure.md",
+      "afterHash": "f81a44eb8944d8b865baaf48b3a0b5d8994c0a1c9b91a275745915f154de2470"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Interactive Shiny Dashboards for Cancer Audits",
+      "notePath": "notes/interactive-shiny-dashboards-for-cancer-audits.md",
+      "afterHash": "2a94d03968720a47379504cde8f6d4c82e8f52fbcb13f8fe4e613b95a8aaf36f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Shiny Application Development and Deployment",
+      "notePath": "notes/shiny-application-development-and-deployment.md",
+      "afterHash": "0ff35a98105d14683844a5e7ba04216812b22914eb6d7c0e5f7af9850e139b0a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Balancing Audit Consistency and Bespoke Requirements",
+      "notePath": "notes/balancing-audit-consistency-and-bespoke-requirements.md",
+      "afterHash": "107081b7cbd9641abe0d382ae9833a9f77447eb8495d76f18b5f3417319ba92c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Reporting Limitations and Stakeholder Engagement",
+      "notePath": "notes/reporting-limitations-and-stakeholder-engagement.md",
+      "afterHash": "a96f1bfb3a64fcd9524a921b57c53b13d49c5de7a8ae65bbeb8d5d8ffe1b21e0"
+    }
+  ]
+}

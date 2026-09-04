@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "01a67518-3bea-4609-af83-dbbb42635ad3",
+  "operation": "ingest",
+  "proposalId": 17,
+  "sourceHash": "05aff1d0d937c3c93eed54ff27695cab9b0e902df71b2f0af583fd64f440d873",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting care / Advancing analytics",
+  "appliedAt": "2026-09-02T17:32:02.582Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Linked NHS data analysis for suicide prevention",
+      "notePath": "notes/linked-nhs-data-analysis-for-suicide-prevention.md",
+      "afterHash": "575efeadf1f1ead6c369fca3517c59ed55301b0b7ab2f2ad788b5618db02e5b4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Health system contact rates before suicide",
+      "notePath": "notes/health-system-contact-rates-before-suicide.md",
+      "afterHash": "a785cb60028a475585ce344915001de9e8271c181067f68a4f6333fe1d3649f3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Individual patient timeline generation",
+      "notePath": "notes/individual-patient-timeline-generation.md",
+      "afterHash": "dfc9f81e8717227f85182600a5594e4423a2982c7d160d2a59aa6d97a91a67a2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Geospatial mapping of suicide locations",
+      "notePath": "notes/geospatial-mapping-of-suicide-locations.md",
+      "afterHash": "db22e287d8f6452360d06b3a61d6b7cf0f0d7bfbc56e80d9d930cf2ab61cdbaa"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of linked administrative data",
+      "notePath": "notes/limitations-of-linked-administrative-data.md",
+      "afterHash": "13635191e4d25db9ff6acadf50d61758cf1b0ed0ce8799b2c6d6d396a15c7a99"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Comparison with coroner's report audits",
+      "notePath": "notes/comparison-with-coroner-s-report-audits.md",
+      "afterHash": "b71053ed078eb98028e07f5e8980922884a055a66c9d5ce8880f90cfbcaa4453"
+    }
+  ]
+}

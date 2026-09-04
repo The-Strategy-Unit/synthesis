@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "8e2e4e8b-c46e-4619-92ad-32afe5d5b91d",
+  "operation": "ingest",
+  "proposalId": 19,
+  "sourceHash": "a7db957f5ef338a76334c8b7f841b3e2c4be7fecbc3a6a09fe2a83632ef1d15d",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:45:55.389Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "MMR vaccine uptake trends in Birmingham and Solihull",
+      "notePath": "notes/mmr-vaccine-uptake-trends-in-birmingham-and-solihull.md",
+      "afterHash": "4a2375bfa73c1f0c6779d010e4ef45d3d11c9a82a9e33fcff100a5eedf44fae8"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data sources for MMR uptake analysis",
+      "notePath": "notes/data-sources-for-mmr-uptake-analysis.md",
+      "afterHash": "0cd89778ae676a802ffe16f1f46b45e9222821c88b3d0a14235cd6874db50205"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Funnel plots for identifying underperforming GP practices",
+      "notePath": "notes/funnel-plots-for-identifying-underperforming-gp-practices.md",
+      "afterHash": "3423e9920335905e48c51c9f6ce3a35f56fff6a5d2f670c553aaf36fa6010421"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Geospatial mapping of MMR uptake by LSOA",
+      "notePath": "notes/geospatial-mapping-of-mmr-uptake-by-lsoa.md",
+      "afterHash": "03abfe56c79d4d5da1b98dbc5e5f7c2eb38840314e65adf2fd6682cc1b0f3656"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Denominator Limitations in FTP MMR Dashboard",
+      "notePath": "notes/data-denominator-limitations-in-ftp-mmr-dashboard.md",
+      "afterHash": "814d90987a59ce3fcd7f0db38580e02eab6e25884b9e0d87c59d20c1c70690fc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "CHIS Data Strengths and Limitations for Outbreak Response",
+      "notePath": "notes/chis-data-strengths-and-limitations-for-outbreak-response.md",
+      "afterHash": "dae4578f0c548612c3bfa690bcd42f8209b027680b30a42549fc0c4183448704"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Vaccine Coding Error Propagation Across Data Systems",
+      "notePath": "notes/vaccine-coding-error-propagation-across-data-systems.md",
+      "afterHash": "0ecd1e8939053d660517419331e69f650269e06431473e313daa9abc9c9fa750"
+    }
+  ]
+}
