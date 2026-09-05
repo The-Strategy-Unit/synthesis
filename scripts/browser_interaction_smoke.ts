@@ -478,17 +478,18 @@ async function run(): Promise<void> {
     await client.evaluate(
       `document.querySelector('#graph circle.node').focus()`,
     );
-    assert.equal(
-      await client.evaluate<boolean>(`(() => {
-      const node = document.activeElement;
-      const label = [...document.querySelectorAll('#graph .label')]
-        .find(item => item.__data__.id === node.__data__.id);
-      return getComputedStyle(label).display !== 'none' &&
-        getComputedStyle(label).fontSize === '13px' &&
-        label.parentNode.parentNode.id === 'graph' &&
-        document.querySelector('#graph-tooltip').textContent === node.__data__.title;
-    })()`),
-      true,
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(`(() => {
+        const node = document.activeElement;
+        const label = [...document.querySelectorAll('#graph .label')]
+          .find(item => item.__data__.id === node.__data__.id);
+        return getComputedStyle(label).display !== 'none' &&
+          getComputedStyle(label).fontSize === '13px' &&
+          label.parentNode.parentNode.id === 'graph' &&
+          document.querySelector('#graph-tooltip').textContent === node.__data__.title;
+      })()`),
+      Boolean,
       "Keyboard focus did not reveal a screen-sized title",
     );
     await client.evaluate(`document.activeElement.dispatchEvent(
