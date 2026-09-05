@@ -3,13 +3,124 @@ import assert from "node:assert/strict";
 import {
   graphFitTransform,
   graphFocusNodeIds,
+  graphLabelLayout,
+  graphLabelLines,
   graphLinkDistance,
   graphLinkStrength,
+  graphNeighbourRows,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighbourLinks,
   semanticSimilarityRange,
 } from "./graph_layout.js";
+
+function labelCandidate(id, x, y, priority = 4) {
+  return { id, x, y, width: 100, height: 32, radius: 8, priority, degree: 0 };
+}
+
+Deno.test("overview labels remain visible, spaced and deterministic", () => {
+  const candidates = [labelCandidate(1, 60, 90), labelCandidate(2, 360, 90)];
+  const first = graphLabelLayout(candidates, 600, 240);
+  assert.equal(first.size, 2);
+  assert.deepEqual(first, graphLabelLayout(candidates, 600, 240));
+  const boxes = [...first.values()];
+  assert.ok(boxes[0].x + boxes[0].width < boxes[1].x);
+});
+
+Deno.test("fitting a wide graph retains labels below the old zoom threshold", () => {
+  const nodes = [{ id: 1, x: -1000, y: 0 }, { id: 2, x: 1000, y: 0 }];
+  const transform = graphFitTransform(nodes, 800, 400);
+  assert.ok(transform.k < 1.5);
+  const candidates = nodes.map((node) =>
+    labelCandidate(
+      node.id,
+      node.x * transform.k + transform.x,
+      node.y * transform.k + transform.y,
+    )
+  );
+  assert.equal(graphLabelLayout(candidates, 800, 400).size, 2);
+});
+
+Deno.test("dense labels prioritise interaction and search over hubs", () => {
+  const candidates = Array.from({ length: 30 }, (_, id) => ({
+    ...labelCandidate(id, 150, 100),
+    degree: 100 - id,
+  }));
+  candidates[29].priority = 0;
+  candidates[28].priority = 2;
+  const labels = graphLabelLayout(candidates, 320, 240);
+  assert.ok(labels.has(29));
+  assert.ok(labels.has(28));
+  assert.ok(labels.size < candidates.length);
+  const boxes = [...labels.values()];
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      assert.ok(
+        a.x + a.width <= b.x || b.x + b.width <= a.x ||
+          a.y + a.height <= b.y || b.y + b.height <= a.y,
+      );
+    }
+  }
+});
+
+Deno.test("label layout rejects offscreen or unsettled nodes and clamps focus", () => {
+  const labels = graphLabelLayout(
+    [
+      labelCandidate(1, -100, 50),
+      labelCandidate(2, NaN, 50),
+      labelCandidate(3, 318, 238, 1),
+    ],
+    320,
+    240,
+  );
+  assert.deepEqual([...labels.keys()], [3]);
+  const box = labels.get(3);
+  assert.ok(box.x >= 0 && box.y >= 0);
+  assert.ok(box.x + box.width <= 320 && box.y + box.height <= 240);
+  assert.equal(graphLabelLayout([], 0, 0).size, 0);
+});
+
+Deno.test("stable labels retain priority over equivalent new candidates", () => {
+  const candidates = [labelCandidate(1, 150, 100), labelCandidate(2, 150, 100)];
+  const labels = graphLabelLayout(candidates, 320, 240, {
+    previousIds: new Set([2]),
+  });
+  assert.equal([...labels.keys()][0], 2);
+});
+
+Deno.test("labels wrap meaningful words and bound very long titles", () => {
+  const measure = (text) => [...text].length * 8;
+  assert.deepEqual(graphLabelLines("Blood pressure targets", measure, 120), [
+    "Blood pressure",
+    "targets",
+  ]);
+  const lines = graphLabelLines("A".repeat(1000), measure, 120);
+  assert.equal(lines.length, 2);
+  assert.ok(lines[1].endsWith("…"));
+  assert.ok(lines.every((line) => measure(line) <= 120));
+  assert.deepEqual(graphLabelLines("   ", measure, 120), ["Untitled page"]);
+});
+
+Deno.test("neighbour list deduplicates edges and preserves both link kinds", () => {
+  const nodes = [{ id: 1, title: "Focus" }, { id: 2, title: "Zulu" }, {
+    id: 3,
+    title: "Alpha",
+  }, { id: 4, title: "Unconnected" }];
+  const links = [
+    { source: 1, target: 2, kind: "semantic" },
+    { source: { id: 2 }, target: { id: 1 }, kind: "explicit" },
+    { source: 3, target: 1, kind: "semantic" },
+    { source: 1, target: 99, kind: "explicit" },
+    { source: 1, target: 1, kind: "explicit" },
+  ];
+  assert.deepEqual(graphNeighbourRows(nodes, links, 1), [
+    { id: 2, title: "Zulu", kinds: ["explicit", "semantic"] },
+    { id: 3, title: "Alpha", kinds: ["semantic"] },
+  ]);
+  assert.deepEqual(graphNeighbourRows(nodes, links, 99), []);
+  assert.deepEqual(graphNeighbourRows(nodes, links, 4), []);
+});
 
 Deno.test("graph fit transform centres every positioned node with padding", () => {
   const transform = graphFitTransform(
