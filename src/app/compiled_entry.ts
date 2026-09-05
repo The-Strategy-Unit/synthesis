@@ -15,7 +15,8 @@ export interface CompiledOptions {
   vaultPath: string | null;
 }
 
-const COMPILED_USAGE = "Usage: synthesis [--trial] [--no-open] [--help]";
+const COMPILED_USAGE =
+  "Usage: synthesis [--trial | --vault <path>] [--no-open] [--help]";
 
 export function compiledHelpText(): string {
   return [
@@ -25,25 +26,31 @@ export function compiledHelpText(): string {
     "",
     "Options:",
     "  --trial    Start with a disposable, provider-free demonstration vault.",
+    "  --vault    Start with the vault at the supplied path.",
     "  --no-open  Start without opening a browser.",
     "  --help     Show this help and exit.",
   ].join("\n");
 }
 
 export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
-  const usage = "Usage: synthesis [--trial | --vault <path>] [--no-open]";
+  let help = false;
   let trial = false;
   let openBrowser = true;
   let vaultPath: string | null = null;
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
+    if (argument === "--help") {
+      if (help) throw new Error(COMPILED_USAGE);
+      help = true;
+      continue;
+    }
     if (argument === "--trial") {
-      if (trial) throw new Error(usage);
+      if (trial) throw new Error(COMPILED_USAGE);
       trial = true;
       continue;
     }
     if (argument === "--no-open") {
-      if (!openBrowser) throw new Error(usage);
+      if (!openBrowser) throw new Error(COMPILED_USAGE);
       openBrowser = false;
       continue;
     }
@@ -53,15 +60,15 @@ export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
         vaultPath !== null || !value || value.startsWith("--") ||
         value.length > 4_096 || /\p{Cc}/u.test(value)
       ) {
-        throw new Error(usage);
+        throw new Error(COMPILED_USAGE);
       }
       vaultPath = value;
       continue;
     }
-    throw new Error(usage);
+    throw new Error(COMPILED_USAGE);
   }
-  if (trial && vaultPath !== null) throw new Error(usage);
-  return { trial, openBrowser, vaultPath };
+  if (trial && vaultPath !== null) throw new Error(COMPILED_USAGE);
+  return { help, trial, openBrowser, vaultPath };
 }
 
 async function main(): Promise<void> {
