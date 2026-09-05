@@ -101,11 +101,23 @@ Deno.test("compiled vault and trial flags are bounded and order-independent", ()
   assert.deepEqual(
     parseCompiledOptions(["--no-open", "--vault", "HACA vault"]),
     {
+      help: false,
       trial: false,
       openBrowser: false,
       vaultPath: "HACA vault",
     },
   );
+  assert.deepEqual(parseCompiledOptions(["--help"]), {
+    help: true,
+    trial: false,
+    openBrowser: true,
+    vaultPath: null,
+  });
+  assert.match(compiledHelpText(), /^Synthesis/);
+  assert.match(compiledHelpText(), /--trial/);
+  assert.match(compiledHelpText(), /--vault/);
+  assert.match(compiledHelpText(), /--no-open/);
+  assert.match(compiledHelpText(), /--help/);
   assert.throws(
     () => parseCompiledOptions(["--trial", "--vault", "vault"]),
     /Usage/,
@@ -120,4 +132,5 @@ Deno.test("compiled vault and trial flags are bounded and order-independent", ()
   );
   assert.throws(() => parseCompiledOptions(["--unknown"]), /Usage/);
   assert.throws(() => parseCompiledOptions(["--trial", "--trial"]), /Usage/);
+  assert.throws(() => parseCompiledOptions(["--help", "--help"]), /Usage/);
 });
