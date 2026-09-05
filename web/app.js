@@ -3521,11 +3521,11 @@ function renderGraph() {
   }
 
   function showGraphTooltip(event, datum) {
-    const rect = event.currentTarget.getBoundingClientRect();
     tooltip.classed("hidden", false).text(datum.title);
+    const rect = event.currentTarget?.getBoundingClientRect();
     const box = tooltip.node().getBoundingClientRect();
-    const x = event.clientX ?? rect.right;
-    const y = event.clientY ?? rect.bottom;
+    const x = event.clientX ?? rect?.right ?? 0;
+    const y = event.clientY ?? rect?.bottom ?? 0;
     tooltip.style(
       "left",
       `${Math.max(8, Math.min(innerWidth - box.width - 8, x + 12))}px`,
