@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "4d3538fc-be5c-4fd3-ade0-be2b63205209",
+  "operation": "ingest",
+  "proposalId": 10,
+  "sourceHash": "0ced48f3f32ad72a8f3f3f5d8eca43a23295b5b128c091453e0df326e37e4abd",
+  "sourceTitle": "HACA2025- Day 2 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T16:48:30.220Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Health needs assessments in the NHS",
+      "notePath": "notes/health-needs-assessments-in-the-nhs.md",
+      "afterHash": "7e0c12f0a7b43b7c73cfaf04bf55a1872a055ee1c5abdc2341eb16bdc5cf76c3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data integration for population health",
+      "notePath": "notes/data-integration-for-population-health.md",
+      "afterHash": "31bfe45d285c5ec6f5e960fcbdfdae3f9506bb981aab9115d5f6aeaea6d7be3e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Inequality scoring in health analytics",
+      "notePath": "notes/inequality-scoring-in-health-analytics.md",
+      "afterHash": "4451455db1ee58b3f612f15e9a81e77ef55ebcdedba9a169fc1df128a4086e52"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Prioritizing long-term conditions",
+      "notePath": "notes/prioritizing-long-term-conditions.md",
+      "afterHash": "c712f9f27c5cac31f34427d8d307d8a680c676e7935dc2e87a3ceb3f4baa8e5d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Population segmentation for healthcare prioritization",
+      "notePath": "notes/population-segmentation-for-healthcare-prioritization.md",
+      "afterHash": "9e79352c2b078a180bb3dc2d50b0942ca958f063c1bff64a011932cdb2cfba26"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Interactive equity reporting with Quarto and R",
+      "notePath": "notes/interactive-equity-reporting-with-quarto-and-r.md",
+      "afterHash": "9c5fa298ee8df7ea3ba5ecf6fb4ff529b7a818040560512af64686ac142baa6d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Northwest London ICB inequality dashboard",
+      "notePath": "notes/northwest-london-icb-inequality-dashboard.md",
+      "afterHash": "ace9903d0c978a5b7c180b4cf7b122c99cb6d3146fa628c5c2fe47ded6e096c5"
+    }
+  ]
+}

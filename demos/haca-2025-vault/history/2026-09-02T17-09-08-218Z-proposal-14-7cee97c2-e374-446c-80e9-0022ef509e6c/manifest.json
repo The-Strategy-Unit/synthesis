@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "7cee97c2-e374-446c-80e9-0022ef509e6c",
+  "operation": "ingest",
+  "proposalId": 14,
+  "sourceHash": "0d1651898b2628d42103df59b6fbe352ff91c856e4c7fad521dd8ef27269a7c6",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:09:08.218Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Women in Data and Analytics Conference (WIDAC)",
+      "notePath": "notes/women-in-data-and-analytics-conference-widac.md",
+      "afterHash": "2159a0f349156f4dde23724c51065326a25197cabbc24fe063e976b2e14eb13d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Underrepresentation of Women in NHS Analytics",
+      "notePath": "notes/underrepresentation-of-women-in-nhs-analytics.md",
+      "afterHash": "60a7c57a7f7dd2da8452d3b5c9c2308ba5706ee759ef44b5592ba274c7e8b803"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Belonging and Confidence in Analytics",
+      "notePath": "notes/belonging-and-confidence-in-analytics.md",
+      "afterHash": "0ebe37b2870b964ba26edc9e835ff541d80547cc47f97e1f7a9cb5a07b2daafa"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# SQLite creates these while Synthesis has the vault open.
+synthesis.db-shm
+synthesis.db-wal
+
+# Common local filesystem metadata.
+.DS_Store
+Thumbs.db

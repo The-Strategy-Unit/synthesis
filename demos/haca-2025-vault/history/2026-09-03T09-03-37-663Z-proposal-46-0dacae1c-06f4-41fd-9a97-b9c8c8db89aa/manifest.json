@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "0dacae1c-06f4-41fd-9a97-b9c8c8db89aa",
+  "operation": "ingest",
+  "proposalId": 46,
+  "sourceHash": "e692ea9f8568d58f1e752fa1cc0991cd812688b48cec1d27d8ac8f75e3361b06",
+  "sourceTitle": "HACA 2025 - Day 1 - Main Stage",
+  "appliedAt": "2026-09-03T09:03:37.663Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Jess Moley: Researcher Profile and Career Trajectory",
+      "notePath": "notes/jess-moley-researcher-profile-and-career-trajectory.md",
+      "afterHash": "3906be36159696cb6d50ac270c24033c222f6d02874353ed314463a0ade953ae"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Values-Driven Research and Equity in Digital Health",
+      "notePath": "notes/values-driven-research-and-equity-in-digital-health.md",
+      "afterHash": "34f4bb3ab13450e0903cf0786a91e83e4316373a3c7867a07fc3ac6f9b61ee7f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Interdisciplinary Approaches to Health Technology",
+      "notePath": "notes/interdisciplinary-approaches-to-health-technology.md",
+      "afterHash": "7336982e5f9df501dfdbc6e2f1a8e36f94475887e56fda3062205d126266147b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Legislative and Systemic Barriers in Health Data",
+      "notePath": "notes/legislative-and-systemic-barriers-in-health-data.md",
+      "afterHash": "a840950a54ea2c40b7ad8b89baa6053b96b832fbcd554fc0abd4a97200a61acb"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Professional Development and Career Navigation Strategies",
+      "notePath": "notes/professional-development-and-career-navigation-strategies.md",
+      "afterHash": "f6b9cb06ef0ed097836289dff0b6fff20de3a05c269376462a55a2186b9bb3ee"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Resources on Health Equity, AI Governance, and Algorithmic Impact",
+      "notePath": "notes/resources-on-health-equity-ai-governance-and-algorithmic-impact.md",
+      "afterHash": "d0e521813c6a23c32379a7c58335b9ced8e5dc2d5d9b35d6361cc56f98678d49"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "9d32fd90-1851-4f09-9514-1d33b2f05ffe",
+  "operation": "ingest",
+  "proposalId": 41,
+  "sourceHash": "e05a5dd71510e702ca6adb41c76103b873fca6e498e93a47d07c703183fb2fbf",
+  "sourceTitle": "HACA2025- Day 1- Improving System Flow",
+  "appliedAt": "2026-09-03T08:28:35.913Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Hybrid simulation model for renal care",
+      "notePath": "notes/hybrid-simulation-model-for-renal-care.md",
+      "afterHash": "6bf596669f54dfdd26284dd07ea3e62acd4979bbbd20ba057108fe8f0a3a2b34"
+    },
+    {
+      "action": "new",
+      "pageTitle": "CKD progression modeling methodology",
+      "notePath": "notes/ckd-progression-modeling-methodology.md",
+      "afterHash": "68e3becda950669f5b07f9b753504219b03ac9d39047b068ec02f3ef6a17465f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Kidney replacement therapy capacity model",
+      "notePath": "notes/kidney-replacement-therapy-capacity-model.md",
+      "afterHash": "cfd35c6f65eb8cd9baebd561ed74d4572a15cd61a3aa2235e97badb95a4848f0"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Participative modeling in healthcare",
+      "notePath": "notes/participative-modeling-in-healthcare.md",
+      "afterHash": "cf96f49a440620b652f3d4d9f17b273ef568eb6be45820289ea436b05d2f5717"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Validation and implementation of renal simulation models",
+      "notePath": "notes/validation-and-implementation-of-renal-simulation-models.md",
+      "afterHash": "551de32d84fb8cdc8993067ba1e55089e91ab19355190df964f98fb91c498188"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Impact of late referrals on KRT outcomes",
+      "notePath": "notes/impact-of-late-referrals-on-krt-outcomes.md",
+      "afterHash": "6b1e3b6e478fd98a3b3ada9e7f18b6dbca621ea97c3162ddf0aba65fa17bba19"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Capacity challenges in renal services",
+      "notePath": "notes/capacity-challenges-in-renal-services.md",
+      "afterHash": "168ca7e244392d1b3a0b79ca6486d6461c446b9a047de22db564f81bf5093e64"
+    }
+  ]
+}

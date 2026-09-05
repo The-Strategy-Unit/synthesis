@@ -1,0 +1,63 @@
+{
+  "formatVersion": 1,
+  "historyId": "490aa949-ea53-491f-966f-832cbc8a645a",
+  "operation": "ingest",
+  "proposalId": 26,
+  "sourceHash": "2e12eb8c60d1461433da4628a366dc2c15411e1ad78b63ae47cd9eab46f69cdb",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:36:06.388Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Network Data Lab and Discover dataset",
+      "notePath": "notes/network-data-lab-and-discover-dataset.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "a5479dc10daaca078715aa09ff83c41cbdb87fdf12faed60d0590ac06eb68698",
+      "afterHash": "7272137816ed4d861d4055578938387d53f42df25b16c04775ab62cfe76b5405"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Demographic disparities in NHS waiting times",
+      "notePath": "notes/demographic-disparities-in-nhs-waiting-times.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "6227068927618ca025cd06c422f7a2935695aaac64d3bce00b50dcca1fce6b7b",
+      "afterHash": "94de68f1655894ca169bcd76d4903e0c9dabe9af5ea56e84c8c1949c73c7f005"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Data quality gaps in waiting list analysis",
+      "notePath": "notes/data-quality-gaps-in-waiting-list-analysis.md",
+      "beforeRevision": "before/002.md",
+      "beforeHash": "97986374e7b38e914a3373e2e82523baa66839b5acd087e9b5fd3517c0d2d72a",
+      "afterHash": "1d497d3fbfae5ac13b7a7088188f444971e3267a2d023895ad77c6ad5ea34943"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Healthcare usage patterns during waiting periods",
+      "notePath": "notes/healthcare-usage-patterns-during-waiting-periods.md",
+      "beforeRevision": "before/003.md",
+      "beforeHash": "13fb0b84e0aee6d3cf9320d4eeb5ebbe512e06613429c811ecef9167bf96e85d",
+      "afterHash": "1b319b787ed179c4d75bc0d8fa59b7e3a1878d6dd2aea9bd62e710860f825de8"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Waiting time measurement standards",
+      "notePath": "notes/waiting-time-measurement-standards.md",
+      "afterHash": "40d98d8bd1af57b62d1c40e222e491ee6df30807650ef592740acb971a989cc7"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Reasons for leaving NHS waiting lists",
+      "notePath": "notes/reasons-for-leaving-nhs-waiting-lists.md",
+      "afterHash": "893ee96cc4e709568a750b7252dd63b0aeeb8c89fc9f4bb5ceabcf230f4990fa"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Deprivation and healthcare use inequalities",
+      "notePath": "notes/deprivation-and-healthcare-use-inequalities.md",
+      "afterHash": "9efc13c59e4b8befabd3f8575161cb0b541ce47c709070ae1cb93ccbd86e63c7"
+    }
+  ]
+}

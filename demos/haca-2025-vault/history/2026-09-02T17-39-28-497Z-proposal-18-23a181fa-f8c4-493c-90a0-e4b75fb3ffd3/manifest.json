@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "23a181fa-f8c4-493c-90a0-e4b75fb3ffd3",
+  "operation": "ingest",
+  "proposalId": 18,
+  "sourceHash": "e0bf58afc351024893434f8c2945370b10ec25384c36dcde44b1c4a27e0f61d9",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:39:28.497Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Care Data Spaces project overview",
+      "notePath": "notes/care-data-spaces-project-overview.md",
+      "afterHash": "a853bebf67ef507e0655a1ab4182cfa251d7a6c5295bfbdd0f23e4710613199d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Adult social care data challenges",
+      "notePath": "notes/adult-social-care-data-challenges.md",
+      "afterHash": "bb61c5265dbae9c8bfffef3716e41b1dc6d4ca88db63b7a35144ccc0235977db"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Modern data infrastructure for adult social care",
+      "notePath": "notes/modern-data-infrastructure-for-adult-social-care.md",
+      "afterHash": "a5ed0ae533f1a4369c68a219f72ec962f19376e169d1745f14403f2c2e139754"
+    },
+    {
+      "action": "new",
+      "pageTitle": "ADAS Strategic Framework and Data Hub",
+      "notePath": "notes/adas-strategic-framework-and-data-hub.md",
+      "afterHash": "3af4737a2fd366cc41f2de9002a6727aa184cabfca5f5ba5114f4040f5a582cf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Unpaid Care Dashboard",
+      "notePath": "notes/unpaid-care-dashboard.md",
+      "afterHash": "b1ab6ca5e78f9d9d199554b7ccc25f5cf0ae0cf2e93dbf411c483b6b130f4d1c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Capacity building and implementation strategies",
+      "notePath": "notes/capacity-building-and-implementation-strategies.md",
+      "afterHash": "f0b01bc7670dacf7698f4bc9d0dc46e2187f4320fc6c4d3d2ccd8c6bb647eef4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Unstructured data analysis in social care",
+      "notePath": "notes/unstructured-data-analysis-in-social-care.md",
+      "afterHash": "6d3a1f21e9f3a4ba13af4a8420af367b040db099020855fd8307f0d7632832b3"
+    }
+  ]
+}

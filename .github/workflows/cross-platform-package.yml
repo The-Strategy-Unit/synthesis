@@ -35,6 +35,7 @@ jobs:
           New-Item -ItemType Directory -Force $package | Out-Null
           Copy-Item "dist/synthesis-windows-x86_64.exe" $package
           Copy-Item "LICENSE" $package
+          Copy-Item "demos/haca-2025-vault" "$package/haca-2025-vault" -Recurse
           Compress-Archive `
             -Path "$package/*" `
             -DestinationPath "dist/synthesis-windows-x86_64.zip" `
@@ -59,9 +60,10 @@ jobs:
           package="dist/release/synthesis-linux-x86_64"
           mkdir -p "$package"
           cp dist/synthesis-linux-x86_64 LICENSE "$package/"
+          cp -R demos/haca-2025-vault "$package/"
           chmod +x "$package/synthesis-linux-x86_64"
           tar -czf dist/synthesis-linux-x86_64.tar.gz \
-            -C "$package" synthesis-linux-x86_64 LICENSE
+            -C "$package" synthesis-linux-x86_64 LICENSE haca-2025-vault
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-linux-x86_64
@@ -82,9 +84,10 @@ jobs:
           package="dist/release/synthesis-macos-aarch64"
           mkdir -p "$package"
           cp dist/synthesis-macos-aarch64 LICENSE "$package/"
+          cp -R demos/haca-2025-vault "$package/"
           chmod +x "$package/synthesis-macos-aarch64"
           tar -czf dist/synthesis-macos-aarch64.tar.gz \
-            -C "$package" synthesis-macos-aarch64 LICENSE
+            -C "$package" synthesis-macos-aarch64 LICENSE haca-2025-vault
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-macos-aarch64

@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "9eb3c452-4a63-40c4-809d-3b2d02e9b74e",
+  "operation": "ingest",
+  "proposalId": 15,
+  "sourceHash": "116d13b46066a73fc23c23e550cb8f992dbe894858d90f7c6e5df92278575479",
+  "sourceTitle": "HACA 2025 - Day 1 - Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T17:18:34.438Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS England Regional Analytics Team",
+      "notePath": "notes/nhs-england-regional-analytics-team.md",
+      "afterHash": "f6e3a7017ad35397b40940e2fd4653d7068265489b464b1428f648b063ffc0a2"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Strategic Vision for Analytics Teams",
+      "notePath": "notes/strategic-vision-for-analytics-teams.md",
+      "afterHash": "6dd25b0a7d1e66a62381f896069ea0e5d5a42315ca3bd7b0a3ccd6af8566083d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Core Skills Profile Implementation",
+      "notePath": "notes/core-skills-profile-implementation.md",
+      "afterHash": "3556918c38f66b7d9569d695133712ba8b9c2ad0ee99e3face01f1db5672ef5a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Learning and Development Playbook",
+      "notePath": "notes/learning-and-development-playbook.md",
+      "afterHash": "409db3edb14c002cc96f152b325b44a860428988dd5c9d56d50ed6544fd14dfa"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Annual Analytical Plans",
+      "notePath": "notes/annual-analytical-plans.md",
+      "afterHash": "587a8aa0d657227d081abe8ccece8ae6c13a64f1fe5ab5bfd87f0ec3969ee239"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Portfolio Management for Operational Analytics",
+      "notePath": "notes/portfolio-management-for-operational-analytics.md",
+      "afterHash": "649625f05b0c5566830b8af72880b8fdf62370d8782c9ff2690fdc5df606f724"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Informal Authority of Data Analysts",
+      "notePath": "notes/informal-authority-of-data-analysts.md",
+      "afterHash": "5407bd039c42b87082597398c231f93ee4c6af28c54ce96d72f294f0309a10c7"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Collective Learning and Psychological Safety",
+      "notePath": "notes/collective-learning-and-psychological-safety.md",
+      "afterHash": "a825b68107e5ba9b92dc728e46f824da17d2e7edb584eec586ee0516983ffc86"
+    }
+  ]
+}

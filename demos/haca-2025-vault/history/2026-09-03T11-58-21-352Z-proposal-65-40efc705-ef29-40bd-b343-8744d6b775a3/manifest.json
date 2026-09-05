@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "40efc705-ef29-40bd-b343-8744d6b775a3",
+  "operation": "ingest",
+  "proposalId": 65,
+  "sourceHash": "148ea1048f72e2a9113ec263ac46779e39a97b068bf5ae32cdd05dc1aee07500",
+  "sourceTitle": "HACA 2025: Shift to Community: Better Together: Supporting analysts and managers with RAP",
+  "appliedAt": "2026-09-03T11:58:21.352Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "NHS Strategy Unit data science support initiatives",
+      "notePath": "notes/nhs-strategy-unit-data-science-support-initiatives.md",
+      "afterHash": "0e554dd8b690bc7c5b81d7019c2a0f2ebb1cc06158786d40afc6d3e4d100474c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "RAP drop-in sessions",
+      "notePath": "notes/rap-drop-in-sessions.md",
+      "afterHash": "b53840176aa7d3a323dea54fbe3641439d8639c5e444d03e77cd81eafe18bfe1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "RAP Code Review Buddy Network",
+      "notePath": "notes/rap-code-review-buddy-network.md",
+      "afterHash": "8f6b1da99cfdc52dbac1a40e0d8df18013e46c34c39fa93ba68181f5c7b93fe6"
+    }
+  ]
+}

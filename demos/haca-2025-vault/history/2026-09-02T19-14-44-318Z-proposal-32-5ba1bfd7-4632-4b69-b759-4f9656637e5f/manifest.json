@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "historyId": "5ba1bfd7-4632-4b69-b759-4f9656637e5f",
+  "operation": "ingest",
+  "proposalId": 32,
+  "sourceHash": "875a5c46413719e1f0e4b2f81f382ecb9b4334878fec2a43178c3f462d22c8ec",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T19:14:44.318Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Dorset Insight and Intelligence Service (DICE)",
+      "notePath": "notes/dorset-insight-and-intelligence-service-dice.md",
+      "afterHash": "65f8f95c147e2c2d16b27469d93abe30541a141729b097733f3990cded102289"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Asthma outcome improvement in Dorset",
+      "notePath": "notes/asthma-outcome-improvement-in-dorset.md",
+      "afterHash": "5eddce9995e6308bc294a866dc1588f5f9242bf4022b3937e5fe4161ae99f4ac"
+    },
+    {
+      "action": "new",
+      "pageTitle": "SABA overuse in asthma management",
+      "notePath": "notes/saba-overuse-in-asthma-management.md",
+      "afterHash": "f2a232b2c7f5b53f248dcab42c812733dc5c3b7e2a7dcf8fef9585ed033764ef"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data-driven population health management",
+      "notePath": "notes/data-driven-population-health-management.md",
+      "afterHash": "ac717b0206a2fd0d885a67d34e4d92237de497958a9ca0ecf15b3c00bdd15656"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Impact of respiratory champions on asthma outcomes",
+      "notePath": "notes/impact-of-respiratory-champions-on-asthma-outcomes.md",
+      "afterHash": "7af3f280a1ce6f89407e01b595c30d4dea12618eebb64e90ce640fa91523daad"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Correlation between SABA use and respiratory admissions",
+      "notePath": "notes/correlation-between-saba-use-and-respiratory-admissions.md",
+      "afterHash": "c9371400c78358083e5a8d00c83d278f887d81d4fc3a5a9d536f4bf6bed96008"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Trends in asthma mortality in Dorset",
+      "notePath": "notes/trends-in-asthma-mortality-in-dorset.md",
+      "afterHash": "9bfd7f853640e84af6f3c57f99a7af8693c2eb9b345dd6a5f5cac1b8cbb6793d"
+    }
+  ]
+}

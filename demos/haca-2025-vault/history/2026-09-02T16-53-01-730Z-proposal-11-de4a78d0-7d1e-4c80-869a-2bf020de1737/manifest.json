@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "de4a78d0-7d1e-4c80-869a-2bf020de1737",
+  "operation": "ingest",
+  "proposalId": 11,
+  "sourceHash": "651e9761d6dda19cef3e89a2503ed23462f6b9d8fc1b0395268f1a2a855a3b82",
+  "sourceTitle": "HACA 2025 - Day 1- Targeting Care/ Advancing Analytics",
+  "appliedAt": "2026-09-02T16:53:01.730Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Social Return on Investment Framework",
+      "notePath": "notes/social-return-on-investment-framework.md",
+      "afterHash": "209ccacd2e9c35b9afa95fedf027f33b80ff824c1473d75acca19e6fbcbc9443"
+    },
+    {
+      "action": "new",
+      "pageTitle": "SROI Implementation Process",
+      "notePath": "notes/sroi-implementation-process.md",
+      "afterHash": "373da17324b7e98db0ba1beab948e24a41c0a79d0e46042ae817ea58163db13a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Challenges in SROI Evaluation",
+      "notePath": "notes/challenges-in-sroi-evaluation.md",
+      "afterHash": "31444b6f6200e863dca6461bfa2284b09e34d61bed740c4aea6e505066c3333c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Manchester Public Health SROI Case Study",
+      "notePath": "notes/manchester-public-health-sroi-case-study.md",
+      "afterHash": "06d6780cc5dd20eb402c03e18a3d85006c02a4c8769c1747364f5dd51040c122"
+    }
+  ]
+}

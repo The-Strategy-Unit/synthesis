@@ -1,0 +1,25 @@
+---
+title: "Practical Analytics vs AI in NHS Care"
+type: concept
+tags: ["practical analytics", "healthcare logistics", "artificial intelligence"]
+links: ["Structuring the NHS Analytic Community", "Propositional Approach to NHS Data Progress", "Separating business intelligence from strategic analysis", "Real-Time Intelligence in Urgent Care", "Strategic commissioning and clinician engagement"]
+relationships: [{"target":"Separating business intelligence from strategic analysis","type":"contradicts","explanation":"The 'Practical Analytics vs AI in NHS Care' page argues that the NHS should focus on 'better delivery of practical analytics' to solve existing operational challenges, rather than pursuing advanced AI techniques. The 'Separating business intelligence from strategic analysis' page suggests that the current system is 'awash with data' but lacks insights because BI and strategic analysis are lumped together, leading to 'urgent crowding out the important.' The 'Practical Analytics' page implies that the current focus on high-volume BI tasks displaces strategic analytical work, which contradicts the 'Separating business intelligence' page's diagnosis of the problem.","significance":"This contradiction highlights a fundamental disagreement on the root cause of the NHS's analytical challenges: whether the issue is a lack of advanced AI or a structural misalignment between BI and strategic analysis.","pageHashes":["2566368c23eac72687283585fe053062e4ea2500b861d0addec8407f31b5a782","c5bccd44f85b0cbc2b29c5b205a175d9cd0340eb577d7dd81984b6bf1391038b"],"confirmedAt":"2026-09-04T21:22:34.002Z"},{"target":"Real-Time Intelligence in Urgent Care","type":"supports","explanation":"The 'Real-Time Intelligence in Urgent Care' page describes a system-wide intelligence tool that uses timely data to provide operational insights and monitor performance against targets. This directly supports the 'Practical Analytics vs AI in NHS Care' page's assertion that practical analytics, focusing on reproducible pipelines and real operational challenges, offers a high-impact opportunity to improve care delivery and efficiency.","significance":"Provides concrete evidence for the 'Practical Analytics' concept by describing a successful implementation of timely, data-driven operational intelligence in the NHS urgent and emergency care sector.","pageHashes":["2566368c23eac72687283585fe053062e4ea2500b861d0addec8407f31b5a782","199cf45b25eb4b0c8cd4501721868d54c08dc27a54b326cfa43d4718633e8ef9"],"confirmedAt":"2026-09-04T21:22:34.030Z"},{"target":"Strategic commissioning and clinician engagement","type":"mechanistic","explanation":"Page 926 advocates for practical analytics to solve operational challenges, while Page 979 describes strategic commissioning as a complex, non-technocratic task requiring clinician engagement. The pages suggest a mechanistic link where practical analytics (reproducible pipelines, real data) provides the foundational evidence and tools necessary to support the human-centric, problem-solving approach required for effective strategic commissioning.","significance":"This synthesis highlights a potential workflow where practical analytics serves as the operational engine for strategic commissioning, ensuring that high-level decisions are grounded in robust, reproducible data analysis rather than abstract policy ideas.","pageHashes":["2566368c23eac72687283585fe053062e4ea2500b861d0addec8407f31b5a782","8531c13a7d372bddd96f461ee35bd2269426c691372dd8f31c727b4da7ceb8e3"],"confirmedAt":"2026-09-04T21:23:00.968Z"}]
+---
+
+# Practical Analytics vs AI in NHS Care
+
+While artificial intelligence has a role in improving healthcare, there is a larger and more immediate opportunity in the better delivery of practical analytics. Optimising the logistics of care delivery is identified as a high-impact area for public servants aiming to reduce avoidable suffering and death. This work is performed by practical analysts working with real NHS data to address real operational challenges, rather than focusing solely on theoretical or esoteric methods.
+
+The emphasis should be on reproducible analytical pipelines and the practical application of data to solve existing problems. This approach contrasts with the pursuit of advanced AI techniques that may not yet offer tangible benefits to daily operations. By focusing on practical analytics, the NHS can achieve material improvements in care delivery and efficiency in the short term.
+
+## Related
+
+- [[Structuring the NHS Analytic Community]]
+- [[Propositional Approach to NHS Data Progress]]
+- [[Separating business intelligence from strategic analysis]]
+- [[Real-Time Intelligence in Urgent Care]]
+- [[Strategic commissioning and clinician engagement]]
+
+## Sources
+
+- [HACA 2025 - Day 1-Main Stage - Closing Session](<https://www.youtube.com/watch?v=09wFPWlRKxY>); SHA-256: `1b306da78ea7930c26da492fe36287265a4856641dfefaf95517f7fec5cdfea6` <!-- synthesis-source:1b306da78ea7930c26da492fe36287265a4856641dfefaf95517f7fec5cdfea6 -->

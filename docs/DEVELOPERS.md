@@ -39,24 +39,33 @@ deno task trial              # disposable provider-free evidence demo
 
 Compile a self-extracting QuickJS executable for the current host with
 `deno task compile`; target Linux x64, macOS ARM64, or Windows x64 with the
-corresponding `compile:*` task. `deno task build` creates all three. Run
-`deno task test:compiled <executable>` on the artefact's target operating system
-to verify native SQLite startup, offline vault APIs, PDF text extraction, the
-trial vault, and embedded UI assets from an unrelated working directory.
+corresponding `compile:*` task. `deno task build` creates all three. A compiled
+executable can open an existing vault with `--vault <path>`. Run the compiled
+smoke task on the artefact's target operating system:
+
+```bash
+deno task test:compiled <executable>
+```
+
+It verifies native SQLite startup, offline vault APIs, PDF text extraction, the
+HACA and trial vaults, and embedded UI assets from an unrelated working
+directory.
 
 Compilation prebundles and minifies application code, keeps the two native npm
 packages external for target-aware resolution, and embeds only the three web
-runtime artefacts. Do not add broad directory includes: the 80 MiB build ceiling
-is intended to catch dependency bloat and accidental inclusion of tests, docs,
-or local material.
+runtime artefacts. The HACA 2025 vault is copied beside the executable when CI
+creates each release archive; it is not embedded in the binary. Do not add broad
+directory includes: the 80 MiB build ceiling is intended to catch dependency
+bloat and accidental inclusion of tests, docs, or local material.
 
 The cross-platform packaging workflow runs for pull requests, manual dispatches,
 and pushed `v*` tags. Pull requests and manual runs produce downloadable build
 artefacts only. A tag run additionally requires the tag to equal
 `v<deno.json version>`; after every target-native compiled smoke test passes, it
-creates the GitHub Release with generated notes, platform archives, and
-`SHA256SUMS`. Existing releases are never overwritten: a rerun succeeds only
-when the published asset names already match exactly.
+creates the GitHub Release with generated notes, platform archives containing
+the executable, licence, and HACA 2025 vault, and `SHA256SUMS`. Existing
+releases are never overwritten: a rerun succeeds only when the published asset
+names already match exactly.
 
 To release, update and commit `deno.json`, then push its matching annotated tag:
 

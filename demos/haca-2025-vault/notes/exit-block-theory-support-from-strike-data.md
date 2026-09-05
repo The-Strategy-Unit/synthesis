@@ -1,0 +1,24 @@
+---
+title: "Exit Block Theory Support from Strike Data"
+type: concept
+tags: ["exit block theory", "bed availability", "emergency department"]
+links: ["Theorized Mechanisms for ED Duration Changes", "Overall Findings on Planned Care and ED Durations", "Statistical modeling of boarding-related harm", "Medical patient boarding and its systemic impacts"]
+relationships: [{"target":"Statistical modeling of boarding-related harm","type":"mechanistic","explanation":"The 'Exit Block Theory Support from Strike Data' page states that reductions in emergency bed occupancy during consultant strikes facilitated patient admission, thereby reducing boarding times. The 'Statistical modeling of boarding-related harm' page describes the exposure variable for downstream impacts like mortality as 'time waiting for a bed (boarding time)' and notes that controlling for 'no criteria to reside' (NCTR) status accounts for exit block effects. This suggests that the strike data provides empirical evidence for the specific mechanism—reduced boarding time due to increased bed availability—that the statistical modelling attempts to isolate and quantify.","significance":"This connection validates the methodological approach used in the statistical modelling by providing real-world evidence for the 'exit block' mechanism. It bridges the gap between observed system flow improvements during industrial action and the specific patient-level exposure variable (boarding time) used in harm modelling.","pageHashes":["c46323c950e4bd5c79bf8467c8ee28cca8d43075b70063c0e83f813bde9c1b18","d371fff4d5ddcec50fc3e7a3efa1e6315e85431d5ed7ca1aee3f28fe3c92896b"],"confirmedAt":"2026-09-04T21:22:34.027Z"},{"target":"Medical patient boarding and its systemic impacts","type":"mechanistic","explanation":"The left page (Exit Block Theory) identifies emergency bed availability as the primary bottleneck for Emergency Department (ED) flow, noting that increased bed availability during strikes reduced ED durations. The right page (Medical patient boarding) defines boarding as the delay in admitting patients to ward beds and details its systemic impacts. The connection is mechanistic: the 'exit block' described on the left is operationally realized as 'boarding' described on the right. The left page provides causal evidence that relieving this specific bottleneck (bed occupancy) improves system flow, while the right page quantifies the harm caused by that same bottleneck. Together, they link the operational mechanism (bed availability) to the clinical and systemic outcomes (boarding duration, mortality, length of stay).","significance":"This synthesis connects a high-level system flow theory with specific clinical consequences. It validates the 'exit block' theory by linking it to the measurable harms of boarding, suggesting that interventions targeting bed availability (as seen during strikes) could directly mitigate the downstream harms (mortality, readmissions) associated with boarding.","pageHashes":["c46323c950e4bd5c79bf8467c8ee28cca8d43075b70063c0e83f813bde9c1b18","c27861c4b18225b0e2f060f5db5a0d9df8c4ebfd10b9ebb198863203460dcc07"],"confirmedAt":"2026-09-04T21:23:00.914Z"}]
+---
+
+# Exit Block Theory Support from Strike Data
+
+The study provides support for the 'exit block theory' regarding emergency department performance. Increases in emergency bed availability on strike days were associated with lower ED durations. This suggests that the primary bottleneck for ED flow is often the inability to discharge patients to inpatient beds, rather than the volume of elective work or front-door demand. When beds became available due to the cessation of other hospital activities during strikes, ED durations decreased, highlighting the critical role of bed management in ED throughput.
+
+During consultant strikes, ED durations reduced by an average of 17 minutes. Causal mediation analysis estimated that just over half of this reduction (approximately 9 minutes) was explained by reductions in emergency bed occupancy. Lower bed occupancy on strike days made it easier to admit patients, thereby reducing boarding times. This finding supports the theory that changes in shared resources, specifically bed availability, mediated the relationship between the strike exposure and the outcome of shorter ED stays.
+
+## Related
+
+- [[Theorized Mechanisms for ED Duration Changes]]
+- [[Overall Findings on Planned Care and ED Durations]]
+- [[Statistical modeling of boarding-related harm]]
+- [[Medical patient boarding and its systemic impacts]]
+
+## Sources
+
+- [HACA2025 - Day 1- Improving System Flow](<https://www.youtube.com/watch?v=QZ04scthvSg>); SHA-256: `e40025cc033d58ebc7da13c61995ba03b5fdae23b6fc51313fc734870f34a5b2` <!-- synthesis-source:e40025cc033d58ebc7da13c61995ba03b5fdae23b6fc51313fc734870f34a5b2 -->

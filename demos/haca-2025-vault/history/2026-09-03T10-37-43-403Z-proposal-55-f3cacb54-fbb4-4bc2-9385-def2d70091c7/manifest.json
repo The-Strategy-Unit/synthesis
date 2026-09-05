@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "f3cacb54-fbb4-4bc2-9385-def2d70091c7",
+  "operation": "ingest",
+  "proposalId": 55,
+  "sourceHash": "150f164160265a8af7500ce8203f02d1b562e62265af9614e94a12d0fe60e6bc",
+  "sourceTitle": "HACA2025 - Day 1 - Main Stage - Jess Morley",
+  "appliedAt": "2026-09-03T10:37:43.403Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "AI as a systems-level technology in healthcare",
+      "notePath": "notes/ai-as-a-systems-level-technology-in-healthcare.md",
+      "afterHash": "5ba0aee507ddaf77a604bf1ec136edc9cdd01bf001390c81c99c50df6e56fdff"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Separation and joining of clinical concepts",
+      "notePath": "notes/separation-and-joining-of-clinical-concepts.md",
+      "afterHash": "8d8fea7e2fe3339e097f8b08d1f08a88041d927edcb1bfae75c0403a08a27c39"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Contextual limitations and infrastructure mismatches",
+      "notePath": "notes/contextual-limitations-and-infrastructure-mismatches.md",
+      "afterHash": "ec7360b87e18a39439810025794daf9610d0aaad1287f9cf32212a1f8f9558a5"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Risk prediction model limitations",
+      "notePath": "notes/risk-prediction-model-limitations.md",
+      "afterHash": "2ef300f2858d022be3fcb8bbd2288abcd98a96b2fa4177612c064a7cdefea49d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Automation bias and human-AI interaction",
+      "notePath": "notes/automation-bias-and-human-ai-interaction.md",
+      "afterHash": "aee3ce3230c0639584f37c9477f90192fa8ca7c874093b4b069364f457f8719b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Procurement safeguards and evaluation frameworks",
+      "notePath": "notes/procurement-safeguards-and-evaluation-frameworks.md",
+      "afterHash": "65a2036c9c22111dc29b17d014239d4e63c184b4e332377259f1ef494f0c319c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Ensuring health equity in AI tools",
+      "notePath": "notes/ensuring-health-equity-in-ai-tools.md",
+      "afterHash": "0adef3bc1dd0114b5b6ca172e927557316a0a8a73a2a0ff22fdb297ae7341078"
+    },
+    {
+      "action": "new",
+      "pageTitle": "AI capabilities, misconceptions, and future potential",
+      "notePath": "notes/ai-capabilities-misconceptions-and-future-potential.md",
+      "afterHash": "8aae1fb66fb3654b02b0557df202dd1e5137354a69e0d50b9a52c9447f21b84f"
+    }
+  ]
+}

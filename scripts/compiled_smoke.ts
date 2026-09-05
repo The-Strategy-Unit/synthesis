@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { basename, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
 function availablePort(): number {
   const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
@@ -100,6 +103,24 @@ interface SmokeExpectation {
   verifyPdf: boolean;
 }
 
+async function copyDirectory(
+  source: string,
+  destination: string,
+): Promise<void> {
+  await Deno.mkdir(destination, { recursive: true });
+  for await (const entry of Deno.readDir(source)) {
+    const sourcePath = join(source, entry.name);
+    const destinationPath = join(destination, entry.name);
+    if (entry.isDirectory) {
+      await copyDirectory(sourcePath, destinationPath);
+    } else if (entry.isFile) {
+      await Deno.copyFile(sourcePath, destinationPath);
+    } else {
+      throw new Error(`Demo vault contains unsupported entry ${sourcePath}`);
+    }
+  }
+}
+
 async function collectChildOutput(
   child: Deno.ChildProcess,
   outputPromise: Promise<Deno.CommandOutput>,
@@ -126,6 +147,7 @@ async function smokeExecutable(
   expectation: SmokeExpectation,
 ): Promise<void> {
   await Deno.mkdir(directory, { recursive: true });
+  await Deno.mkdir(join(directory, "vault"), { recursive: true });
   const port = availablePort();
   const origin = `http://127.0.0.1:${port}`;
   const child = new Deno.Command(executable, {
@@ -218,6 +240,17 @@ async function main(): Promise<void> {
       sourceCount: 0,
       verifyPdf: true,
     });
+    const hacaDirectory = join(directory, "haca");
+    await copyDirectory(
+      join(PROJECT_DIRECTORY, "demos", "haca-2025-vault"),
+      join(hacaDirectory, "haca-2025-vault"),
+    );
+    await smokeExecutable(copiedExecutable, hacaDirectory, {
+      arguments: ["--vault", "haca-2025-vault", "--no-open"],
+      pageCount: 344,
+      sourceCount: 66,
+      verifyPdf: false,
+    });
     await smokeExecutable(copiedExecutable, join(directory, "trial"), {
       arguments: ["--trial", "--no-open"],
       pageCount: 7,
@@ -225,7 +258,7 @@ async function main(): Promise<void> {
       verifyPdf: false,
     });
     console.log(
-      "Compiled Synthesis served its UI, extracted PDF text, and opened its offline trial vault.",
+      "Compiled Synthesis served its UI, extracted PDF text, and opened its HACA and trial vaults.",
     );
   } finally {
     await Deno.remove(directory, { recursive: true });

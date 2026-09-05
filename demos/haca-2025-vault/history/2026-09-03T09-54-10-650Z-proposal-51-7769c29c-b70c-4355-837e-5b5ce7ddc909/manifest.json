@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "historyId": "7769c29c-b70c-4355-837e-5b5ce7ddc909",
+  "operation": "ingest",
+  "proposalId": 51,
+  "sourceHash": "0c7835363a8afacfd41616ecd8692220a5164b2dfdff549c2c896fcf71b064ef",
+  "sourceTitle": "HACA 2025: Shift to Community: Modelling characteristics associated with the risk of a poor...",
+  "appliedAt": "2026-09-03T09:54:10.650Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Predicting poor patient outcomes after hospital discharge",
+      "notePath": "notes/predicting-poor-patient-outcomes-after-hospital-discharge.md",
+      "afterHash": "25a17127ee11ae4c7bdf1f92d8c045aafc77665b83c28a61ac0560157ac0af2c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Definition of poor patient outcome 90 days post-discharge",
+      "notePath": "notes/definition-of-poor-patient-outcome-90-days-post-discharge.md",
+      "afterHash": "ffee3c1bfaff44075ed694e2e5d843c161e266347b7e00dae6ec4905b639e37d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data quality of client-level adult social care datasets",
+      "notePath": "notes/data-quality-of-client-level-adult-social-care-datasets.md",
+      "afterHash": "946adcb19c5f21118b99baded0b6590bc28f11e461b7bcfe9a6ab908588415a9"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+---
+title: "Barriers to preferred place of death"
+type: concept
+tags: ["discharge planning", "multi-agency care", "end of life"]
+links: ["Patient priorities and agency in palliative care", "Operational and workforce constraints in community care", "Continuity of care and urgent demand", "Legislative and Systemic Barriers in Health Data"]
+relationships: [{"target":"Continuity of care and urgent demand","type":"causal_hypothesis","explanation":"The 'Barriers to preferred place of death' page identifies systemic and clinical barriers, such as late recognition of end-of-life status and resource mismatches, that prevent patients from dying at home. The 'Continuity of care and urgent demand' page presents a hypothesis that increased continuity of care reduces demand for urgent care services, but notes that the current trend prioritizing access over continuity may undermine this benefit. The first page's description of complex, multi-agency coordination required to facilitate a patient's wish to die at home suggests that achieving continuity of care in end-of-life settings is a significant challenge that could be a major driver of urgent care demand.","significance":"This relationship proposes a specific, high-impact hypothesis: that the failure to achieve continuity of care in end-of-life settings is a primary driver of urgent care demand. It connects the 'systemic barriers' identified in the first page with the 'demand management' hypothesis in the second, suggesting that addressing end-of-life continuity could be a key lever for reducing urgent care pressure.","pageHashes":["81402ca02770f2fa3e2f29287ad36b1413c73d8c6c4e18ec3ae2b558f1af575d","b42f25a4f3813e80cd9b1966d6b899c80af8857dd86755f621d2a6edb117b27c"],"confirmedAt":"2026-09-04T21:22:34.234Z"},{"target":"Legislative and Systemic Barriers in Health Data","type":"analogous","explanation":"The 'Barriers to preferred place of death' page describes systemic and logistical obstacles to patient choice, requiring multi-agency coordination and resource planning. The 'Legislative and Systemic Barriers in Health Data' page argues that unlocking the benefits of health data requires legislative change and addressing systemic constraints, rather than isolated technical fixes. Both pages identify systemic constraints (resource capacity vs. legislation) that must be addressed to enable the intended outcome (patient choice vs. data utility).","significance":"This analogy highlights that both patient choice and data utility are constrained by complex, multi-faceted systemic factors that cannot be solved by technical interventions alone. It suggests that improving patient choice at the end of life may require legislative and systemic changes similar to those proposed for health data interoperability.","pageHashes":["81402ca02770f2fa3e2f29287ad36b1413c73d8c6c4e18ec3ae2b558f1af575d","5af7d277503a17f60e3d2c532063bdfe40f409e516d1a0621f0020eef66a2bed"],"confirmedAt":"2026-09-04T21:22:34.339Z"}]
+---
+
+# Barriers to preferred place of death
+
+Several systemic and clinical barriers prevent patients from dying in their preferred location. Late recognition of end-of-life status often means patients are identified as dying only after prolonged hospital stays, missing the window for planned discharge. Even when wishes are known, rapid deterioration can outpace the ability to arrange home care resources, such as hospital beds or carers. Additionally, patients may wait on wards for nursing home beds that are unavailable. These mismatches between patient wishes and resource capacity or timing often result in death occurring in hospital despite a preference for home.
+
+Facilitating a patient's wish to die at home often requires extensive multi-agency coordination, particularly in complex cases. For instance, discharging a patient with pancreatic cancer and a history of coercive control required collaboration with police, care providers, GPs, district nurses, and hospice teams to implement safety plans and fast-track funding. In other cases, patient preferences may need to be negotiated when home care is not feasible or when family dynamics require adjustment. A patient with aggressive bowel cancer in a rural area was moved to a hospice to ensure her son received adequate support and to relieve her mother from dual caregiving burdens. This demonstrates that the 'best' outcome may differ from the initial stated preference.
+
+## Related
+
+- [[Patient priorities and agency in palliative care]]
+- [[Operational and workforce constraints in community care]]
+- [[Continuity of care and urgent demand]]
+- [[Legislative and Systemic Barriers in Health Data]]
+
+## Sources
+
+- [HACA2025-Day 2 - Main Stage](<https://www.youtube.com/watch?v=2_QkJ3ffwHM>); SHA-256: `fd6bd80928c4b0c65306fd738a5cff8f39a0d82390b819f775bd611aca450729` <!-- synthesis-source:fd6bd80928c4b0c65306fd738a5cff8f39a0d82390b819f775bd611aca450729 -->

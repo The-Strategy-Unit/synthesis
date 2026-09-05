@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "fdf42477-3499-436d-a426-509d1ecf78ac",
+  "operation": "ingest",
+  "proposalId": 34,
+  "sourceHash": "dbfbb160ff1b9a8e189e3eb3b641d68efa8cde879c995184d3ecea2708777fc4",
+  "sourceTitle": "HACA2025- Day 1- Improving System Flow",
+  "appliedAt": "2026-09-02T19:28:39.740Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Northumbria Healthcare endoscopy non-attendance prediction project",
+      "notePath": "notes/northumbria-healthcare-endoscopy-non-attendance-prediction-project.md",
+      "afterHash": "55fdbb672f7bc9b40f150bfe6c18e69c31f2601c8048fb2ba586400056f04e6c"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Endoscopy non-attendance risk factors",
+      "notePath": "notes/endoscopy-non-attendance-risk-factors.md",
+      "afterHash": "500610cbf8da1436a94a20d3b1d49ed0b5220e012bd42b3e670c1b755dea4aef"
+    },
+    {
+      "action": "new",
+      "pageTitle": "XGBoost non-attendance prediction model",
+      "notePath": "notes/xgboost-non-attendance-prediction-model.md",
+      "afterHash": "fb583d60e2c878874a7777134557df51491b07492b8f74f2c6f6f183549f6864"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Model calibration and explainability in risk prediction",
+      "notePath": "notes/model-calibration-and-explainability-in-risk-prediction.md",
+      "afterHash": "881e90f185c3226ec424a9d131bd865137c140a5ceec7f498c1d5007ccb6fb47"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Endoscopy appointment non-attendance intervention",
+      "notePath": "notes/endoscopy-appointment-non-attendance-intervention.md",
+      "afterHash": "0948bc43d254084b93f2d285afa39e44ee9536a84cbb6c8c3cd8f3f895a3bc68"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Impact of proactive calling on high-risk patient attendance",
+      "notePath": "notes/impact-of-proactive-calling-on-high-risk-patient-attendance.md",
+      "afterHash": "c0ba2b7ccadb69c230682a51ba72dc6471e7aa4f8217dca543c69566569ea2d4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data quality issues in patient contact details",
+      "notePath": "notes/data-quality-issues-in-patient-contact-details.md",
+      "afterHash": "3b4a5bc0d33fa3275fde3086bd0339673aa1184cd6b11c167c6c4eb7497a83d1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Information governance in qualitative data collection",
+      "notePath": "notes/information-governance-in-qualitative-data-collection.md",
+      "afterHash": "370fe3dc0a1a59cd505fff7899e8ef55dc7b5cfd1afc2513770af7dca8126d1b"
+    }
+  ]
+}

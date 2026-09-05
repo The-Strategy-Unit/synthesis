@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "historyId": "9e1dee2f-d993-47d0-bc69-6d5af67a7862",
+  "operation": "ingest",
+  "proposalId": 21,
+  "sourceHash": "21e7e25b42c84432bcfadc9ca15b05ae71af5d9a1967f2699049b493953ab7c2",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T17:59:25.542Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Network Data Lab and Discover dataset",
+      "notePath": "notes/network-data-lab-and-discover-dataset.md",
+      "afterHash": "a5479dc10daaca078715aa09ff83c41cbdb87fdf12faed60d0590ac06eb68698"
+    },
+    {
+      "action": "new",
+      "pageTitle": "NHS waiting list analysis objectives",
+      "notePath": "notes/nhs-waiting-list-analysis-objectives.md",
+      "afterHash": "3e83cce60dbb67653e9faa660a09d436d021345fdc8b4b0003494e4222ce62e1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Demographic disparities in NHS waiting times",
+      "notePath": "notes/demographic-disparities-in-nhs-waiting-times.md",
+      "afterHash": "6227068927618ca025cd06c422f7a2935695aaac64d3bce00b50dcca1fce6b7b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Healthcare usage patterns during waiting periods",
+      "notePath": "notes/healthcare-usage-patterns-during-waiting-periods.md",
+      "afterHash": "13fb0b84e0aee6d3cf9320d4eeb5ebbe512e06613429c811ecef9167bf96e85d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data quality gaps in waiting list analysis",
+      "notePath": "notes/data-quality-gaps-in-waiting-list-analysis.md",
+      "afterHash": "1c5ef30db0d0b3a3ee9c22c5868c47a68a2ee435f26171aa81368bf53781946a"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Causal analysis of waiting times using difference-in-difference",
+      "notePath": "notes/causal-analysis-of-waiting-times-using-difference-in-difference.md",
+      "afterHash": "9033ef14a265cfb4bdc5ad1cffc527b497952d3dfeadd8e1c6999006f60963cf"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Patient advisory group feedback on waiting times",
+      "notePath": "notes/patient-advisory-group-feedback-on-waiting-times.md",
+      "afterHash": "f17616110e4a3c1c572ad1b63f4c76d15d61be2c6f529c636f910d42d6716191"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Technical stack for healthcare data analysis",
+      "notePath": "notes/technical-stack-for-healthcare-data-analysis.md",
+      "afterHash": "f0f4551a7112702bbb50928df444f0100df45644b48301e5ab5a1e9aaa4afb0c"
+    }
+  ]
+}

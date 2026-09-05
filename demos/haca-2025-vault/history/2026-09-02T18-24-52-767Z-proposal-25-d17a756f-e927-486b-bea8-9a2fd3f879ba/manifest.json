@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "d17a756f-e927-486b-bea8-9a2fd3f879ba",
+  "operation": "ingest",
+  "proposalId": 25,
+  "sourceHash": "20754c8b3bdb7cd6f8e02cabbee0d273c698420c13b1dc765468f7481736bea5",
+  "sourceTitle": "HACA2025- Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:24:52.767Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "National Diabetes Learning Health System",
+      "notePath": "notes/national-diabetes-learning-health-system.md",
+      "afterHash": "21ba936920a23de9b0f17105bc90146a9ead547bea0b3851afce1f27e695b811"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Embedded Trials in the National Diabetes Audit",
+      "notePath": "notes/embedded-trials-in-the-national-diabetes-audit.md",
+      "afterHash": "528f48cbe49c37201cc35060f891ace19d7eab290ca28a465673fb1860db9e7f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Routine Data in Health Research",
+      "notePath": "notes/routine-data-in-health-research.md",
+      "afterHash": "eca6bf1992e241b837d1173c9a2957c73a93521e1a9205887c395c498a49226b"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Equipoise in Quality Improvement Research",
+      "notePath": "notes/equipoise-in-quality-improvement-research.md",
+      "afterHash": "6621c3d8c40b222295dfce8cef2d95c8a2c7e86cc3dfd9d1acee28e020189c03"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "historyId": "47c0bb46-50b9-4a94-9670-7b1be11e04ed",
+  "operation": "ingest",
+  "proposalId": 7,
+  "sourceHash": "e591c9686f34ff737103b33a17139437b0cb9605e387ac577930044d837f4b16",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/Advancing Analytics",
+  "appliedAt": "2026-09-02T16:28:13.557Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "Demand and capacity modeling for acute care",
+      "notePath": "notes/demand-and-capacity-modeling-for-acute-care.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "3241a1524ed9286231b286f6cc13be047e1b12c40fd8f12d4aa871580aeaabce",
+      "afterHash": "60c893f514d659dffc2c06aef3a30c4a039f155a5de4cf89fa90dc5559924cfd"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Probabilistic Modelling Principles for Healthcare",
+      "notePath": "notes/probabilistic-modelling-principles-for-healthcare.md",
+      "afterHash": "244a131b5951c41f10250c5563c0283bf3c9b576289de877a65f1aec09068ac4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Monte Carlo Simulation Methodology for Hospital Demand",
+      "notePath": "notes/monte-carlo-simulation-methodology-for-hospital-demand.md",
+      "afterHash": "bbdff1079f06b64c7b214defc5a8c27e2be96da4230e20e7e6052a05c3b4b58d"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Hospital Demand Drivers: Demographic and Non-Demographic",
+      "notePath": "notes/hospital-demand-drivers-demographic-and-non-demographic.md",
+      "afterHash": "fde5c6807e80c9cc9577a7eb93985e5b29d636615c93a9ab435c56a0f180328e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Infrastructure and Versioning Challenges",
+      "notePath": "notes/data-infrastructure-and-versioning-challenges.md",
+      "afterHash": "2f7ba880ac37d6cb404fbfc7f15c0b49b719d509acb1dbd644ca52aabee86dbb"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Trade-offs of reproducible analytical pipelines",
+      "notePath": "notes/trade-offs-of-reproducible-analytical-pipelines.md",
+      "afterHash": "b2f7c34a798fcad950e33de4e86948656fd93e2028c3a93db56c4f6b6b9254e8"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Stakeholder Engagement and Strategic Planning",
+      "notePath": "notes/stakeholder-engagement-and-strategic-planning.md",
+      "afterHash": "e99b7da58e592f04a4b1306ceec6d256516431b88eea605fbfcac351e593da20"
+    }
+  ]
+}

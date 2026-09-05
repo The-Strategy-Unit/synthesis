@@ -1,0 +1,63 @@
+{
+  "formatVersion": 1,
+  "historyId": "e98ee452-5fe4-4bfe-9539-22dc742af9ae",
+  "operation": "ingest",
+  "proposalId": 42,
+  "sourceHash": "ec6a528d899f48d3ad76b6dcd1ade9acedad77dd96853a8a05d040fb73784aef",
+  "sourceTitle": "HACA 2025 - Day 1 - Main Stage",
+  "appliedAt": "2026-09-03T08:37:14.754Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "merge",
+      "pageTitle": "User-centric design in analytics",
+      "notePath": "notes/user-centric-design-in-analytics.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "4eedb456ddb5d5c040ea88299b61760a8f9e63aada427278a3ab6df1dc9a3c51",
+      "afterHash": "dacc21592b8a38a2f9a5da5d18675ae3cb98c6c551ff77c5ad61d5246bef484f"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Chief Data Analytical Officer Network",
+      "notePath": "notes/chief-data-analytical-officer-network.md",
+      "afterHash": "a6e3ecbb598724490b174dcabff9db8510d8745fa530897ffeb4fd2af64e5155"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Raising the Analyst Voice",
+      "notePath": "notes/raising-the-analyst-voice.md",
+      "afterHash": "38eff11a116be3a83df6a153207707e1037fdf1e2d223e94cc09930672e8d743"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Analyst Role in Digital Transformation",
+      "notePath": "notes/analyst-role-in-digital-transformation.md",
+      "afterHash": "980409c1e833e585fc9cae28b0c52c0cd39ac413a0751d9d886744da8e24c301"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Integration Priorities",
+      "notePath": "notes/data-integration-priorities.md",
+      "afterHash": "6c27d91ecec63a795a9417cda6de236f6e1f6dacb44ce0d631ee81e3e4f9ffe9"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Canonical Data Models for System Interoperability",
+      "notePath": "notes/canonical-data-models-for-system-interoperability.md",
+      "afterHash": "362bf6f22d673e698e0f4c62a176e520210bd6f875cf4bfa72c447718e982e35"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data Repatriation from Central to Local Providers",
+      "notePath": "notes/data-repatriation-from-central-to-local-providers.md",
+      "afterHash": "977ef10b0c3e1d505b06a6d51a5170d8869aae760cf0eee625f1b12fad0c5e88"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Open Analysis Standards and the Goldacre Report",
+      "notePath": "notes/open-analysis-standards-and-the-goldacre-report.md",
+      "afterHash": "8b216a0f318df34c63f0367420d52356fc3f63746720ad178ef3fd7a7735bef5"
+    }
+  ]
+}

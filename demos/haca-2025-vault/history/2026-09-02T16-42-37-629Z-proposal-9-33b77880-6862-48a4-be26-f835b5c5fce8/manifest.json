@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "33b77880-6862-48a4-be26-f835b5c5fce8",
+  "operation": "ingest",
+  "proposalId": 9,
+  "sourceHash": "0f1132f08778ebd0fc4aa81622efc1a3f2303a2d5da68c9584040a497eec026c",
+  "sourceTitle": "HACA2025 - Day 2 - Targeting Care/Advancing Analytics",
+  "appliedAt": "2026-09-02T16:42:37.629Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "UK public expenditure on end-of-life care in 2022",
+      "notePath": "notes/uk-public-expenditure-on-end-of-life-care-in-2022.md",
+      "afterHash": "d30b94d4f52f3baafc34ceb30bc8acba3dbe80fc63f0e7d059066859277c2d5e"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Sectoral distribution of UK end-of-life spending",
+      "notePath": "notes/sectoral-distribution-of-uk-end-of-life-spending.md",
+      "afterHash": "66483c486710089200b9485c74a5d6c7f1ea42e689226a245114cba29ccc91b4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Limitations of UK end-of-life cost data",
+      "notePath": "notes/limitations-of-uk-end-of-life-cost-data.md",
+      "afterHash": "ad3ded8b612baa199fdc2bee23b6bae24f6fff9eeb2dbfd54dc8117d503c33e3"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Policy implications of end-of-life care expenditure",
+      "notePath": "notes/policy-implications-of-end-of-life-care-expenditure.md",
+      "afterHash": "23633b2d7d3b4f654d01f5dfc8306e4dbbf2ae409598bfaf326b74ebf3d9a53c"
+    }
+  ]
+}

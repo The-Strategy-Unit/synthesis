@@ -1,0 +1,71 @@
+{
+  "formatVersion": 1,
+  "historyId": "75004ef1-9ba8-44d6-b9a2-7af58aa5645d",
+  "operation": "ingest",
+  "proposalId": 60,
+  "sourceHash": "2f37d9a2a816ae10318d853052aa8a736efeca82aa02f70ee74eac86ad87f3e8",
+  "sourceTitle": "HACA2025 - Day 2- Main Stage - Panel Discussion",
+  "appliedAt": "2026-09-03T11:17:53.156Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "contradict",
+      "pageTitle": "Siobhan Ligorish",
+      "notePath": "notes/siobhan-ligorish.md",
+      "beforeRevision": "before/000.md",
+      "beforeHash": "59e140efc245270f9afcb08773abe92668234e12643e8332131761a6dc6fe33d",
+      "afterHash": "28c372a0ac1a569ebb443eb268eccf3101f5d090ade32cd37d8856931cbe57a4"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Analyst professional development strategies",
+      "notePath": "notes/analyst-professional-development-strategies.md",
+      "beforeRevision": "before/001.md",
+      "beforeHash": "66eeea1bef45570abe133740c3b47ffb2e921943b8975a68e6bc59317873ee08",
+      "afterHash": "ee6244d5e7a866e5932b43ed2ae746c5b6230f7208afa0a4f6177d5bf2ecb3c1"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Professional Development and Career Navigation Strategies",
+      "notePath": "notes/professional-development-and-career-navigation-strategies.md",
+      "beforeRevision": "before/002.md",
+      "beforeHash": "f6b9cb06ef0ed097836289dff0b6fff20de3a05c269376462a55a2186b9bb3ee",
+      "afterHash": "d8b841c4d8fb391bde9af6c5675377f069946cc490c9876bc04273b4a4b0d314"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Role of open source in healthcare data sharing",
+      "notePath": "notes/role-of-open-source-in-healthcare-data-sharing.md",
+      "beforeRevision": "before/003.md",
+      "beforeHash": "7bb05832572b292e621ab3250cb31a7a16a3a45dcee85af0d47d01899061549f",
+      "afterHash": "f59a29700e95ba6a66e4eae61450de642270d7ddd2004f4739ba447478c593c3"
+    },
+    {
+      "action": "merge",
+      "pageTitle": "Multi-level culture for analytical workforce development",
+      "notePath": "notes/multi-level-culture-for-analytical-workforce-development.md",
+      "beforeRevision": "before/004.md",
+      "beforeHash": "7e17e7f98341ea9df6877cee8d9b55d0b47dd807c173239a25e81aebdb14d576",
+      "afterHash": "c508d66ece550cc63a227191436eb486e66282ab7962550efbe81052905f9ebd"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Tom Smith's transition from manufacturing to NHS analytics",
+      "notePath": "notes/tom-smith-s-transition-from-manufacturing-to-nhs-analytics.md",
+      "afterHash": "c7245ba59887c2f2af57a785286439e6dbdcb2223ccb0512559b19348cf475fe"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Lean manufacturing principles in healthcare analytics",
+      "notePath": "notes/lean-manufacturing-principles-in-healthcare-analytics.md",
+      "afterHash": "363b4ab4ba538a610d2e082d496f5f1cda8f232a389f667482ecd5781c0851d1"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Data visualization as communication and multidisciplinary collaboration",
+      "notePath": "notes/data-visualization-as-communication-and-multidisciplinary-collaboration.md",
+      "afterHash": "f08045b3d3386bdba39310280ee992e93d708e25b6123a81b39cf3e8ad54962d"
+    }
+  ]
+}

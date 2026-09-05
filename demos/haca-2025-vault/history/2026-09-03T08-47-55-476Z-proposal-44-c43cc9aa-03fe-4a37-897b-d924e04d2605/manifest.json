@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "historyId": "c43cc9aa-03fe-4a37-897b-d924e04d2605",
+  "operation": "ingest",
+  "proposalId": 44,
+  "sourceHash": "c8591021a5cd83795c28c82f13776b05dfe6a3f9053311ea23d0f3265c560fae",
+  "sourceTitle": "HACA 2025: Shift to Community: Quantifying categories of potentially mitigable hospital activity...",
+  "appliedAt": "2026-09-03T08:47:55.476Z",
+  "reviewMode": "automatic",
+  "batchId": "aa146e9f-c56e-4b97-bf23-c90cc06d7fcf",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Framework for quantifying potentially mitigable hospital activity",
+      "notePath": "notes/framework-for-quantifying-potentially-mitigable-hospital-activity.md",
+      "afterHash": "c50a1b5283bb86d4ffeb7b6616b2adf1e81846742ca8a8caaaa89174448f9755"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Mechanisms of hospital activity mitigation",
+      "notePath": "notes/mechanisms-of-hospital-activity-mitigation.md",
+      "afterHash": "1c2ad2371571a0490b335f23f055413ea627085841e746a3300065c6dbf66cac"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Trends in potentially mitigable hospital bed days",
+      "notePath": "notes/trends-in-potentially-mitigable-hospital-bed-days.md",
+      "afterHash": "516f622f8e9ae16ac5a1065fee18a86a2d2c7ab832f849e8b1cdb765a41a11f6"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Regional variability in hospital activity",
+      "notePath": "notes/regional-variability-in-hospital-activity.md",
+      "afterHash": "8c7b2ab6b27055274df03c96798efe605d9ac858c35eb4870306085fbd60f957"
+    }
+  ]
+}

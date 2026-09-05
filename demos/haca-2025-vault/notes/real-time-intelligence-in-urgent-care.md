@@ -1,0 +1,22 @@
+---
+title: "Real-Time Intelligence in Urgent Care"
+type: concept
+tags: ["data science", "healthcare operations", "real-time data"]
+links: ["Shropshire UEC Performance Dashboard", "Making Data Count Methodology", "Routine Data in Health Research", "Real-time prediction of emergency department patient flow"]
+relationships: [{"target":"Routine Data in Health Research","type":"mechanistic","explanation":"The 'Real-Time Intelligence in Urgent Care' page describes the use of timely data feeds to provide system-wide insights and monitor emerging pressures. The 'Routine Data in Health Research' page discusses the use of routinely collected national audit data for research, noting that while it offers advantages like reduced workload for sites, it faces challenges with data quality and inconsistencies. The relationship is mechanistic: the 'Real-Time Intelligence' approach relies on the availability and timeliness of data sources, which are often derived from routine data collections. However, the 'Real-Time Intelligence' page explicitly notes that the use of unvalidated data feeds is a trade-off for timeliness, requiring complementary validated metrics for accountability. This suggests a mechanistic link where the quality and validation of routine data sources directly impact the reliability and utility of real-time intelligence systems.","significance":"This connection highlights a critical tension in NHS data infrastructure: the need for immediate, operational insights versus the requirement for validated, high-quality data for research and accountability. It suggests that improving the quality and standardisation of routine data could enhance the reliability of real-time intelligence systems, thereby improving operational decision-making in urgent care.","pageHashes":["199cf45b25eb4b0c8cd4501721868d54c08dc27a54b326cfa43d4718633e8ef9","dd7f380f9e5f73dd49a44572b9c6c678366de4c34b23e479d990c9ab654450d1"],"confirmedAt":"2026-09-04T21:22:34.020Z"},{"target":"Real-time prediction of emergency department patient flow","type":"mechanistic","explanation":"Page 948 describes 'Real-Time Intelligence' as a system-wide approach using timely data to provide operational insights, including visibility of performance against targets. Page 949 describes 'Real-time prediction' as a method to forecast patient flow and admission needs, providing a data-driven view of pressure. The relationship is mechanistic because the prediction model (949) is a specific data-driven tool that feeds into the broader system-wide intelligence framework (948), which uses such data to monitor pressures and inform action.","significance":"This connection highlights how predictive analytics are operationalised within system-wide intelligence dashboards to manage urgent care pressures. It suggests that the 'Real-time prediction' concept is a functional component of the 'Real-Time Intelligence' ecosystem.","pageHashes":["199cf45b25eb4b0c8cd4501721868d54c08dc27a54b326cfa43d4718633e8ef9","815966a5ad9eeac394f8fde59775cebffc6068f4edf9af3b5507901a6eaf823f"],"confirmedAt":"2026-09-04T21:23:00.970Z"}]
+---
+
+# Real-Time Intelligence in Urgent Care
+
+Real-time intelligence in urgent and emergency care involves the use of timely, wide-ranging data availability and sources to provide system-wide insights. This approach includes numerator and denominator flows for filtering, offering views from daily to yearly intervals. Key features include visibility of performance against targets, plans, and prior intervals to facilitate immediate insight and action. The methodology supports a comprehensive range across the UEC spectrum, including pre-hospital, emergency services, inpatient, and discharge stages. By integrating frameworks like NHS England's 'Making Data Count', these systems enable operational teams to monitor emerging pressures and respond swiftly. The use of unvalidated data feeds is a trade-off for timeliness, requiring complementary validated metrics for accountability.
+
+## Related
+
+- [[Shropshire UEC Performance Dashboard]]
+- [[Making Data Count Methodology]]
+- [[Routine Data in Health Research]]
+- [[Real-time prediction of emergency department patient flow]]
+
+## Sources
+
+- [HACA2025 - Day 1 -  Improving System](<https://www.youtube.com/watch?v=5gap_Qv0kTo>); SHA-256: `3e74b9f01ab66754015d2456e824b9565827cc83bceaea6282c800b3e326a93c` <!-- synthesis-source:3e74b9f01ab66754015d2456e824b9565827cc83bceaea6282c800b3e326a93c -->

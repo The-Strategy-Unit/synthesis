@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "historyId": "8fde9c5d-a9ed-4053-a8f9-d6b83e83d382",
+  "operation": "ingest",
+  "proposalId": 24,
+  "sourceHash": "b7a62a476bf6b82518f155ce6adc3a278d7085366a9b7c274b508fcc523c6aad",
+  "sourceTitle": "HACA2025 - Day 2 - Improving System Flow",
+  "appliedAt": "2026-09-02T18:20:31.235Z",
+  "reviewMode": "automatic",
+  "batchId": "17054671-6563-4c4e-910a-8b3373e326d0",
+  "changes": [
+    {
+      "action": "new",
+      "pageTitle": "Arthritis UK Lift Experience Survey methodology",
+      "notePath": "notes/arthritis-uk-lift-experience-survey-methodology.md",
+      "afterHash": "fe518d0d422b2caeb00628c8d827847c620a9c7c2bfd6f6bcece8b43fafaa2bc"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Key findings from Arthritis Lift Experience Survey",
+      "notePath": "notes/key-findings-from-arthritis-lift-experience-survey.md",
+      "afterHash": "932bbdc82a0cd6a12f905b0c26cee9d1d3f47c444bdd1434b2bf929baf1257a4"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Health inequalities in arthritis care",
+      "notePath": "notes/health-inequalities-in-arthritis-care.md",
+      "afterHash": "f80e16a5959cc0f960b822dd5b844e0f47fd828ea2451e0a5d4db7c51bd2b550"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Diagnostic delays and validation issues in arthritis",
+      "notePath": "notes/diagnostic-delays-and-validation-issues-in-arthritis.md",
+      "afterHash": "408eed0a7614bcd29c2c82fb2621d4a096c8bb49e68ef77b6507ac6389f4d241"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Workplace impact and economic costs of arthritis",
+      "notePath": "notes/workplace-impact-and-economic-costs-of-arthritis.md",
+      "afterHash": "945842156e8843f9deb96a32347b2bdca96730923edb857436c17d976c6846ea"
+    },
+    {
+      "action": "new",
+      "pageTitle": "Policy recommendations for arthritis care",
+      "notePath": "notes/policy-recommendations-for-arthritis-care.md",
+      "afterHash": "140371abd4a26386944f0beeb36f27ed6dc5a9a81f9c46d64ebdcb8fe77fda46"
+    }
+  ]
+}
