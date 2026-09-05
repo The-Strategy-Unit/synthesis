@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-import { parseCompiledOptions } from "../src/app/compiled_entry.ts";
+import {
+  compiledHelpText,
+  parseCompiledOptions,
+} from "../src/app/compiled_entry.ts";
 import {
   assertArtifactSize,
   compileArguments,
@@ -84,11 +87,13 @@ Deno.test("the pinned PDF.js canvas loader is patched narrowly", () => {
 
 Deno.test("compiled vault and trial flags are bounded and order-independent", () => {
   assert.deepEqual(parseCompiledOptions([]), {
+    help: false,
     trial: false,
     openBrowser: true,
     vaultPath: null,
   });
   assert.deepEqual(parseCompiledOptions(["--no-open", "--trial"]), {
+    help: false,
     trial: true,
     openBrowser: false,
     vaultPath: null,
