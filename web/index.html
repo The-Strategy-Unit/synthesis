@@ -201,27 +201,39 @@
                     Clear search
                   </button>
                 </div>
-                <div id="graph-focus-context"
-                  class="graph-focus-context hidden">
-                  <span id="graph-focus-summary" role="status"
-                    aria-live="polite"></span>
-                  <div>
-                    <button id="graph-focus-open" type="button">
-                      Open page
-                    </button>
-                    <button id="graph-focus-clear" type="button">
-                      Clear focus
-                    </button>
-                  </div>
-                </div>
-                <p class="graph-method-note">
-                  Select a node to pin its visible connections. Semantic
-                  proximity draws mutually close pages together. Clusters,
-                  bridges, and hubs can reveal patterns worth investigating. Distances
-                  between disconnected groups, axes, and rotation have no
-                  meaning.
+                <p class="graph-method-note" id="graph-help">
+                  Titles appear as space allows. Select a page to explore its
+                  neighbours; open it to inspect evidence. Proximity suggests
+                  similarity, not proof. Axes, rotation, and distances between
+                  disconnected groups have no meaning.
                 </p>
-                <svg id="graph" aria-label="Knowledge connection map"></svg>
+                <div class="graph-workspace">
+                  <svg id="graph" aria-label="Knowledge connection map"
+                    aria-describedby="graph-help"></svg>
+                  <aside class="graph-directory"
+                    aria-labelledby="graph-directory-title">
+                    <h3 id="graph-directory-title">Pages in this view</h3>
+                    <div id="graph-focus-context"
+                      class="graph-focus-context hidden">
+                      <span id="graph-focus-summary" role="status"
+                        aria-live="polite"></span>
+                      <div>
+                        <button id="graph-focus-open" type="button">
+                          Open page
+                        </button>
+                        <button id="graph-focus-clear" type="button">
+                          Clear focus
+                        </button>
+                      </div>
+                    </div>
+                    <label for="graph-page-filter">Filter page titles</label>
+                    <input id="graph-page-filter" type="search"
+                      autocomplete="off" />
+                    <p id="graph-page-count" role="status"
+                      aria-live="polite"></p>
+                    <ul id="graph-page-list"></ul>
+                  </aside>
+                </div>
               </section>
             </div>
           </section>

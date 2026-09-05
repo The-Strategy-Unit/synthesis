@@ -1,5 +1,21 @@
 import assert from "node:assert/strict";
 
+Deno.test("graph titles have a labelled keyboard-accessible list alternative", async () => {
+  const html = await Deno.readTextFile(
+    new URL("./index.html", import.meta.url),
+  );
+  const app = await Deno.readTextFile(new URL("./app.js", import.meta.url));
+  assert.match(html, /aria-labelledby="graph-directory-title"/);
+  assert.match(html, /<label for="graph-page-filter">/);
+  assert.match(
+    html,
+    /id="graph-page-count" role="status"\s+aria-live="polite"/,
+  );
+  assert.match(html, /<ul id="graph-page-list"><\/ul>/);
+  assert.match(app, /\.on\("focus",/);
+  assert.doesNotMatch(app, /currentZoom > uiConfig.labelZoomThreshold/);
+});
+
 Deno.test("transient workflows use labelled native modal dialogs", async () => {
   const html = await Deno.readTextFile(
     new URL("./index.html", import.meta.url),

@@ -11,8 +11,11 @@ import { zoom, zoomIdentity } from "d3-zoom";
 import {
   graphFitTransform,
   graphFocusNodeIds,
+  graphLabelLayout,
+  graphLabelLines,
   graphLinkDistance,
   graphLinkStrength,
+  graphNeighbourRows,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighbourLinks,
@@ -506,6 +509,8 @@ let graphMaximized = false;
 let graphAutoFitPending = false;
 let fitGraphToViewport = () => {};
 let refreshGraphFocusHighlight = () => {};
+let refreshGraphPositions = () => {};
+let revealGraphNode = (_id) => {};
 let simulation = null;
 let graphUnavailable = false;
 
@@ -598,16 +603,22 @@ const graphMaximizeInertTargets = [
 ].filter(Boolean);
 
 function resizeGraphViewport() {
-  if (graphPanel.classList.contains("hidden")) return;
-  const width = Math.max(graphElement.clientWidth, 320);
-  const height = Math.max(graphElement.clientHeight, 240);
+  if (
+    graphPanel.classList.contains("hidden") || primaryWorkspace !== "wiki" ||
+    graphElement.clientWidth <= 0 || graphElement.clientHeight <= 0
+  ) return;
+  const width = Math.max(graphElement.clientWidth, 1);
+  const height = Math.max(graphElement.clientHeight, 1);
   select(graphElement).attr("viewBox", `0 0 ${width} ${height}`);
   if (simulation) {
     simulation
       .force("center", forceCenter(width / 2, height / 2))
-      .alpha(0.12)
-      .restart();
+      .alpha(0.12);
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      simulation.stop().tick();
+    } else simulation.restart();
   }
+  refreshGraphPositions();
 }
 
 function setGraphMaximized(maximized, resize = true) {
@@ -2705,11 +2716,18 @@ const graphFocusContext = document.getElementById("graph-focus-context");
 const graphFocusSummary = document.getElementById("graph-focus-summary");
 const graphFocusOpenButton = document.getElementById("graph-focus-open");
 const graphFocusClearButton = document.getElementById("graph-focus-clear");
+const graphPageFilter = document.getElementById("graph-page-filter");
+const graphPageList = document.getElementById("graph-page-list");
+const graphPageCount = document.getElementById("graph-page-count");
+const graphDirectoryTitle = document.getElementById("graph-directory-title");
 
 function clearGraphFocus() {
+  const restoreFocus = graphFocusContext.contains(document.activeElement);
   graphFocusId = null;
+  graphPageFilter.value = "";
   renderGraphFocusContext();
   refreshGraphFocusHighlight();
+  if (restoreFocus) graphPageFilter.focus({ preventScroll: true });
 }
 
 function setGraphFocus(noteId) {
@@ -2717,6 +2735,7 @@ function setGraphFocus(noteId) {
     return;
   }
   graphFocusId = noteId;
+  graphPageFilter.value = "";
   renderGraphFocusContext();
   refreshGraphFocusHighlight();
 }
@@ -2724,6 +2743,7 @@ function setGraphFocus(noteId) {
 function clearGraphSearch() {
   graphSearch = null;
   graphFocusId = null;
+  graphPageFilter.value = "";
   applySemanticNeighbourhoodBreadth();
 }
 
@@ -2755,6 +2775,62 @@ graphFocusOpenButton.addEventListener("click", () => {
   if (graphFocusId !== null) void loadNote(graphFocusId);
 });
 graphFocusClearButton.addEventListener("click", clearGraphFocus);
+graphPageFilter.addEventListener("input", renderGraphPageList);
+graphPageList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-page-id]");
+  if (!button) return;
+  graphAutoFitPending = false;
+  setGraphFocus(Number(button.dataset.pageId));
+  revealGraphNode(graphFocusId);
+  // The neighbour list is replaced on selection; keep keyboard focus usable.
+  graphFocusOpenButton.focus({ preventScroll: true });
+});
+
+function renderGraphPageList() {
+  const rows = graphFocusId === null
+    ? [...graphData.nodes].sort((a, b) =>
+      Number(graphSearch?.matchedIds.has(b.id) ?? false) -
+        Number(graphSearch?.matchedIds.has(a.id) ?? false) ||
+      a.title.localeCompare(b.title) || a.id - b.id
+    )
+    : graphNeighbourRows(graphData.nodes, graphData.links, graphFocusId);
+  const query = graphPageFilter.value.trim().toLocaleLowerCase();
+  const matches = rows.filter((row) =>
+    row.title.toLocaleLowerCase().includes(query)
+  );
+  graphDirectoryTitle.textContent = graphFocusId === null
+    ? "Pages in this view"
+    : "Connected pages";
+  graphPageCount.textContent = graphUnavailable
+    ? "Connections unavailable. Refresh to retry."
+    : rows.length === 0 && graphFocusId !== null
+    ? "No connections at the current suggestion setting."
+    : `${matches.length} of ${rows.length} pages${
+      query ? " match this filter" : ""
+    }`;
+  graphPageList.replaceChildren();
+  for (const row of matches) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.pageId = String(row.id);
+    const title = document.createElement("span");
+    title.textContent = row.title;
+    button.appendChild(title);
+    const detail = document.createElement("small");
+    detail.textContent = [
+      graphSearch?.matchedIds.has(row.id) ? "Search match" : "",
+      ...(row.kinds ?? []).map((kind) =>
+        kind === "explicit"
+          ? "Reviewed wiki link"
+          : "Semantic suggestion · similarity only"
+      ),
+    ].filter(Boolean).join(" · ");
+    if (detail.textContent) button.appendChild(detail);
+    item.appendChild(button);
+    graphPageList.appendChild(item);
+  }
+}
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && graphMaximized) {
     event.preventDefault();
@@ -3203,14 +3279,18 @@ const tooltip = select("#graph-tooltip");
 function renderGraph() {
   const svg = select(graphElement);
   refreshGraphFocusHighlight = () => {};
+  refreshGraphPositions = () => {};
+  revealGraphNode = (_id) => {};
   fitGraphToViewport = () => {};
+  tooltip.classed("hidden", true);
   const panel = document.getElementById("graph-panel");
   if (panel.classList.contains("hidden")) return;
   simulation?.stop();
-  const width = Math.max(graphElement.clientWidth, 320);
-  const height = Math.max(graphElement.clientHeight, 240);
+  const width = Math.max(graphElement.clientWidth, 1);
+  const height = Math.max(graphElement.clientHeight, 1);
   svg.attr("viewBox", `0 0 ${width} ${height}`);
   svg.selectAll("*").remove();
+  renderGraphPageList();
   svg.on("click.graph-focus", (event) => {
     if (event.target === svg.node()) clearGraphFocus();
   });
@@ -3240,7 +3320,11 @@ function renderGraph() {
   }
 
   const g = svg.append("g");
-  let currentZoom = 1;
+  let transform = zoomIdentity;
+  let hoveredId = null;
+  let keyboardId = null;
+  let highlightedIds = new Set();
+  let previousLabelIds = new Set();
   const sims = graphData.links
     .filter((link) => link.kind === "semantic")
     .map((link) => link.similarity ?? 0.6);
@@ -3254,11 +3338,10 @@ function renderGraph() {
       if (event.sourceEvent) graphAutoFitPending = false;
     })
     .on("zoom", (event) => {
-      currentZoom = event.transform.k;
+      transform = event.transform;
       g.attr("transform", event.transform);
-      const showLabels = currentZoom > uiConfig.labelZoomThreshold;
-      label.style("display", showLabels ? null : "none");
-      if (showLabels) tooltip.classed("hidden", true);
+      updateGraphLabels();
+      tooltip.classed("hidden", true);
     });
   svg.property("__zoom", zoomIdentity);
   svg.call(zoomBehavior);
@@ -3338,34 +3421,34 @@ function renderGraph() {
       graphAutoFitPending = false;
       setGraphFocus(d.id);
     })
-    .on("mouseover", (_event, d) => {
-      highlightNeighbourhood(d.id);
-      const visibleConnections = degree.get(d.id) ?? 0;
-      const declaredConnections = graphData.links.filter((link) =>
-        link.kind === "explicit" &&
-        [endpointId(link.source), endpointId(link.target)].includes(d.id)
-      ).length;
-      tooltip
-        .classed("hidden", false)
-        .text(
-          `${
-            graphSearch?.matchedIds.has(d.id) ? "Search match · " : ""
-          }${d.title} — ${declaredConnections} reviewed wiki links, ${
-            visibleConnections - declaredConnections
-          } mutual semantic proximity suggestions`,
-        );
+    .on("focus", (event, d) => {
+      graphAutoFitPending = false;
+      keyboardId = d.id;
+      revealGraphNode(d.id);
+      refreshGraphFocusHighlight();
+      showGraphTooltip(event, d);
     })
-    .on("mousemove", (event) => {
-      tooltip
-        .style("left", `${event.clientX + 12}px`)
-        .style("top", `${event.clientY - 10}px`);
+    .on("blur", () => {
+      keyboardId = null;
+      refreshGraphFocusHighlight();
+      tooltip.classed("hidden", true);
     })
+    .on("mouseover", (event, d) => {
+      hoveredId = d.id;
+      refreshGraphFocusHighlight();
+      showGraphTooltip(event, d);
+    })
+    .on("mousemove", showGraphTooltip)
     .on("mouseout", () => {
+      hoveredId = null;
       refreshGraphFocusHighlight();
       tooltip.classed("hidden", true);
     });
 
-  const label = g.append("g")
+  // Titles live outside the zoomed layer so their font stays readable in pixels.
+  const label = svg.append("g")
+    .attr("class", "graph-labels")
+    .attr("aria-hidden", "true")
     .selectAll("text")
     .data(graphData.nodes)
     .join("text")
@@ -3374,10 +3457,107 @@ function renderGraph() {
       "is-search-match",
       (datum) => graphSearch?.matchedIds.has(datum.id) ?? false,
     )
-    .text((d) => d.title.length > 20 ? d.title.slice(0, 17) + "…" : d.title)
-    .attr("dx", 10)
-    .attr("dy", 3)
     .style("pointer-events", "none");
+
+  const measurement = document.createElement("canvas").getContext("2d");
+  measurement.font = `500 13px ${getComputedStyle(graphElement).fontFamily}`;
+  const measure = (text) => measurement.measureText(text).width;
+  const labelMetrics = new Map();
+  let measuredWidth = 0;
+
+  function updateGraphLabels() {
+    const viewport = graphElement.viewBox.baseVal;
+    const maxWidth = Math.min(180, viewport.width - 24);
+    if (measuredWidth !== maxWidth) {
+      measuredWidth = maxWidth;
+      label.each(function (datum) {
+        const lines = graphLabelLines(datum.title, measure, maxWidth);
+        labelMetrics.set(datum.id, {
+          width: Math.max(1, ...lines.map(measure)),
+          height: Math.max(16, lines.length * 16),
+        });
+        select(this).selectAll("tspan").data(lines).join("tspan")
+          .text((line) => line).attr(
+            "dy",
+            (_line, index) => index === 0 ? 0 : 16,
+          );
+      });
+    }
+    const activeId = hoveredId ?? keyboardId;
+    const placements = graphLabelLayout(
+      graphData.nodes.map((datum) => ({
+        id: datum.id,
+        x: transform.applyX(datum.x),
+        y: transform.applyY(datum.y),
+        radius: nodeRadius(datum) * transform.k,
+        ...labelMetrics.get(datum.id),
+        priority: datum.id === activeId
+          ? 0
+          : datum.id === graphFocusId
+          ? 1
+          : graphSearch?.matchedIds.has(datum.id)
+          ? 2
+          : highlightedIds.has(datum.id)
+          ? 3
+          : 4,
+        degree: degree.get(datum.id) ?? 0,
+      })),
+      viewport.width,
+      viewport.height,
+      {
+        previousIds: previousLabelIds,
+        // Retain the configured threshold as a density change, never a blank map.
+        padding: transform.k > uiConfig.labelZoomThreshold ? 4 : 10,
+      },
+    );
+    previousLabelIds = new Set(placements.keys());
+    label.each(function (datum) {
+      const box = placements.get(datum.id);
+      const text = select(this).style("display", box ? null : "none");
+      if (!box) return;
+      text.attr("x", box.x).attr("y", box.y + 12);
+      text.selectAll("tspan").attr("x", box.x);
+    });
+  }
+
+  function showGraphTooltip(event, datum) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    tooltip.classed("hidden", false).text(datum.title);
+    const box = tooltip.node().getBoundingClientRect();
+    const x = event.clientX ?? rect.right;
+    const y = event.clientY ?? rect.bottom;
+    tooltip.style(
+      "left",
+      `${Math.max(8, Math.min(innerWidth - box.width - 8, x + 12))}px`,
+    )
+      .style(
+        "top",
+        `${Math.max(8, Math.min(innerHeight - box.height - 8, y + 12))}px`,
+      );
+  }
+
+  revealGraphNode = (id) => {
+    const datum = graphData.nodes.find((item) => item.id === id);
+    if (!datum || !Number.isFinite(datum.x) || !Number.isFinite(datum.y)) {
+      return;
+    }
+    const viewport = graphElement.viewBox.baseVal;
+    const x = transform.applyX(datum.x), y = transform.applyY(datum.y);
+    if (
+      x >= 40 && x <= viewport.width - 40 && y >= 40 &&
+      y <= viewport.height - 40
+    ) return;
+    svg.call(
+      zoomBehavior.transform,
+      zoomIdentity
+        .translate(
+          viewport.width / 2 - datum.x * transform.k,
+          viewport.height / 2 - datum.y * transform.k,
+        )
+        .scale(transform.k),
+    );
+  };
+  refreshGraphPositions = updateGraphPositions;
 
   function endpointId(endpoint) {
     return endpoint && typeof endpoint === "object" ? endpoint.id : endpoint;
@@ -3389,6 +3569,7 @@ function renderGraph() {
       graphData.links,
       hoveredId,
     );
+    highlightedIds = connectedIds;
 
     link
       .classed(
@@ -3401,26 +3582,41 @@ function renderGraph() {
         endpointId(edge.source) !== hoveredId &&
         endpointId(edge.target) !== hoveredId);
     node
-      .classed("is-focused", (datum) => datum.id === hoveredId)
+      .classed(
+        "is-focused",
+        (datum) => datum.id === hoveredId || datum.id === graphFocusId,
+      )
       .classed(
         "is-connected",
         (datum) => datum.id !== hoveredId && connectedIds.has(datum.id),
       )
-      .classed("is-muted", (datum) => !connectedIds.has(datum.id));
+      .classed(
+        "is-muted",
+        (datum) => !connectedIds.has(datum.id) && datum.id !== graphFocusId,
+      );
     label
-      .classed("is-highlighted", (datum) => connectedIds.has(datum.id))
-      .classed("is-muted", (datum) => !connectedIds.has(datum.id));
+      .classed(
+        "is-highlighted",
+        (datum) => connectedIds.has(datum.id) || datum.id === graphFocusId,
+      )
+      .classed(
+        "is-muted",
+        (datum) => !connectedIds.has(datum.id) && datum.id !== graphFocusId,
+      );
   }
 
   function clearNeighbourhoodHighlight() {
+    highlightedIds = new Set();
     link.classed("is-highlighted is-muted", false);
     node.classed("is-focused is-connected is-muted", false);
     label.classed("is-highlighted is-muted", false);
   }
 
   refreshGraphFocusHighlight = () => {
-    if (graphFocusId === null) clearNeighbourhoodHighlight();
-    else highlightNeighbourhood(graphFocusId);
+    const activeId = hoveredId ?? keyboardId ?? graphFocusId;
+    if (activeId === null) clearNeighbourhoodHighlight();
+    else highlightNeighbourhood(activeId);
+    updateGraphLabels();
   };
   refreshGraphFocusHighlight();
 
@@ -3452,14 +3648,17 @@ function renderGraph() {
     node
       .attr("cx", (d) => d.x)
       .attr("cy", (d) => d.y);
-    label
-      .attr("x", (d) => d.x)
-      .attr("y", (d) => d.y);
+    updateGraphLabels();
   }
 
   fitGraphToViewport = () => {
     if (graphData.nodes.length === 0) return;
-    const transform = graphFitTransform(graphData.nodes, width, height);
+    const viewport = graphElement.viewBox.baseVal;
+    const transform = graphFitTransform(
+      graphData.nodes,
+      viewport.width,
+      viewport.height,
+    );
     svg.call(
       zoomBehavior.transform,
       zoomIdentity.translate(transform.x, transform.y).scale(transform.k),
@@ -3574,6 +3773,7 @@ function renderGraphSearchContext() {
 }
 
 function renderGraphFocusContext() {
+  renderGraphPageList();
   const focused = graphFocusId === null
     ? undefined
     : graphData.nodes.find((node) => node.id === graphFocusId);
@@ -3649,8 +3849,8 @@ globalThis.addEventListener("popstate", () => {
     console.error("Could not restore workspace", error);
   });
 });
-globalThis.addEventListener("resize", () => {
+new ResizeObserver(() => {
   if (simulation && readerState.view === "connections") {
     resizeGraphViewport();
   }
-});
+}).observe(graphElement);
