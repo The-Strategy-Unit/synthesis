@@ -364,6 +364,111 @@ function playlistStream(
   return ingestStream(requestId, release, requestSignal, run);
 }
 
+function manualQueueStream(
+  db: DB,
+  requestId: string,
+  release: () => void,
+  requestSignal: AbortSignal,
+  videoUrls: string[],
+  resolveProviders: ProviderResolver,
+  ingestVideo: typeof ingestYouTube,
+): Response {
+  const run: IngestRun = async (send, signal) => {
+    const queueId = crypto.randomUUID();
+    const providers = await resolveProviders();
+    send("queue_started", {
+      queueId,
+      total: videoUrls.length,
+      reviewMode: "manual",
+      providerMode: providerMode(providers),
+    });
+    const notes: Array<{ id: number; title: string }> = [];
+    let staged = 0;
+    let existing = 0;
+    let applied = 0;
+    let rejected = 0;
+    let failed = 0;
+
+    for (let index = 0; index < videoUrls.length; index++) {
+      ensureIngestActive(signal);
+      const current = index + 1;
+      const itemData = { queueId, current, total: videoUrls.length };
+      send("queue_source", { ...itemData, url: videoUrls[index] });
+      try {
+        const ingested = await ingestVideo(videoUrls[index], signal);
+        send("ingested", { ...itemData, title: ingested.title });
+        const result = await stageSingleSource(
+          db,
+          ingested,
+          false,
+          (stage, data) => send(stage, { ...asSseData(data), ...itemData }),
+          providers,
+          signal,
+        );
+        if (result.kind === "already-applied") {
+          applied++;
+          notes.push(...result.result.notes);
+          send("queue_skipped", {
+            ...itemData,
+            title: ingested.title,
+            reason: "already-applied",
+          });
+          continue;
+        }
+        if (result.proposal.status === "rejected") {
+          rejected++;
+          send("queue_skipped", {
+            ...itemData,
+            title: ingested.title,
+            proposalId: result.proposal.id,
+            reason: "rejected",
+          });
+          continue;
+        }
+        if (result.created) staged++;
+        else existing++;
+        const counts = { new: 0, merge: 0, contradict: 0 };
+        for (const change of result.proposal.changes) counts[change.action]++;
+        send("queue_proposal", {
+          ...itemData,
+          title: ingested.title,
+          proposalId: result.proposal.id,
+          existing: !result.created,
+          ...counts,
+        });
+      } catch (error) {
+        if (signal.aborted || error instanceof IngestCancelledError) {
+          throw error;
+        }
+        failed++;
+        logFailure(requestId, `Queued source ${current}`, error);
+        const proposalError = asProposalApiError(error);
+        const safeError = error instanceof LlmServiceError
+          ? error.message
+          : error instanceof ApiError
+          ? error.message
+          : proposalError?.message ?? "Could not prepare this source";
+        send("queue_failed", {
+          ...itemData,
+          error: safeError,
+          requestId,
+        });
+      }
+    }
+    send("queue_complete", {
+      queueId,
+      total: videoUrls.length,
+      staged,
+      existing,
+      applied,
+      rejected,
+      failed,
+    });
+    return notes;
+  };
+  return ingestStream(requestId, release, requestSignal, run);
+}
+
 function trustedBatchStream(
   db: DB,
   requestId: string,
@@ -525,6 +630,7 @@ function trustedBatchStream(
 export {
   approveProposalAndRefresh,
   ingestStream,
+  manualQueueStream,
   normalisePlaylistInput,
   playlistStream,
   processAndStage,

@@ -16,7 +16,7 @@ tool and is not intended for production or regulated workloads.
 ## Five-minute start
 
 Download and extract the archive for your platform from the
-[final v0.2.4 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.4).
+[final v0.2.5 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.5).
 The executables are unsigned; macOS builds are not notarised.
 
 Try the disposable, provider-free example:
@@ -68,7 +68,8 @@ never silently switches from local to remote.
 ## Everyday workflow
 
 1. **Add source**: upload a born-digital PDF, Markdown, or text file; paste
-   text; or provide a YouTube URL.
+   text; provide a YouTube URL; or queue up to 20 YouTube videos for sequential
+   preparation.
 2. **Review**: inspect proposed `new`, `merge`, or `contradict` changes and
    their evidence. Edit, select, approve, or reject them.
 3. **Read**: navigate wiki pages, source evidence, keyword or semantic search,
@@ -83,6 +84,13 @@ never silently switches from local to remote.
 
 Scanned or encrypted PDFs are rejected; run OCR first. YouTube ingestion needs
 `yt-dlp` beside the executable or on `PATH`.
+
+The manual YouTube queue validates and deduplicates the complete list, then
+prepares one source at a time as a separate proposal. No queued proposal changes
+the wiki before review. Stop safely or resubmit the same list after a failure;
+existing proposals are reused. If an earlier approval makes a later proposal
+stale, explicitly reprocess it against the current wiki from its immutable
+source archive.
 
 Trusted-video batches can automatically select every staged change only after an
 exact, count-specific confirmation. This saves review clicks; it does not make
@@ -143,6 +151,7 @@ deno task compile
 
 - One stateful process and one writable vault; no multi-user collaboration.
 - No supported serverless, distributed, or production deployment.
+- No direct webpage or remote-PDF URL ingestion; upload supported files locally.
 - AI-generated text requires human judgement and source verification.
 - PDF extraction handles text, not OCR or document-layout understanding.
 - Provider quality, privacy, cost, and availability vary.

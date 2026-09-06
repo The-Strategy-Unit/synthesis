@@ -4,7 +4,7 @@ Synthesis is a local-first, single-process knowledge compiler. It stores durable
 knowledge as ordinary files and treats models, SQLite, embeddings, and graph
 layout as replaceable machinery.
 
-This document describes the frozen 0.2.4 MVP. It is a design reference, not a
+This document describes the frozen 0.2.5 MVP. It is a design reference, not a
 production-deployment specification.
 
 ## System map
@@ -50,6 +50,13 @@ Model output is tainted input. IDs, citations, pages, tokens, links, and
 response shapes are bounded and validated. A proposal never changes the wiki.
 Approval must select exact changes; stale target hashes fail instead of
 overwriting newer knowledge.
+
+A manual YouTube queue validates one exact bounded list, holds the ingest gate
+as one job, and prepares its sources sequentially as independent pending
+proposals. Item failures are isolated and reported without exposing diagnostics.
+Resubmission reuses existing proposals. A stale pending proposal can be
+explicitly regenerated from its hash-validated immutable source before review;
+the old draft remains intact if regeneration fails.
 
 Approved file changes have before-images and hashes in `history/`. The complete
 change set is checked before visible mutation. Database failure restores the
@@ -136,7 +143,7 @@ Ingestion is serialized by an in-memory identity-aware gate with queue and daily
 quota limits. Semantic search has a per-identity rate limit. Long operations use
 SSE and cooperative cancellation; cancellation never interrupts an atomic apply.
 
-Only one process may own a writable vault. Version 0.2.4 documents this
+Only one process may own a writable vault. Version 0.2.5 documents this
 requirement but does not enforce a cross-process vault lock.
 
 Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback

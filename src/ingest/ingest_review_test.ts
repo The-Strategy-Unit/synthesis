@@ -9,6 +9,7 @@ import {
   IngestProposalStateError,
   InvalidWikiLinkError,
   rejectIngestProposal,
+  restageIngestProposal,
   stageSingleSource,
   StaleIngestProposalError,
 } from "./orchestrate.ts";
@@ -120,6 +121,7 @@ Deno.test({
         const staged = await stageSingleSource(db, source, true, () => {});
         assert.equal(staged.kind, "proposal");
         if (staged.kind !== "proposal") return;
+        assert.equal(staged.created, true);
         assert.equal(staged.proposal.status, "pending");
         assert.equal(staged.proposal.changes[0].page.title, "Reviewed concept");
         assert.equal(requests, 2, "staging must not request an embedding");
@@ -136,6 +138,7 @@ Deno.test({
         const repeated = await stageSingleSource(db, source, true, () => {});
         assert.equal(repeated.kind, "proposal");
         if (repeated.kind !== "proposal") return;
+        assert.equal(repeated.created, false);
         assert.equal(repeated.proposal.id, staged.proposal.id);
         assert.equal(requests, 2, "re-staging must not call a provider");
 
@@ -361,7 +364,12 @@ Deno.test({
         );
 
         let requests = 0;
+        let failRestage = false;
         globalThis.fetch = () => {
+          if (failRestage) {
+            failRestage = false;
+            throw new Error("Reprocessing provider failed");
+          }
           switch (requests++) {
             case 0:
               return Promise.resolve(modelJson({
@@ -392,8 +400,47 @@ Deno.test({
               return Promise.resolve(modelJson({
                 body: "Original and new source-backed knowledge.",
               }));
+            case 4:
+              return Promise.resolve(modelJson({
+                items: [{
+                  title: "Existing concept update",
+                  type: "concept",
+                  body: "New source-backed knowledge.",
+                  tags: ["existing"],
+                  links: [],
+                }],
+              }));
+            case 5:
+              return Promise.resolve(modelJson({
+                summary: "An update source summary.",
+                notes: [{
+                  title: "Existing concept update",
+                  type: "concept",
+                  body: "New source-backed knowledge.",
+                  tags: ["existing"],
+                  links: [],
+                }],
+              }));
+            case 6:
+              return Promise.resolve(modelJson({
+                decisions: [{ action: "merge", existing_id: noteId }],
+              }));
+            case 7:
+              return Promise.resolve(modelJson({
+                body:
+                  "Changed durable knowledge plus restaged source-backed knowledge.",
+              }));
+            case 8:
+              return Promise.resolve(Response.json({
+                data: [{
+                  embedding: Array.from(
+                    { length: config.embed.dimensions },
+                    (_, index) => index === 0 ? 1 : 0,
+                  ),
+                }],
+              }));
             default:
-              throw new Error("approval must fail before embedding");
+              throw new Error(`Unexpected provider request ${requests}`);
           }
         };
 
@@ -430,6 +477,41 @@ Deno.test({
           "pending",
         );
         assert.equal(await Deno.readTextFile(notePath), changedPage);
+
+        const originalProposalJson = db.proposals.getIngestProposal(
+          staged.proposal.id,
+        )?.proposal_json;
+        failRestage = true;
+        await assert.rejects(
+          restageIngestProposal(db, staged.proposal.id, () => {}),
+          /Unable to contact the LLM service/,
+        );
+        assert.equal(requests, 4);
+        assert.equal(
+          db.proposals.getIngestProposal(staged.proposal.id)?.proposal_json,
+          originalProposalJson,
+        );
+
+        const restaged = await restageIngestProposal(
+          db,
+          staged.proposal.id,
+          () => {},
+        );
+        assert.equal(restaged.id, staged.proposal.id);
+        assert.equal(restaged.status, "pending");
+        assert.equal(requests, 8);
+
+        const applied = await approveIngestProposal(
+          db,
+          restaged.id,
+          () => {},
+        );
+        assert.equal(applied.mergeCount, 1);
+        assert.equal(requests, 9);
+        assert.equal(
+          parseWikiPage(await Deno.readTextFile(notePath)).body,
+          "Changed durable knowledge plus restaged source-backed knowledge.",
+        );
       });
     } finally {
       globalThis.fetch = originalFetch;

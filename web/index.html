@@ -292,6 +292,11 @@
                   <p id="proposal-decision-summary" role="status"
                     aria-live="polite"></p>
                   <div>
+                    <button id="proposal-reprocess"
+                      class="workspace-secondary" type="button"
+                      aria-describedby="provider-mode">
+                      Reprocess against current wiki
+                    </button>
                     <button id="proposal-reject" type="button">
                       Reject proposal
                     </button>
@@ -312,16 +317,16 @@
         <header class="source-panel-header">
           <div>
             <h2 id="source-panel-title">Add a source</h2>
-            <p>Prepare one source for review, or explicitly confirm an automatic batch of trusted videos.</p>
+            <p>Prepare one source, queue videos for review, or explicitly confirm an automatic batch of trusted videos.</p>
           </div>
           <button id="source-panel-close" type="button"
             aria-label="Close add source panel">&times;</button>
         </header>
         <div id="ingest-bar">
           <label id="ingest-input-label"
-            for="ingest-input">Source text, YouTube link, or URL</label>
+            for="ingest-input">Source text or YouTube link</label>
           <textarea id="ingest-input" rows="7"
-            placeholder="Paste source text, a YouTube ID, or a URL..."></textarea>
+            placeholder="Paste source text or a YouTube ID or URL..."></textarea>
           <div id="source-file-row" class="source-file-row">
             <span>or</span>
             <label class="file-picker" for="ingest-file">
@@ -344,11 +349,25 @@
                 <option value="text">Text</option>
                 <option value="video">YouTube video</option>
                 <option value="playlist">YouTube playlist</option>
+                <option value="queue">YouTube queue · manual review</option>
                 <option
                   value="trusted-batch">Trusted videos · automatic apply</option>
               </select>
             </div>
           </details>
+          <section id="manual-queue-controls"
+            class="manual-queue-controls hidden"
+            aria-labelledby="manual-queue-title">
+            <h3 id="manual-queue-title">Sequential manual-review queue</h3>
+            <p>
+              Videos are prepared one at a time. Each successful source becomes
+              a separate proposal; no wiki changes are applied automatically.
+              Failed items remain visible and the same list can be submitted
+              again safely.
+            </p>
+            <ol id="manual-queue-list" aria-label="Queued YouTube videos"
+              aria-live="polite"></ol>
+          </section>
           <section id="trusted-batch-controls"
             class="trusted-batch-controls hidden"
             aria-labelledby="trusted-batch-title">

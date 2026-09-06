@@ -1,6 +1,6 @@
 # Developer guide
 
-Synthesis 0.2.4 is a frozen MIT-licensed MVP. This repository is not accepting
+Synthesis 0.2.5 is a frozen MIT-licensed MVP. This repository is not accepting
 further product development or providing support. Fork it before extending it.
 
 ## Setup
@@ -102,16 +102,16 @@ width requires a new database.
 
 ### Bounds
 
-| Area    | Variables and defaults                                       |
-| ------- | ------------------------------------------------------------ |
-| HTTP    | body 1 MiB; upload 25 MiB; pasted text 250,000 characters    |
-| Source  | transcript 500,000 characters; subtitles 10 MiB              |
-| PDF     | 500 pages; 30-second parse timeout                           |
-| Models  | 10-minute request timeout; 12,000-character extraction input |
-| Queue   | 4 waiting; 5 jobs/user/day; 20 jobs/day globally             |
-| YouTube | 2-minute `yt-dlp`; playlist 10; trusted batch 100            |
-| Search  | 500-character query; 20 results; 5 semantic searches/minute  |
-| Graph   | retain 8 semantic neighbours; display 3 initially            |
+| Area    | Variables and defaults                                             |
+| ------- | ------------------------------------------------------------------ |
+| HTTP    | body 1 MiB; upload 25 MiB; pasted text 250,000 characters          |
+| Source  | transcript 500,000 characters; subtitles 10 MiB                    |
+| PDF     | 500 pages; 30-second parse timeout                                 |
+| Models  | 10-minute request timeout; 12,000-character extraction input       |
+| Queue   | 4 waiting; 5 jobs/user/day; 20 jobs/day globally                   |
+| YouTube | 2-minute `yt-dlp`; playlist 10; manual queue 20; trusted batch 100 |
+| Search  | 500-character query; 20 results; 5 semantic searches/minute        |
+| Graph   | retain 8 semantic neighbours; display 3 initially                  |
 
 Every bound can be overridden within the clamps defined in `config.ts`.
 
@@ -136,8 +136,8 @@ modules are authoritative.
 | System      | `GET /api/config`, `/status`, `/schema`, `/export`, `/semantic-index`; `PUT /api/schema`; `POST /api/rebuild`, `/semantic-index/rebuild`                              |
 | Provider    | `GET /api/provider`, `/provider/readiness`; `POST /api/provider`, `/provider/diagnose`                                                                                |
 | Wiki        | `GET /api/notes`, `/notes/:id`, `/sources`, `/sources/:id`, `/search`, `/graph`, `/lint`; `POST /api/lint/analyze`, `/query`, `/query/save`                           |
-| Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/batch`, `/ingest/undo`                                                                               |
-| Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`                                                            |
+| Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/queue`, `/ingest/batch`, `/ingest/undo`                                                              |
+| Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`, `/api/proposals/:id/reprocess`                            |
 | Discoveries | `GET /api/discoveries`, `/api/discoveries/:id`; `POST /api/discoveries/generate`, `/api/discoveries/batch`, `/api/discoveries/:id/investigate`, `/confirm`, `/reject` |
 
 Mutation bodies require JSON except `/api/ingest/file`, which requires multipart
@@ -184,11 +184,11 @@ The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
 releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
 Windows, and publish immutable platform archives plus `SHA256SUMS`.
 
-Version 0.2.4 is the final release of this repository:
+Version 0.2.5 is the final release of this repository:
 
 ```bash
-git tag -a v0.2.4 -m "Synthesis v0.2.4"
-git push origin v0.2.4
+git tag -a v0.2.5 -m "Synthesis v0.2.5"
+git push origin v0.2.5
 ```
 
 After verifying the release assets, archive the repository. Further releases

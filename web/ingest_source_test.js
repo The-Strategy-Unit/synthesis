@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   classifyIngestSource,
+  parseManualVideoQueue,
   parseTrustedVideoBatch,
   trustedBatchConfirmation,
 } from "./ingest_source.js";
@@ -86,4 +87,14 @@ Deno.test("trusted video batches preserve the exact non-empty line list", () => 
   );
   assert.throws(() => parseTrustedVideoBatch("\n \n"), /at least one/);
   assert.throws(() => trustedBatchConfirmation(0), RangeError);
+});
+
+Deno.test("manual video queues preserve one non-empty source per line", () => {
+  assert.deepEqual(
+    parseManualVideoQueue(
+      " dQw4w9WgXcQ\n\nhttps://youtu.be/9bZkp7q19f0 \n",
+    ),
+    ["dQw4w9WgXcQ", "https://youtu.be/9bZkp7q19f0"],
+  );
+  assert.throws(() => parseManualVideoQueue("\n \n"), /at least one/);
 });

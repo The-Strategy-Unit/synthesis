@@ -53,7 +53,7 @@ function asProposalApiError(error: unknown): ApiError | undefined {
     return new ApiError(
       409,
       "PROPOSAL_STALE",
-      `${error.message}. Reject it and ingest the source again.`,
+      `${error.message}. Reprocess it against the current wiki before reviewing it again.`,
     );
   }
   return undefined;

@@ -44,6 +44,16 @@ export class ProposalStore {
     ).all(status) as unknown as IngestProposalRecord[];
   }
 
+  replacePendingIngestProposal(id: number, proposalJson: string): boolean {
+    if (!Number.isSafeInteger(id) || id < 1) return false;
+    const info = this.db.prepare(
+      `UPDATE ingest_proposals
+       SET proposal_json = ?, created_at = datetime('now'), reviewed_at = NULL
+       WHERE id = ? AND status = 'pending'`,
+    ).run(proposalJson, id);
+    return Number(info.changes) === 1;
+  }
+
   reviewIngestProposal(
     id: number,
     status: "approved" | "rejected",

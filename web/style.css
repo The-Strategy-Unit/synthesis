@@ -1283,6 +1283,7 @@ body {
 #lint-refresh:focus-visible,
 #lint-analyse:focus-visible,
 #proposal-approve:focus-visible,
+#proposal-reprocess:focus-visible,
 #proposal-reject:focus-visible,
 #discoveries-scan:focus-visible,
 #discovery-investigate:focus-visible,
@@ -1811,6 +1812,7 @@ body {
 }
 
 #proposal-approve:disabled,
+#proposal-reprocess:disabled,
 #proposal-reject:disabled {
   opacity: 0.65;
   cursor: not-allowed;
@@ -2772,6 +2774,59 @@ body {
 #trusted-batch-confirmation {
   width: 100%;
   max-width: none;
+}
+
+.manual-queue-controls {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(86, 182, 194, 0.08);
+}
+
+.manual-queue-controls h3 {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.manual-queue-controls p {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+#manual-queue-list {
+  display: grid;
+  max-height: 10rem;
+  margin: 0;
+  padding-left: 1.5rem;
+  gap: 0.4rem;
+  overflow-y: auto;
+}
+
+#manual-queue-list li {
+  padding-left: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+#manual-queue-list small {
+  display: block;
+  color: var(--text-faint);
+}
+
+#manual-queue-list li[data-state="processing"] small {
+  color: var(--accent);
+}
+
+#manual-queue-list li[data-state="ready"] small {
+  color: var(--success);
+}
+
+#manual-queue-list li[data-state="failed"] small {
+  color: var(--error);
 }
 
 .trusted-batch-controls {

@@ -296,6 +296,12 @@ export const config = {
       100,
       10,
     ),
+    maxManualQueueItems: envIntClamped(
+      "SYNTHESIS_MAX_MANUAL_QUEUE_ITEMS",
+      1,
+      100,
+      20,
+    ),
     maxTrustedBatchItems: envIntClamped(
       "SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS",
       1,

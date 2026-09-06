@@ -12,6 +12,7 @@ const SOURCE_TYPES = new Set([
   "text",
   "video",
   "playlist",
+  "queue",
   "trusted-batch",
 ]);
 
@@ -54,14 +55,22 @@ export function classifyIngestSource(value, sourceType) {
   };
 }
 
-export function parseTrustedVideoBatch(value) {
+function parseVideoLines(value, emptyMessage) {
   const urls = String(value).split(/\r?\n/u).map((line) => line.trim()).filter(
     Boolean,
   );
   if (urls.length === 0) {
-    throw new Error("Add at least one YouTube video URL or ID");
+    throw new Error(emptyMessage);
   }
   return urls;
+}
+
+export function parseManualVideoQueue(value) {
+  return parseVideoLines(value, "Add at least one queued YouTube URL or ID");
+}
+
+export function parseTrustedVideoBatch(value) {
+  return parseVideoLines(value, "Add at least one YouTube video URL or ID");
 }
 
 export function trustedBatchConfirmation(sourceCount) {

@@ -1,6 +1,10 @@
 import { config } from "../../app/config.ts";
 import { ingestText } from "../../ingest/ingest.ts";
 import {
+  ManualQueueInputError,
+  validateManualQueueRequest,
+} from "../../ingest/manual_queue.ts";
+import {
   TrustedBatchInputError,
   validateTrustedBatchRequest,
 } from "../../ingest/trusted_batch.ts";
@@ -14,6 +18,7 @@ import {
   ApiError,
   ingestStream,
   json,
+  manualQueueStream,
   normalisePlaylistInput,
   optionalString,
   playlistStream,
@@ -126,6 +131,32 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
       release,
       req.signal,
       batch.urls,
+      resolveProviders,
+      ingestDependencies.ingestYouTube,
+    );
+  }
+
+  if (path === "/api/ingest/queue" && method === "POST") {
+    requireIngester(identity);
+    let queue;
+    try {
+      queue = validateManualQueueRequest(
+        await readJson(req),
+        config.ingest.maxManualQueueItems,
+      );
+    } catch (error) {
+      if (error instanceof ManualQueueInputError) {
+        throw new ApiError(400, "INVALID_SOURCE_QUEUE", error.message);
+      }
+      throw error;
+    }
+    const release = await ingestGate.acquire(identity, req.signal);
+    return manualQueueStream(
+      db,
+      requestId,
+      release,
+      req.signal,
+      queue.urls,
       resolveProviders,
       ingestDependencies.ingestYouTube,
     );

@@ -6,7 +6,7 @@
 
 import { dirname, relative } from "node:path";
 
-import { notesDir, sourcesDir } from "../app/config.ts";
+import { config, notesDir, sourcesDir } from "../app/config.ts";
 import { errMsg, slugify } from "../shared/utils.ts";
 import {
   DB,
@@ -29,6 +29,7 @@ import {
   writeIngestHistory,
   type WrittenIngestHistory,
 } from "../vault/ingest_history.ts";
+import { loadArchivedVaultSource } from "../vault/vault_archive.ts";
 import {
   type ActiveProviders,
   embeddingIdentity,
@@ -264,7 +265,7 @@ export interface IngestProposalReview {
 }
 
 export type StagedIngestResult =
-  | { kind: "proposal"; proposal: IngestProposalReview }
+  | { kind: "proposal"; proposal: IngestProposalReview; created: boolean }
   | { kind: "already-applied"; result: AppliedIngestResult };
 
 export class IngestProposalNotFoundError extends Error {}
@@ -1020,7 +1021,11 @@ export async function stageSingleSource(
       knownSource.id,
     );
     if (knownProposal) {
-      return { kind: "proposal", proposal: proposalReview(db, knownProposal) };
+      return {
+        kind: "proposal",
+        proposal: proposalReview(db, knownProposal),
+        created: false,
+      };
     }
   }
 
@@ -1036,6 +1041,21 @@ export async function stageSingleSource(
     return { kind: "already-applied", result: prepared.result };
   }
 
+  const proposalJson = await preparedProposalJson(prepared);
+  const proposalId = db.proposals.addIngestProposal(
+    prepared.sourceId,
+    proposalJson,
+  );
+  return {
+    kind: "proposal",
+    proposal: getIngestProposalReview(db, proposalId),
+    created: true,
+  };
+}
+
+async function preparedProposalJson(
+  prepared: PreparedSourceChanges,
+): Promise<string> {
   const proposalChanges: IngestProposalChange[] = [];
   for (const update of prepared.preparedUpdates) {
     proposalChanges.push({
@@ -1048,20 +1068,58 @@ export async function stageSingleSource(
   for (const create of prepared.preparedCreates) {
     proposalChanges.push({ action: "new", markdown: create.content });
   }
-  const proposalJson = serialiseIngestProposal({
+  return serialiseIngestProposal({
     version: 1,
     sourceId: prepared.sourceId,
     contentHash: prepared.contentHash,
     changes: proposalChanges,
   });
-  const proposalId = db.proposals.addIngestProposal(
-    prepared.sourceId,
-    proposalJson,
+}
+
+export async function restageIngestProposal(
+  db: DB,
+  id: number,
+  send: (stage: string, data?: unknown) => void,
+  providers: ActiveProviders = environmentProviders(),
+  signal?: AbortSignal,
+): Promise<IngestProposalReview> {
+  const record = db.proposals.getIngestProposal(id);
+  if (!record) {
+    throw new IngestProposalNotFoundError(`Ingest proposal ${id} not found`);
+  }
+  if (record.status !== "pending") {
+    throw new IngestProposalStateError(
+      `Ingest proposal ${id} is already ${record.status}`,
+    );
+  }
+  const source = db.sources.getSource(record.source_id);
+  if (!source) {
+    throw new Error(`Ingest proposal ${id} has no source record`);
+  }
+  const archived = await loadArchivedVaultSource(
+    config.vaultDir,
+    source.content_hash,
   );
-  return {
-    kind: "proposal",
-    proposal: getIngestProposalReview(db, proposalId),
-  };
+  const prepared = await prepareSingleSourceChanges(
+    db,
+    archived,
+    archived.sourceType === "text",
+    send,
+    providers,
+    signal,
+  );
+  if (prepared.kind === "already-applied") {
+    throw new IngestProposalStateError(
+      `Ingest proposal ${id} source is already applied`,
+    );
+  }
+  const proposalJson = await preparedProposalJson(prepared);
+  if (!db.proposals.replacePendingIngestProposal(id, proposalJson)) {
+    throw new IngestProposalStateError(
+      `Ingest proposal ${id} is no longer pending`,
+    );
+  }
+  return getIngestProposalReview(db, id);
 }
 
 export async function approveIngestProposal(

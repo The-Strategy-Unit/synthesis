@@ -34,7 +34,10 @@ Deno.test("discovery filters use relationship, page, and source context", () => 
     discoveryMatchesFilter(discovery, "conference talk", "shared_constraint"),
     true,
   );
-  assert.equal(discoveryMatchesFilter(discovery, "capacity", "supports"), false);
+  assert.equal(
+    discoveryMatchesFilter(discovery, "capacity", "supports"),
+    false,
+  );
   assert.equal(discoveryMatchesFilter(discovery, "unrelated", "all"), false);
 });
 
@@ -149,6 +152,16 @@ Deno.test("ingestion progress exposes the source-to-review handoff", () => {
     read: "current",
     review: "pending",
   });
+  assert.deepEqual(ingestProgress("queue_source"), {
+    draft: "pending",
+    read: "current",
+    review: "pending",
+  });
+  assert.deepEqual(ingestProgress("queue_proposal"), {
+    draft: "complete",
+    read: "complete",
+    review: "current",
+  });
   assert.deepEqual(ingestProgress("automatic_proposal"), {
     draft: "complete",
     read: "complete",
@@ -178,6 +191,7 @@ Deno.test("review is an application workspace, not a modal", async () => {
   assert.match(html, /id="review-workspace" class="hidden"/);
   assert.match(html, /id="proposal-decision-summary" role="status"/);
   assert.match(html, /id="proposal-include-all"/);
+  assert.match(html, /id="proposal-reprocess"/);
   assert.match(html, /id="ingest-stages"/);
   assert.doesNotMatch(html, /id="review-modal"/);
   assert.doesNotMatch(html, /class="proposal-change-select"/);

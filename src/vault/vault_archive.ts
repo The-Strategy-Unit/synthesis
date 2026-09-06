@@ -252,6 +252,26 @@ async function readArchivedSource(
   };
 }
 
+export async function loadArchivedVaultSource(
+  vaultDirectory: string,
+  contentHash: string,
+): Promise<ArchivedVaultSource> {
+  if (!SHA256_PATTERN.test(contentHash)) {
+    throw new Error("Archived source content hash is invalid");
+  }
+  const root = resolve(vaultDirectory);
+  const rootInfo = await Deno.lstat(root);
+  if (!rootInfo.isDirectory || rootInfo.isSymlink) {
+    throw new Error("Source vault must be an ordinary directory");
+  }
+  const sourceDirectory = join(root, "sources", contentHash);
+  const sourceInfo = await Deno.lstat(sourceDirectory);
+  if (!sourceInfo.isDirectory || sourceInfo.isSymlink) {
+    throw new Error("Archived source must be an ordinary directory");
+  }
+  return await readArchivedSource(sourceDirectory, contentHash);
+}
+
 async function historyOrder(
   vaultDirectory: string,
 ): Promise<Map<string, string>> {

@@ -1,6 +1,6 @@
 {
   "name": "synthesis",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "tasks": {
     "app": "deno task start",
     "trial": "deno run --allow-all scripts/start.ts --trial",
@@ -31,6 +31,7 @@
       "src/wiki/wiki_test.ts",
       "src/ingest/distil_test.ts",
       "src/ingest/ingest_test.ts",
+      "src/ingest/manual_queue_test.ts",
       "src/provider/provider_profile_test.ts",
       "src/provider/provider_profile_store_test.ts",
       "src/provider/provider_runtime_test.ts",

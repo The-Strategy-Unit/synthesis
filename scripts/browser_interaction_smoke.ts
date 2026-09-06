@@ -403,7 +403,7 @@ async function run(): Promise<void> {
     await client.send("Page.enable");
     await client.send("Page.navigate", { url: origin });
 
-    console.log("Browser smoke: checking search relevance and graph controls.");
+    console.log("Browser smoke: waiting for the seeded wiki.");
     await waitFor(
       () =>
         client!.evaluate<number>(
@@ -412,6 +412,39 @@ async function run(): Promise<void> {
       (count) => count === 34,
       "Wiki pages did not render in the browser",
     );
+    console.log("Browser smoke: checking the manual source queue.");
+    const queueState = await client.evaluate<{
+      fileHidden: boolean;
+      queueVisible: boolean;
+      rows: number;
+      waiting: number;
+    }>(`(() => {
+      document.querySelector('#add-source-btn').click();
+      const sourceType = document.querySelector('#ingest-source-type');
+      sourceType.value = 'queue';
+      sourceType.dispatchEvent(new Event('change', { bubbles: true }));
+      const input = document.querySelector('#ingest-input');
+      input.value = 'dQw4w9WgXcQ\nhttps://youtu.be/9bZkp7q19f0';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const rows = [...document.querySelectorAll('#manual-queue-list li')];
+      return {
+        fileHidden: document.querySelector('#source-file-row').classList.contains('hidden'),
+        queueVisible: !document.querySelector('#manual-queue-controls').classList.contains('hidden'),
+        rows: rows.length,
+        waiting: rows.filter(item => item.dataset.state === 'waiting').length,
+      };
+    })()`);
+    assert.deepEqual(queueState, {
+      fileHidden: true,
+      queueVisible: true,
+      rows: 2,
+      waiting: 2,
+    });
+    await client.evaluate(
+      "document.querySelector('#source-panel-close').click()",
+    );
+
+    console.log("Browser smoke: checking search relevance and graph controls.");
     await client.evaluate(`(() => {
       const input = document.querySelector('#search-input');
       input.value = 'operational';

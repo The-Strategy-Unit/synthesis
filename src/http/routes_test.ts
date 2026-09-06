@@ -46,6 +46,12 @@ function mutationHeaders(origin = "http://localhost"): HeadersInit {
   };
 }
 
+function modelJson(value: unknown): Response {
+  return Response.json({
+    choices: [{ message: { content: JSON.stringify(value) } }],
+  });
+}
+
 routeTest(
   "status is minimal and carries private no-store security headers",
   async () => {
@@ -1449,6 +1455,145 @@ routeTest(
   },
 );
 
+routeTest("manual source queues require unique valid videos", async () => {
+  await withTempHandler(async (handle) => {
+    const request = (body: Record<string, unknown>) =>
+      handle(
+        new Request("http://localhost/api/ingest/queue", {
+          method: "POST",
+          headers: mutationHeaders(),
+          body: JSON.stringify(body),
+        }),
+      );
+
+    const automatic = await request({
+      urls: ["dQw4w9WgXcQ"],
+      reviewMode: "automatic",
+    });
+    assert.equal(automatic.status, 400);
+    assert.equal((await automatic.json()).code, "INVALID_SOURCE_QUEUE");
+
+    const duplicate = await request({
+      urls: ["dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ"],
+      reviewMode: "manual",
+    });
+    assert.equal(duplicate.status, 400);
+    assert.equal((await duplicate.json()).code, "INVALID_SOURCE_QUEUE");
+  });
+});
+
+routeTest(
+  "manual source queues stage sequential proposals and preserve retry state",
+  async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      await withTempHandler(async (_defaultHandle, db, dir) => {
+        await Deno.mkdir(`${dir}/notes`, { recursive: true });
+        await Deno.mkdir(`${dir}/sources`, { recursive: true });
+        let providerRequests = 0;
+        globalThis.fetch = () => {
+          providerRequests++;
+          return Promise.resolve(modelJson(
+            providerRequests === 1
+              ? {
+                items: [{
+                  title: "Queued concept",
+                  type: "concept",
+                  body: "A source-backed queued concept.",
+                  tags: ["queue"],
+                  links: [],
+                }],
+              }
+              : {
+                summary: "A queued source summary.",
+                notes: [{
+                  title: "Queued concept",
+                  type: "concept",
+                  body: "A source-backed queued concept.",
+                  tags: ["queue"],
+                  links: [],
+                }],
+              },
+          ));
+        };
+
+        let activeDownloads = 0;
+        let maxActiveDownloads = 0;
+        const downloadOrder: string[] = [];
+        const ingestVideo = async (url: string) => {
+          activeDownloads++;
+          maxActiveDownloads = Math.max(maxActiveDownloads, activeDownloads);
+          downloadOrder.push(`start:${url}`);
+          await Promise.resolve();
+          try {
+            if (url.includes("dQw4w9WgXcQ")) {
+              throw new Error("sensitive downloader detail");
+            }
+            return {
+              transcript: "A queued transcript for manual review.",
+              sourceUrl: url,
+              title: "Queued video",
+              sourceType: "youtube" as const,
+            };
+          } finally {
+            activeDownloads--;
+            downloadOrder.push(`end:${url}`);
+          }
+        };
+        const handle = createHandler(db, undefined, undefined, {
+          ingestYouTube: ingestVideo,
+        });
+        const request = (urls: string[]) =>
+          handle(
+            new Request("http://localhost/api/ingest/queue", {
+              method: "POST",
+              headers: mutationHeaders(),
+              body: JSON.stringify({ urls, reviewMode: "manual" }),
+            }),
+          );
+
+        const response = await request(["dQw4w9WgXcQ", "9bZkp7q19f0"]);
+        assert.equal(response.status, 200);
+        const events = await response.text();
+        assert.match(events, /"stage":"queue_started"/);
+        assert.match(events, /"stage":"queue_failed"/);
+        assert.match(events, /"stage":"queue_proposal"/);
+        assert.match(
+          events,
+          /"stage":"queue_complete"[^\n]+"staged":1,"existing":0,"applied":0,"rejected":0,"failed":1/,
+        );
+        assert.doesNotMatch(events, /sensitive downloader detail/);
+        assert.equal(maxActiveDownloads, 1);
+        assert.deepEqual(downloadOrder, [
+          "start:https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "end:https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "start:https://www.youtube.com/watch?v=9bZkp7q19f0",
+          "end:https://www.youtube.com/watch?v=9bZkp7q19f0",
+        ]);
+        assert.equal(providerRequests, 2);
+        assert.equal(db.notes.getAllNotes().length, 0);
+        assert.equal(db.proposals.getIngestProposals("pending").length, 1);
+
+        const resumed = await request(["9bZkp7q19f0"]);
+        assert.equal(resumed.status, 200);
+        const resumedEvents = await resumed.text();
+        assert.match(
+          resumedEvents,
+          /"stage":"queue_proposal"[^\n]+"existing":true/,
+        );
+        assert.match(
+          resumedEvents,
+          /"stage":"queue_complete"[^\n]+"staged":0,"existing":1,"applied":0,"rejected":0,"failed":0/,
+        );
+        assert.equal(providerRequests, 2);
+        assert.equal(db.proposals.getIngestProposals("pending").length, 1);
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
+
 routeTest(
   "trusted batches require exact automatic-apply confirmation",
   async () => {
@@ -2381,6 +2526,17 @@ routeTest(
           (await terminalResponse.json()).code,
           "PROPOSAL_NOT_PENDING",
         );
+
+        const terminalReprocess = await handle(
+          new Request(
+            `http://localhost/api/proposals/${approvedId}/reprocess`,
+            { method: "POST", headers: mutationHeaders(), body: "{}" },
+          ),
+        );
+        assert.equal(terminalReprocess.status, 200);
+        const terminalReprocessEvents = await terminalReprocess.text();
+        assert.match(terminalReprocessEvents, /"stage":"error"/);
+        assert.match(terminalReprocessEvents, /"code":"PROPOSAL_NOT_PENDING"/);
 
         await ingest("Rejected source", "Source text for rejection.");
         const pendingAfterSecond = await handle(

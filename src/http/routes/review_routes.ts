@@ -3,6 +3,7 @@ import {
   getIngestProposalReview,
   listIngestProposalReviews,
   rejectIngestProposal,
+  restageIngestProposal,
 } from "../../ingest/orchestrate.ts";
 import { validateIngestProposalApproval } from "../../ingest/ingest_proposal.ts";
 import { errMsg } from "../../shared/utils.ts";
@@ -61,7 +62,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     });
   }
   const proposalMatch = path.match(
-    /^\/api\/proposals\/(\d+)(?:\/(approve|reject))?$/,
+    /^\/api\/proposals\/(\d+)(?:\/(approve|reject|reprocess))?$/,
   );
   if (proposalMatch) {
     const proposalId = Number(proposalMatch[1]);
@@ -120,6 +121,28 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
             { approval, signal },
           );
           return result.notes;
+        },
+      );
+    }
+    if (action === "reprocess" && method === "POST") {
+      requireIngester(identity);
+      const release = await ingestGate.acquire(identity, req.signal);
+      return ingestStream(
+        requestId,
+        release,
+        req.signal,
+        async (send, signal) => {
+          const proposal = await restageIngestProposal(
+            db,
+            proposalId,
+            send,
+            await resolveProviders(),
+            signal,
+          );
+          const counts = { new: 0, merge: 0, contradict: 0 };
+          for (const change of proposal.changes) counts[change.action]++;
+          send("proposal", { proposal, reprocessed: true, ...counts });
+          return [];
         },
       );
     }

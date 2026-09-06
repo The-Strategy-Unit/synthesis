@@ -23,6 +23,7 @@ import {
 } from "./graph_layout.js";
 import {
   classifyIngestSource,
+  parseManualVideoQueue,
   parseTrustedVideoBatch,
   trustedBatchConfirmation,
 } from "./ingest_source.js";
@@ -904,6 +905,7 @@ const proposalDetail = document.getElementById("proposal-detail");
 const proposalChanges = document.getElementById("proposal-changes");
 const proposalApprove = document.getElementById("proposal-approve");
 const proposalIncludeAll = document.getElementById("proposal-include-all");
+const proposalReprocess = document.getElementById("proposal-reprocess");
 const proposalReject = document.getElementById("proposal-reject");
 const proposalDecisionSummary = document.getElementById(
   "proposal-decision-summary",
@@ -954,6 +956,10 @@ function updateProposalApprovalControls() {
   proposalApprove.title = modelActions
     ? ""
     : "Applying proposed changes requires an available AI provider.";
+  proposalReprocess.disabled = proposalBusy || !modelActions;
+  proposalReprocess.title = modelActions
+    ? "Regenerate this pending proposal from its archived source against the current wiki."
+    : "Reprocessing requires an available AI provider.";
   const allIncluded = decisions.length > 0 &&
     summary.include === decisions.length;
   proposalIncludeAll.textContent = allIncluded
@@ -965,6 +971,7 @@ function updateProposalApprovalControls() {
 
 function setProposalBusy(busy) {
   proposalBusy = busy;
+  proposalReprocess.disabled = busy;
   proposalReject.disabled = busy;
   proposalChanges.querySelectorAll("select, textarea").forEach((control) => {
     control.disabled = busy;
@@ -1329,11 +1336,55 @@ async function rejectSelectedProposal() {
   }
 }
 
+async function reprocessSelectedProposal() {
+  if (!selectedProposalId) return;
+  const proposalId = selectedProposalId;
+  setProposalBusy(true);
+  reviewStatus.textContent =
+    "Reprocessing archived source against the current wiki...";
+  const finishOperation = beginOperation(
+    "Reprocessing the proposal…",
+    reviewStatus,
+  );
+  try {
+    const response = await fetch(`/api/proposals/${proposalId}/reprocess`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    await consumeSse(response, async (data) => {
+      const labels = {
+        ingesting: "Loading the archived source...",
+        extracting: "Extracting durable knowledge again...",
+        distilled: "Candidate pages refreshed.",
+        integrating: "Comparing with the current wiki...",
+        rewriting: data.total
+          ? `Refreshing page ${data.current} of ${data.total}: ${data.title}`
+          : "Refreshing existing pages...",
+        proposal: "Proposal refreshed against the current wiki.",
+        done: "Reprocessing complete.",
+        error: data.error,
+      };
+      reviewStatus.textContent = labels[data.stage] ?? data.stage;
+      if (data.stage === "error") throw new Error(data.error);
+    });
+    await loadPendingProposals(proposalId);
+    reviewStatus.textContent =
+      "Proposal refreshed. Review every change before deciding.";
+  } catch (error) {
+    reviewStatus.textContent = error.message;
+  } finally {
+    finishOperation();
+    setProposalBusy(false);
+  }
+}
+
 reviewNavigationButton.addEventListener("click", () => {
   if (primaryWorkspace !== "review") openReviewWorkspace();
 });
 proposalApprove.addEventListener("click", approveSelectedProposal);
 proposalIncludeAll.addEventListener("click", includeAllProposalChanges);
+proposalReprocess.addEventListener("click", reprocessSelectedProposal);
 proposalReject.addEventListener("click", rejectSelectedProposal);
 proposalSourceInspect.addEventListener("click", () => {
   if (selectedProposalSourceId) openSourcesModal(selectedProposalSourceId);
@@ -2949,14 +3000,17 @@ const ingestTitleInput = document.getElementById("ingest-title");
 const trustedBatchControls = document.getElementById(
   "trusted-batch-controls",
 );
+const manualQueueControls = document.getElementById("manual-queue-controls");
+const manualQueueList = document.getElementById("manual-queue-list");
 const trustedBatchConfirmationInput = document.getElementById(
   "trusted-batch-confirmation",
 );
 const ingestPlaceholders = {
-  auto: "Paste source text, a YouTube ID, or a URL...",
+  auto: "Paste source text or a YouTube ID or URL...",
   text: "Paste source text...",
   video: "Paste a YouTube video ID or URL...",
   playlist: "Paste a YouTube playlist ID or URL...",
+  queue: "Paste one YouTube video ID or URL per line...",
   "trusted-batch": "Paste one YouTube video ID or URL per line...",
 };
 
@@ -2964,22 +3018,53 @@ function isTrustedBatchMode() {
   return ingestSourceType.value === "trusted-batch";
 }
 
+function isManualQueueMode() {
+  return ingestSourceType.value === "queue";
+}
+
+function renderManualQueueItems(urls) {
+  manualQueueList.replaceChildren(...urls.map((url, index) => {
+    const item = document.createElement("li");
+    item.dataset.queueIndex = String(index);
+    item.dataset.state = "waiting";
+    const source = document.createElement("span");
+    source.textContent = url;
+    const state = document.createElement("small");
+    state.textContent = "Waiting";
+    item.append(source, state);
+    return item;
+  }));
+}
+
+function updateManualQueueItem(current, state, detail) {
+  const item = manualQueueList.querySelector(
+    `[data-queue-index="${Number(current) - 1}"]`,
+  );
+  if (!item) return;
+  item.dataset.state = state;
+  item.querySelector("small").textContent = detail;
+}
+
 function renderIngestMode() {
   const automatic = isTrustedBatchMode();
+  const queued = isManualQueueMode();
   ingestInput.placeholder = ingestPlaceholders[ingestSourceType.value];
   document.getElementById("ingest-input-label").textContent = automatic
     ? "Trusted YouTube videos · one ID or URL per line"
-    : "Source text, YouTube link, or URL";
+    : queued
+    ? "Queued YouTube videos · one ID or URL per line"
+    : "Source text or YouTube link";
   document.getElementById("source-file-row").classList.toggle(
     "hidden",
-    automatic,
+    automatic || queued,
   );
   document.getElementById("ingest-title-label").classList.toggle(
     "hidden",
-    automatic,
+    automatic || queued,
   );
-  ingestTitleInput.classList.toggle("hidden", automatic);
+  ingestTitleInput.classList.toggle("hidden", automatic || queued);
   trustedBatchControls.classList.toggle("hidden", !automatic);
+  manualQueueControls.classList.toggle("hidden", !queued);
   document.getElementById("ingest-final-step-title").textContent = automatic
     ? "Apply validated changes"
     : "Ready for review";
@@ -2988,14 +3073,30 @@ function renderIngestMode() {
     : "Nothing changes automatically";
   document.getElementById("ingest-progress-note").textContent = automatic
     ? "Stop safely and submit the same list to resume; completed sources are skipped."
+    : queued
+    ? "Stop safely and submit the same list to resume; existing proposals are reused."
     : "Completed proposals remain available in Review.";
   document.getElementById("ingest-btn").textContent = automatic
     ? "Start automatic batch"
+    : queued
+    ? "Queue for review"
     : "Prepare for review";
 
-  if (automatic) {
+  if (queued) {
+    let urls = [];
+    try {
+      urls = parseManualVideoQueue(ingestInput.value);
+    } catch { /* an empty queue has no rows */ }
+    renderManualQueueItems(urls);
+  } else {
+    manualQueueList.replaceChildren();
+  }
+
+  if (automatic || queued) {
     ingestFileInput.value = "";
     document.getElementById("ingest-file-name").textContent = "";
+  }
+  if (automatic) {
     let phrase = "the confirmation shown after adding videos";
     try {
       phrase = trustedBatchConfirmation(
@@ -3047,10 +3148,20 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   const source = input.value.trim();
   const sourceType = ingestSourceType.value;
   const automatic = sourceType === "trusted-batch";
+  const queued = sourceType === "queue";
   const title = titleInput.value.trim();
   const file = fileInput.files?.[0];
   if (!source && !file) return;
   let trustedUrls = [];
+  let queuedUrls = [];
+  if (queued) {
+    try {
+      queuedUrls = parseManualVideoQueue(source);
+    } catch (err) {
+      status.textContent = err.message;
+      return;
+    }
+  }
   if (automatic) {
     try {
       trustedUrls = parseTrustedVideoBatch(source);
@@ -3092,13 +3203,17 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
   let stagedProposalId = null;
   let ingestWarning = null;
   let batchSummary = null;
+  let queueSummary = null;
+  let firstQueuedProposalId = null;
 
   try {
-    const classifiedSource = automatic || file
+    const classifiedSource = automatic || queued || file
       ? null
       : classifyIngestSource(source, sourceType);
     const endpoint = automatic
       ? "/api/ingest/batch"
+      : queued
+      ? "/api/ingest/queue"
       : file
       ? "/api/ingest/file"
       : classifiedSource.kind === "playlist"
@@ -3114,6 +3229,12 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
           reviewMode: "automatic",
           confirm: trustedBatchConfirmationInput.value,
         }),
+      };
+    } else if (queued) {
+      request = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: queuedUrls, reviewMode: "manual" }),
       };
     } else if (file) {
       const form = new FormData();
@@ -3163,6 +3284,20 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
           `Reviewing cross-source candidate group ${data.current} of ${data.total}...`,
         batch_complete:
           `Batch complete · ${data.applied} applied · ${data.skipped} already present`,
+        queue_started: `Queue started · ${data.total} source${
+          data.total === 1 ? "" : "s"
+        }`,
+        queue_source: `Preparing source ${data.current} of ${data.total}...`,
+        queue_proposal: data.existing
+          ? `Source ${data.current} already has a proposal waiting for review.`
+          : `Source ${data.current} is ready for review.`,
+        queue_skipped: data.reason === "rejected"
+          ? `Source ${data.current} already has a rejected proposal.`
+          : `Source ${data.current} was already applied.`,
+        queue_failed:
+          `Source ${data.current} failed: ${data.error}. It can be retried.`,
+        queue_complete:
+          `Queue complete · ${data.staged} new · ${data.existing} existing · ${data.failed} failed`,
         proposal:
           `Ready for review (${data.new} new, ${data.merge} merge, ${data.contradict} contradict)`,
         warning: data.error,
@@ -3170,6 +3305,8 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
           ? `Completed with warning: ${ingestWarning}`
           : batchSummary
           ? `Batch complete · ${batchSummary.applied} applied · ${batchSummary.skipped} already present`
+          : queueSummary
+          ? `Queue complete · ${queueSummary.staged} new proposals · ${queueSummary.existing} existing · ${queueSummary.failed} failed`
           : stagedProposalId
           ? "Proposal ready for review. No wiki pages changed yet."
           : `${data.notes?.length ?? 0} existing pages found.`,
@@ -3181,10 +3318,35 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
         updateShell({ type: "close-source" });
         await openReviewWorkspace(stagedProposalId);
       }
+      if (data.stage === "queue_source") {
+        updateManualQueueItem(data.current, "processing", "Processing…");
+      }
+      if (data.stage === "queue_proposal") {
+        firstQueuedProposalId ??= data.proposalId;
+        updateManualQueueItem(
+          data.current,
+          "ready",
+          data.existing ? "Existing proposal" : "Ready for review",
+        );
+      }
+      if (data.stage === "queue_skipped") {
+        updateManualQueueItem(
+          data.current,
+          "ready",
+          data.reason === "rejected" ? "Already rejected" : "Already applied",
+        );
+      }
+      if (data.stage === "queue_failed") {
+        updateManualQueueItem(data.current, "failed", "Failed · retryable");
+      }
       if (data.stage === "batch_complete") batchSummary = data;
+      if (data.stage === "queue_complete") queueSummary = data;
       if (data.stage === "done") {
         completed = true;
-        if (!stagedProposalId) {
+        if (queued && firstQueuedProposalId && queueSummary?.failed === 0) {
+          updateShell({ type: "close-source" });
+          await openReviewWorkspace(firstQueuedProposalId);
+        } else if (!stagedProposalId) {
           await loadNoteList();
           await loadGraph();
         }
@@ -3197,6 +3359,8 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
       ? "Stop requested. Completed sources and proposals are preserved; submit the same input to resume."
       : automatic
       ? `Automatic batch stopped: ${err.message}`
+      : queued
+      ? `Queue stopped: ${err.message}`
       : `Could not prepare source: ${err.message}`;
   } finally {
     finishOperation();
@@ -3213,14 +3377,14 @@ document.getElementById("ingest-btn").addEventListener("click", async () => {
     document.getElementById("ingest-btn").disabled = !providerCapabilities(
       providerState.phase,
     ).modelActions;
-    if (completed) {
+    if (completed && (!queued || queueSummary?.failed === 0)) {
       input.value = "";
       titleInput.value = "";
       fileInput.value = "";
       trustedBatchConfirmationInput.value = "";
       document.getElementById("ingest-file-name").textContent = "";
     }
-    renderIngestMode();
+    if (!queued || queueSummary?.failed === 0) renderIngestMode();
   }
 });
 
