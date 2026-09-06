@@ -475,26 +475,32 @@ async function run(): Promise<void> {
       Boolean,
       "The fitted graph hid every page title",
     );
-    await client.evaluate(
-      `document.querySelector('#graph circle.node').focus()`,
-    );
-    await waitFor(
-      () =>
-        client!.evaluate<boolean>(`(() => {
+    const focusState = await client.evaluate<Record<string, boolean>>(`(() => {
         const node = document.querySelector('#graph circle.node');
+        node.dispatchEvent(new FocusEvent('focus'));
         const label = [...document.querySelectorAll('#graph .label')]
           .find(item => item.__data__.id === node.__data__.id);
-        return !!label &&
-          getComputedStyle(label).display !== 'none' &&
-          getComputedStyle(label).fontSize === '13px' &&
-          label.parentNode.parentNode.id === 'graph' &&
-          document.querySelector('#graph-tooltip').textContent === node.__data__.title;
-      })()`),
-      Boolean,
-      "Keyboard focus did not reveal a screen-sized title",
+        return {
+          keyboardAddressable: node.getAttribute('role') === 'button' &&
+            node.getAttribute('tabindex') === '0',
+          labelVisible: !!label && getComputedStyle(label).display !== 'none',
+          labelScreenSized: !!label && getComputedStyle(label).fontSize === '13px',
+          labelOutsideZoomLayer: !!label && label.parentNode.parentNode.id === 'graph',
+          tooltipMatches: document.querySelector('#graph-tooltip').textContent ===
+            node.__data__.title,
+        };
+      })()`);
+    assert.deepEqual(focusState, {
+      keyboardAddressable: true,
+      labelVisible: true,
+      labelScreenSized: true,
+      labelOutsideZoomLayer: true,
+      tooltipMatches: true,
+    });
+    await client.evaluate(
+      `document.querySelector('#graph circle.node').dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))`,
     );
-    await client.evaluate(`document.querySelector('#graph circle.node').dispatchEvent(
-      new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))`);
     assert.match(
       await client.evaluate<string>(
         "document.querySelector('#graph-page-list').textContent",
