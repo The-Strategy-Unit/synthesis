@@ -138,6 +138,25 @@ export function browserExecutableArgument(
   return candidate?.trim() || undefined;
 }
 
+export function manualQueueSmokeExpression(queuedSources: string): string {
+  return `(() => {
+    document.querySelector('#add-source-btn').click();
+    const sourceType = document.querySelector('#ingest-source-type');
+    sourceType.value = 'queue';
+    sourceType.dispatchEvent(new Event('change', { bubbles: true }));
+    const input = document.querySelector('#ingest-input');
+    input.value = ${JSON.stringify(queuedSources)};
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const rows = [...document.querySelectorAll('#manual-queue-list li')];
+    return {
+      fileHidden: document.querySelector('#source-file-row').classList.contains('hidden'),
+      queueVisible: !document.querySelector('#manual-queue-controls').classList.contains('hidden'),
+      rows: rows.length,
+      waiting: rows.filter(item => item.dataset.state === 'waiting').length,
+    };
+  })()`;
+}
+
 async function browserCommand(): Promise<string> {
   const explicit = browserExecutableArgument(Deno.args);
   if (explicit) return explicit;
@@ -413,27 +432,16 @@ async function run(): Promise<void> {
       "Wiki pages did not render in the browser",
     );
     console.log("Browser smoke: checking the manual source queue.");
+    const queuedSources = [
+      "dQw4w9WgXcQ",
+      "https://youtu.be/9bZkp7q19f0",
+    ].join("\n");
     const queueState = await client.evaluate<{
       fileHidden: boolean;
       queueVisible: boolean;
       rows: number;
       waiting: number;
-    }>(`(() => {
-      document.querySelector('#add-source-btn').click();
-      const sourceType = document.querySelector('#ingest-source-type');
-      sourceType.value = 'queue';
-      sourceType.dispatchEvent(new Event('change', { bubbles: true }));
-      const input = document.querySelector('#ingest-input');
-      input.value = 'dQw4w9WgXcQ\nhttps://youtu.be/9bZkp7q19f0';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      const rows = [...document.querySelectorAll('#manual-queue-list li')];
-      return {
-        fileHidden: document.querySelector('#source-file-row').classList.contains('hidden'),
-        queueVisible: !document.querySelector('#manual-queue-controls').classList.contains('hidden'),
-        rows: rows.length,
-        waiting: rows.filter(item => item.dataset.state === 'waiting').length,
-      };
-    })()`);
+    }>(manualQueueSmokeExpression(queuedSources));
     assert.deepEqual(queueState, {
       fileHidden: true,
       queueVisible: true,

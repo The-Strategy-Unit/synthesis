@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   browserExecutableArgument,
+  manualQueueSmokeExpression,
   withTimeout,
 } from "./browser_interaction_smoke.ts";
 
@@ -21,6 +22,12 @@ Deno.test("browserExecutableArgument accepts a task argument after --", () => {
 
 Deno.test("browserExecutableArgument ignores an empty separator", () => {
   assert.equal(browserExecutableArgument(["--"]), undefined);
+});
+
+Deno.test("manual queue browser expression safely preserves lines", () => {
+  const expression = manualQueueSmokeExpression("first\nsecond");
+  assert.doesNotThrow(() => new Function(expression));
+  assert.match(expression, /input\.value = "first\\nsecond";/);
 });
 
 Deno.test("withTimeout bounds an operation that never settles", async () => {
