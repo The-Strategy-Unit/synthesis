@@ -1,6 +1,6 @@
 # Developer guide
 
-Synthesis 0.2.3 is a frozen MIT-licensed MVP. This repository is not accepting
+Synthesis 0.2.4 is a frozen MIT-licensed MVP. This repository is not accepting
 further product development or providing support. Fork it before extending it.
 
 ## Setup
@@ -184,11 +184,11 @@ The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
 releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
 Windows, and publish immutable platform archives plus `SHA256SUMS`.
 
-Version 0.2.3 is the final release of this repository:
+Version 0.2.4 is the final release of this repository:
 
 ```bash
-git tag -a v0.2.3 -m "Synthesis v0.2.3"
-git push origin v0.2.3
+git tag -a v0.2.4 -m "Synthesis v0.2.4"
+git push origin v0.2.4
 ```
 
 After verifying the release assets, archive the repository. Further releases

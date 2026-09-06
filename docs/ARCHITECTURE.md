@@ -4,7 +4,7 @@ Synthesis is a local-first, single-process knowledge compiler. It stores durable
 knowledge as ordinary files and treats models, SQLite, embeddings, and graph
 layout as replaceable machinery.
 
-This document describes the frozen 0.2.3 MVP. It is a design reference, not a
+This document describes the frozen 0.2.4 MVP. It is a design reference, not a
 production-deployment specification.
 
 ## System map
@@ -136,7 +136,7 @@ Ingestion is serialized by an in-memory identity-aware gate with queue and daily
 quota limits. Semantic search has a per-identity rate limit. Long operations use
 SSE and cooperative cancellation; cancellation never interrupts an atomic apply.
 
-Only one process may own a writable vault. Version 0.2.3 documents this
+Only one process may own a writable vault. Version 0.2.4 documents this
 requirement but does not enforce a cross-process vault lock.
 
 Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback

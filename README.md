@@ -16,7 +16,7 @@ tool and is not intended for production or regulated workloads.
 ## Five-minute start
 
 Download and extract the archive for your platform from the
-[v0.2.3 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.3).
+[final v0.2.4 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.4).
 The executables are unsigned; macOS builds are not notarised.
 
 Try the disposable, provider-free example:
