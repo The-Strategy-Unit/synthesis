@@ -140,6 +140,9 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="graph-focus-summary" role="status"/);
     assert.match(index, /id="graph-focus-open" type="button"/);
     assert.match(index, /id="graph-focus-clear" type="button"/);
+    assert.match(index, /aria-labelledby="graph-directory-title"/);
+    assert.match(index, /id="graph-page-filter" type="search"/);
+    assert.match(index, /id="graph-page-list"/);
     assert.match(index, /id="review-workspace" class="hidden"/);
     assert.match(index, /id="proposal-decision-summary" role="status"/);
     assert.match(index, /id="proposal-include-all"/);
@@ -162,6 +165,8 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /review_workflow/);
     assert.match(bundle, /searchContextGraph/);
     assert.match(bundle, /graphFocusNodeIds/);
+    assert.match(bundle, /graphLabelLayout/);
+    assert.match(bundle, /graphNeighbourRows/);
     assert.match(bundle, /setGraphMaximized/);
     assert.match(bundle, /fitGraphToViewport/);
     assert.match(bundle, /Retry with keyword search/);

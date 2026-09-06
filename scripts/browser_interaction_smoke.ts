@@ -113,6 +113,22 @@ async function seedWiki(vault: string): Promise<void> {
       type: "concept",
     }, [source]),
   );
+  // A provider-free, disconnected overview catches the original fit/label gap
+  // and exercises long titles without touching a user's vault.
+  for (let index = 0; index < 32; index++) {
+    await Deno.writeTextFile(
+      `${vault}/notes/research-${index}.md`,
+      renderWikiPage({
+        body: "A synthetic research topic for graph readability checks.",
+        links: [],
+        tags: ["research"],
+        title: `Research topic ${
+          index + 1
+        }: interpreting evidence across populations and settings`,
+        type: "concept",
+      }, [source]),
+    );
+  }
 }
 
 export function browserExecutableArgument(
@@ -393,7 +409,7 @@ async function run(): Promise<void> {
         client!.evaluate<number>(
           "document.querySelectorAll('#note-list .note-list-button').length",
         ),
-      (count) => count === 2,
+      (count) => count === 34,
       "Wiki pages did not render in the browser",
     );
     await client.evaluate(`(() => {
@@ -449,6 +465,119 @@ async function run(): Promise<void> {
       (transform) => /translate\(.+\) scale\(.+\)/.test(transform),
       "Fit graph did not apply a viewport transform",
     );
+
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          `[...document.querySelectorAll('#graph .label')]
+        .some(label => getComputedStyle(label).display !== 'none')`,
+        ),
+      Boolean,
+      "The fitted graph hid every page title",
+    );
+    const focusState = await client.evaluate<Record<string, boolean>>(`(() => {
+        const node = document.querySelector('#graph circle.node');
+        node.dispatchEvent(new FocusEvent('focus'));
+        const label = [...document.querySelectorAll('#graph .label')]
+          .find(item => item.__data__.id === node.__data__.id);
+        return {
+          keyboardAddressable: node.getAttribute('role') === 'button' &&
+            node.getAttribute('tabindex') === '0',
+          labelVisible: !!label && getComputedStyle(label).display !== 'none',
+          labelScreenSized: !!label && getComputedStyle(label).fontSize === '13px',
+          labelOutsideZoomLayer: !!label && label.parentNode.parentNode.id === 'graph',
+          tooltipMatches: document.querySelector('#graph-tooltip').textContent ===
+            node.__data__.title,
+        };
+      })()`);
+    assert.deepEqual(focusState, {
+      keyboardAddressable: true,
+      labelVisible: true,
+      labelScreenSized: true,
+      labelOutsideZoomLayer: true,
+      tooltipMatches: true,
+    });
+    await client.evaluate(
+      `document.querySelector('#graph circle.node').dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))`,
+    );
+    assert.match(
+      await client.evaluate<string>(
+        "document.querySelector('#graph-page-list').textContent",
+      ),
+      /Reviewed wiki link/,
+    );
+    assert.equal(
+      await client.evaluate<number>(
+        "document.querySelectorAll('#graph-page-list button').length",
+      ),
+      1,
+      "Focus should list only connected pages",
+    );
+    await client.evaluate(
+      "document.querySelector('#graph-page-list button').click()",
+    );
+    assert.equal(
+      await client.evaluate<string>("document.activeElement.id"),
+      "graph-focus-open",
+    );
+    await client.evaluate(
+      "document.querySelector('#graph-focus-open').click()",
+    );
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          "document.querySelector('#graph-panel').classList.contains('hidden') && !document.querySelector('#reader-panel').classList.contains('hidden')",
+        ),
+      Boolean,
+      "Opening a graph neighbour did not open the wiki page",
+    );
+    await client.evaluate(
+      "document.querySelector('#connections-view-btn').click()",
+    );
+    await client.evaluate(
+      "document.querySelector('#graph-focus-clear').click()",
+    );
+    await client.evaluate(
+      "document.querySelector('#graph-search-clear').click()",
+    );
+    await waitFor(
+      () =>
+        client!.evaluate<number>(
+          "document.querySelectorAll('#graph circle.node').length",
+        ),
+      (count) => count === 34,
+      "Clearing search did not restore the overview",
+    );
+    await client.evaluate("document.querySelector('#graph-fit').click()");
+    assert.equal(
+      await client.evaluate<boolean>(`(() => {
+      const labels = [...document.querySelectorAll('#graph .label')]
+        .filter(label => getComputedStyle(label).display !== 'none');
+      const boxes = labels.map(label => label.getBoundingClientRect());
+      return boxes.length > 1 && boxes.every((a, i) => boxes.slice(i + 1).every(b =>
+        a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top));
+    })()`),
+      true,
+      "Overview titles must be visible without overlapping",
+    );
+    await client.evaluate(`(() => {
+      const input = document.querySelector('#graph-page-filter');
+      input.value = 'no such page';
+      input.dispatchEvent(new Event('input'));
+    })()`);
+    assert.equal(
+      await client.evaluate<number>(
+        "document.querySelectorAll('#graph-page-list button').length",
+      ),
+      0,
+      "Title filter did not handle no matches",
+    );
+    await client.evaluate(`(() => {
+      const input = document.querySelector('#graph-page-filter');
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+    })()`);
 
     await client.evaluate(
       "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))",

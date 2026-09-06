@@ -211,9 +211,16 @@ the corrected vector space.
 
 ### UI
 
-| Variable                         | Default | Notes        |
-| -------------------------------- | ------- | ------------ |
-| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10 |
+| Variable                         | Default | Notes                                                                                                    |
+| -------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10; switches from spacious overview labels to tighter detail labels, without hiding all titles |
+
+The connections view places collision-aware, screen-sized titles at every zoom.
+Hovered/keyboard-focused pages and the selected page take priority, followed by
+search matches and neighbours. The linked page list shows full titles and
+distinguishes reviewed links from semantic suggestions; its title filter is
+local and requires no provider. Selecting a listed page preserves the layout and
+brings an off-screen selection into view. Open the page to inspect evidence.
 
 ## Extending
 
