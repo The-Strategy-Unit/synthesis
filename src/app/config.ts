@@ -226,10 +226,10 @@ export const config = {
 
     // Keep every knowledge-authoring role on the quality floor by default.
     // Operators can still select another compatible provider model explicitly.
-    extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.8:27b"),
-    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.8:27b"),
-    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.8:27b"),
-    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.8:27b"),
+    extractModel: env("SYNTHESIS_EXTRACT_MODEL", "qwen3.6:27b"),
+    consolidateModel: env("SYNTHESIS_CONSOLIDATE_MODEL", "qwen3.6:27b"),
+    integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.6:27b"),
+    rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.6:27b"),
 
     temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
     extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),

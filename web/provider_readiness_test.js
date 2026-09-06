@@ -11,7 +11,7 @@ Deno.test("local Ollama preset matches the vault embedding configuration", () =>
   assert.deepEqual(ollamaPreset(768), {
     displayName: "Local Ollama",
     llmApiBase: "http://localhost:11434/v1",
-    llmModel: "qwen3.8:27b",
+    llmModel: "qwen3.6:27b",
     embeddingApiBase: "http://localhost:11434/v1",
     embeddingModel: "nomic-embed-text-v2-moe:latest",
     embeddingDimensions: 768,

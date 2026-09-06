@@ -59,7 +59,7 @@ The app opens `http://localhost:8000` and uses `~/Synthesis` by default.
 Override the vault with `SYNTHESIS_VAULT=/path/to/vault`. Use only one running
 Synthesis process per writable vault.
 
-The default Ollama models are `qwen3.8:27b` for writing and
+The default Ollama models are `qwen3.6:27b` for writing and
 `nomic-embed-text-v2-moe:latest` for embeddings. The **Provider** screen can
 select another local or OpenAI-compatible provider. Remote providers receive the
 source and wiki text needed for each request under their own terms; Synthesis
@@ -151,4 +151,4 @@ deno task compile
 
 ## Licence
 
-[MIT](LICENSE). It provides the software without
+[MIT](LICENSE). It provides the software without warranty.

@@ -87,10 +87,10 @@ trusted proxy.
 | `SYNTHESIS_API_BASE`                                   | `http://localhost:11434/v1`      |
 | `SYNTHESIS_API_KEY`                                    | `ollama`                         |
 | `SYNTHESIS_EMBED_API_BASE` / `SYNTHESIS_EMBED_API_KEY` | Inherit chat provider            |
-| `SYNTHESIS_EXTRACT_MODEL`                              | `qwen3.8:27b`                    |
-| `SYNTHESIS_CONSOLIDATE_MODEL`                          | `qwen3.8:27b`                    |
-| `SYNTHESIS_INTEGRATE_MODEL`                            | `qwen3.8:27b`                    |
-| `SYNTHESIS_REWRITE_MODEL`                              | `qwen3.8:27b`                    |
+| `SYNTHESIS_EXTRACT_MODEL`                              | `qwen3.6:27b`                    |
+| `SYNTHESIS_CONSOLIDATE_MODEL`                          | `qwen3.6:27b`                    |
+| `SYNTHESIS_INTEGRATE_MODEL`                            | `qwen3.6:27b`                    |
+| `SYNTHESIS_REWRITE_MODEL`                              | `qwen3.6:27b`                    |
 | `SYNTHESIS_EMBED_MODEL`                                | `nomic-embed-text-v2-moe:latest` |
 | `SYNTHESIS_EMBED_DIMENSIONS`                           | `768`                            |
 | `SYNTHESIS_REASONING_EFFORT`                           | `none`                           |
