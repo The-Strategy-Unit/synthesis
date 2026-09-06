@@ -1,441 +1,215 @@
-# Developer Guide
+# Developer guide
 
-Setup, configuration, extending, and troubleshooting for Synthesis.
-
-## Prerequisites
-
-- [Deno](https://deno.land) ≥ 2.0; Deno 2.9.5 for reproducible QuickJS builds
-- [Ollama](https://ollama.com) running locally (or a remote OpenAI-compatible
-  endpoint)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube ingestion
+Synthesis 0.2.3 is a frozen MIT-licensed MVP. This repository is not accepting
+further product development or providing support. Fork it before extending it.
 
 ## Setup
 
+Requirements:
+
+- Deno 2+; CI uses Deno 2.9.5.
+- Ollama or another explicitly selected OpenAI-compatible provider.
+- `yt-dlp` only for YouTube ingestion.
+
 ```bash
-git clone https://github.com/The-Strategy-Unit/synthesis.git
-cd synthesis
-deno task setup
-deno task app
+deno task setup        # check Ollama, yt-dlp, models, and vault directory
+deno task app          # open ~/Synthesis at http://localhost:8000
+deno task dev          # watch mode
+deno task trial        # disposable provider-free demo
 ```
 
-`setup.ts` will:
+Use `.env.example` as the configuration reference. Never commit credentials or
+real vault data.
 
-1. Check that Ollama is running (exits with install instructions if not)
-2. Check for yt-dlp and warn if it must be installed
-3. Check every configured model role and report models that must be pulled
-4. Create the vault directory at `~/Synthesis/notes`
+## Repository map
 
-## Development
+| Path                  | Purpose                                   |
+| --------------------- | ----------------------------------------- |
+| `main.ts`, `src/app/` | Composition and startup                   |
+| `src/http/`           | HTTP/SSE policy and routes                |
+| `src/ingest/`         | Extraction, proposal, review, apply       |
+| `src/wiki/`           | Markdown, links, lint, query, discovery   |
+| `src/vault/`          | Export, rebuild, history, undo, migration |
+| `src/catalogue/`      | SQLite, FTS5, sqlite-vec                  |
+| `src/provider/`       | Provider transport, profiles, secrets     |
+| `web/`                | Browser ES modules, HTML, CSS             |
+| `scripts/`            | Setup, tests, build, smoke, migration     |
+
+Tests are collocated as `*_test.ts` or `*_test.js`. Do not edit generated
+`web/app.bundle.js` or `dist/`.
+
+## Quality gates
 
 ```bash
-deno task dev      # auto-reload via --watch
-deno task lint     # Lint and format tracked source/documentation paths
-deno task test:unit          # fast, permissionless logic tests
-deno task test:integration   # database, route, and orchestration tests
-deno task test:e2e           # provider-independent server/UI workflow tests
-deno task test:browser       # real browser search/graph smoke; pass a Chromium path if it is not discoverable
-deno task trial              # disposable provider-free evidence demo
+deno fmt --check <changed-files>
+deno lint
+deno task check
+deno task test:unit
+deno task test:integration
+deno task test:e2e
+deno task test:browser
 ```
 
-Compile a self-extracting QuickJS executable for the current host with
-`deno task compile`; target Linux x64, macOS ARM64, or Windows x64 with the
-corresponding `compile:*` task. `deno task build` creates all three. A compiled
-executable can open an existing vault with `--vault <path>`. Run the compiled
-smoke task on the artefact's target operating system:
+Backend, persistence, provider, ingest, or API changes require integration
+tests. UI and route changes require E2E. Packaging changes require compilation
+and `deno task test:compiled <executable>` on each target OS. Automated tests
+use temporary vaults and mocked providers; they must not need credentials,
+Ollama, `yt-dlp`, or internet access.
+
+`deno task lint` is a mutating convenience command. Use the non-mutating
+formatter and linter commands above for review.
+
+## Configuration
+
+All variables are validated in `src/app/config.ts`; `.env.example` contains the
+complete list and defaults.
+
+### Runtime and access
+
+| Variable                            | Default              | Purpose                          |
+| ----------------------------------- | -------------------- | -------------------------------- |
+| `SYNTHESIS_VAULT`                   | `~/Synthesis`        | Authoritative vault              |
+| `SYNTHESIS_APP_DATA`                | Platform config dir  | Provider profiles and secrets    |
+| `SYNTHESIS_HOST` / `SYNTHESIS_PORT` | `127.0.0.1` / `8000` | Listener                         |
+| `SYNTHESIS_OPEN_BROWSER`            | `true`               | Launch browser                   |
+| `SYNTHESIS_PUBLIC_ORIGIN`           | unset                | Required protected origin        |
+| `SYNTHESIS_TRUST_PROXY_AUTH`        | `false`              | Trust Cloudflare identity header |
+| `SYNTHESIS_ALLOWED_EMAILS`          | empty                | Viewers                          |
+| `SYNTHESIS_INGESTER_EMAILS`         | empty                | Mutation identities              |
+
+Never enable proxy auth unless clients can reach the app only through that
+trusted proxy.
+
+### Providers
+
+| Variable                                               | Default                          |
+| ------------------------------------------------------ | -------------------------------- |
+| `SYNTHESIS_API_BASE`                                   | `http://localhost:11434/v1`      |
+| `SYNTHESIS_API_KEY`                                    | `ollama`                         |
+| `SYNTHESIS_EMBED_API_BASE` / `SYNTHESIS_EMBED_API_KEY` | Inherit chat provider            |
+| `SYNTHESIS_EXTRACT_MODEL`                              | `qwen3.8:27b`                    |
+| `SYNTHESIS_CONSOLIDATE_MODEL`                          | `qwen3.8:27b`                    |
+| `SYNTHESIS_INTEGRATE_MODEL`                            | `qwen3.8:27b`                    |
+| `SYNTHESIS_REWRITE_MODEL`                              | `qwen3.8:27b`                    |
+| `SYNTHESIS_EMBED_MODEL`                                | `nomic-embed-text-v2-moe:latest` |
+| `SYNTHESIS_EMBED_DIMENSIONS`                           | `768`                            |
+| `SYNTHESIS_REASONING_EFFORT`                           | `none`                           |
+
+Temperature and token limits are independently configurable for extract,
+consolidate, integrate, rewrite, and query roles; see `.env.example`. Changing
+embedding identity invalidates vectors and derived links. A different vector
+width requires a new database.
+
+### Bounds
+
+| Area    | Variables and defaults                                       |
+| ------- | ------------------------------------------------------------ |
+| HTTP    | body 1 MiB; upload 25 MiB; pasted text 250,000 characters    |
+| Source  | transcript 500,000 characters; subtitles 10 MiB              |
+| PDF     | 500 pages; 30-second parse timeout                           |
+| Models  | 10-minute request timeout; 12,000-character extraction input |
+| Queue   | 4 waiting; 5 jobs/user/day; 20 jobs/day globally             |
+| YouTube | 2-minute `yt-dlp`; playlist 10; trusted batch 100            |
+| Search  | 500-character query; 20 results; 5 semantic searches/minute  |
+| Graph   | retain 8 semantic neighbours; display 3 initially            |
+
+Every bound can be overridden within the clamps defined in `config.ts`.
+
+## Permissions and trust
+
+`scripts/start.ts` gives the child runtime network access for runtime-selected
+providers, FFI for sqlite-vec, scoped vault/app-data/temp file access,
+restricted environment access, and permission to run `yt-dlp`.
+
+Provider bases must be HTTPS URLs ending in `/v1`, except loopback HTTP. API
+keys belong in the OS keyring or environment. Model output, uploads, JSON, URLs,
+paths, Markdown, citations, IDs, and provider envelopes are validated at their
+boundaries.
+
+## API index
+
+There is no generated OpenAPI document. `src/http/routes.ts` and its five route
+modules are authoritative.
+
+| Area        | Routes                                                                                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System      | `GET /api/config`, `/status`, `/schema`, `/export`, `/semantic-index`; `PUT /api/schema`; `POST /api/rebuild`, `/semantic-index/rebuild`                              |
+| Provider    | `GET /api/provider`, `/provider/readiness`; `POST /api/provider`, `/provider/diagnose`                                                                                |
+| Wiki        | `GET /api/notes`, `/notes/:id`, `/sources`, `/sources/:id`, `/search`, `/graph`, `/lint`; `POST /api/lint/analyze`, `/query`, `/query/save`                           |
+| Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/batch`, `/ingest/undo`                                                                               |
+| Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`                                                            |
+| Discoveries | `GET /api/discoveries`, `/api/discoveries/:id`; `POST /api/discoveries/generate`, `/api/discoveries/batch`, `/api/discoveries/:id/investigate`, `/confirm`, `/reject` |
+
+Mutation bodies require JSON except `/api/ingest/file`, which requires multipart
+form data. Ingest and approval use SSE. Errors expose only a safe `error`,
+`code`, and `requestId`; diagnostics stay server-side.
+
+Important exact confirmations:
+
+| Operation              | Confirmation                   |
+| ---------------------- | ------------------------------ |
+| Catalogue rebuild      | `REBUILD`                      |
+| Semantic index rebuild | `REBUILD SEMANTIC INDEX`       |
+| Undo newest ingest     | `UNDO`                         |
+| Trusted batch          | `AUTO APPLY N TRUSTED SOURCES` |
+| Confirm discoveries    | `CONFIRM N LINKS`              |
+| Reject discoveries     | `REJECT N PROPOSALS`           |
+
+Manual proposal approval requires a non-empty array of exact reviewed change
+indexes; `{}` is invalid. Trusted batches are the only flow that selects all
+staged wiki changes automatically. Discovery proposals always remain pending for
+human review.
+
+Search accepts `mode=keyword|semantic|hybrid`; hybrid is the API default.
+Semantic mode returns `409 SEMANTIC_INDEX_INCOMPLETE` until the current index is
+complete. Scores rank results within a query and are not probabilities.
+
+## Packaging
 
 ```bash
+deno task compile             # current host
+deno task compile:linux
+deno task compile:macos
+deno task compile:windows
+deno task build               # all targets
 deno task test:compiled <executable>
 ```
 
-It verifies native SQLite startup, offline vault APIs, PDF text extraction, the
-HACA and trial vaults, and embedded UI assets from an unrelated working
-directory.
+Compiled executables use the experimental QuickJS backend and target-native
+SQLite/keyring packages. Browser assets are bundled; the HACA vault is placed
+beside the executable in release archives. The 80 MiB executable ceiling guards
+against accidental dependency or private-data inclusion.
 
-Compilation prebundles and minifies application code, keeps the two native npm
-packages external for target-aware resolution, and embeds only the three web
-runtime artefacts. The HACA 2025 vault is copied beside the executable when CI
-creates each release archive; it is not embedded in the binary. Do not add broad
-directory includes: the 80 MiB build ceiling is intended to catch dependency
-bloat and accidental inclusion of tests, docs, or local material.
+The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
+releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
+Windows, and publish immutable platform archives plus `SHA256SUMS`.
 
-The cross-platform packaging workflow runs for pull requests, manual dispatches,
-and pushed `v*` tags. Pull requests and manual runs produce downloadable build
-artefacts only. A tag run additionally requires the tag to equal
-`v<deno.json version>`; after every target-native compiled smoke test passes, it
-creates the GitHub Release with generated notes, platform archives containing
-the executable, licence, and HACA 2025 vault, and `SHA256SUMS`. Existing
-releases are never overwritten: a rerun succeeds only when the published asset
-names already match exactly.
-
-To release, update and commit `deno.json`, then push its matching annotated tag:
+Version 0.2.3 is the final release of this repository:
 
 ```bash
-git tag -a v0.2.2 -m "Synthesis v0.2.2"
-git push origin v0.2.2
+git tag -a v0.2.3 -m "Synthesis v0.2.3"
+git push origin v0.2.3
 ```
 
-### Permissions
-
-`scripts/start.ts` grants the child runtime:
-
-- `--allow-net` because validated provider endpoints can be configured at
-  runtime
-- `--allow-ffi` - sqlite-vec native extension
-- `--allow-read=web,$vaultDir,$appDataDir,$tmpDir`
-- `--allow-write=$vaultDir,$appDataDir,$tmpDir`
-- `--allow-run=yt-dlp`
-- `--allow-env` restricted to documented Synthesis and platform path variables
-
-Application validation limits provider API bases to HTTPS endpoints ending in
-`/v1`, except that loopback HTTP is allowed for local providers.
-
-## Configuration reference
-
-All config lives in `src/app/config.ts`. Every value has an environment variable
-override with validation (clamping, enum checks, minimum bounds).
-
-### Core
-
-| Variable                 | Default       | Validation/notes                    |
-| ------------------------ | ------------- | ----------------------------------- |
-| `SYNTHESIS_VAULT`        | `~/Synthesis` | Authoritative vault root            |
-| `SYNTHESIS_APP_DATA`     | platform data | Provider profile and secret service |
-| `SYNTHESIS_HOST`         | `127.0.0.1`   | Listener address                    |
-| `SYNTHESIS_PORT`         | `8000`        | clamped 1–65535                     |
-| `SYNTHESIS_OPEN_BROWSER` | `true`        | Launcher behaviour                  |
-
-### Access, limits, and quotas
-
-| Variable                                 | Default | Validation/notes                       |
-| ---------------------------------------- | ------- | -------------------------------------- |
-| `SYNTHESIS_PUBLIC_ORIGIN`                | unset   | Required for protected network hosting |
-| `SYNTHESIS_TRUST_PROXY_AUTH`             | `false` | Trust Cloudflare identity header       |
-| `SYNTHESIS_ALLOWED_EMAILS`               | empty   | Comma-separated viewers                |
-| `SYNTHESIS_INGESTER_EMAILS`              | empty   | Comma-separated mutation identities    |
-| `SYNTHESIS_MAX_BODY_BYTES`               | 1 MiB   | clamped 1 KiB–10 MiB                   |
-| `SYNTHESIS_MAX_UPLOAD_BYTES`             | 25 MiB  | clamped 1–100 MiB                      |
-| `SYNTHESIS_MAX_PASTED_TEXT_CHARS`        | 250000  | clamped 1000–1,000,000                 |
-| `SYNTHESIS_MAX_TITLE_CHARS`              | 200     | clamped 20–1000                        |
-| `SYNTHESIS_MAX_SEARCH_CHARS`             | 500     | clamped 20–5000                        |
-| `SYNTHESIS_MAX_TRANSCRIPT_CHARS`         | 500000  | clamped 1000–2,000,000                 |
-| `SYNTHESIS_MAX_SUBTITLE_BYTES`           | 10 MiB  | clamped 1–100 MiB                      |
-| `SYNTHESIS_YT_DLP_TIMEOUT_MS`            | 120000  | clamped 5 seconds–30 minutes           |
-| `SYNTHESIS_MODEL_TIMEOUT_MS`             | 600000  | clamped 5 seconds–30 minutes           |
-| `SYNTHESIS_INGEST_QUEUE_SIZE`            | 4       | clamped 0–100                          |
-| `SYNTHESIS_PER_USER_DAILY_JOBS`          | 5       | clamped 1–10000                        |
-| `SYNTHESIS_GLOBAL_DAILY_JOBS`            | 20      | clamped 1–100000                       |
-| `SYNTHESIS_SEMANTIC_SEARCHES_PER_MINUTE` | 5       | clamped 1–1000                         |
-
-### LLM API
-
-| Variable                     | Default                     | Notes                          |
-| ---------------------------- | --------------------------- | ------------------------------ |
-| `SYNTHESIS_API_BASE`         | `http://localhost:11434/v1` | OpenAI-compatible endpoint     |
-| `SYNTHESIS_API_KEY`          | `ollama`                    | Bearer token                   |
-| `SYNTHESIS_REASONING_EFFORT` | `none`                      | `high\|medium\|low\|max\|none` |
-
-### Model roles
-
-| Variable                      | Default       | Used by                        |
-| ----------------------------- | ------------- | ------------------------------ |
-| `SYNTHESIS_EXTRACT_MODEL`     | `qwen3.8:27b` | Per-chunk extraction           |
-| `SYNTHESIS_CONSOLIDATE_MODEL` | `qwen3.8:27b` | Source-level consolidation     |
-| `SYNTHESIS_INTEGRATE_MODEL`   | `qwen3.8:27b` | new/merge/contradict decisions |
-| `SYNTHESIS_REWRITE_MODEL`     | `qwen3.8:27b` | Rewriting existing notes       |
-
-The defaults are a quality floor for the bundled Ollama setup, not a model-name
-allowlist. Provider profiles may select a different model because parameter
-counts and capabilities cannot be inferred reliably from arbitrary hosted model
-identifiers. Every model-authored workflow also receives Synthesis' mandatory
-editorial policy: Synthesis-authored language uses British English, official
-names and quotations are preserved, and uncertain transcript details must not be
-silently repaired or invented. A custom vault schema may add stricter domain
-rules but cannot remove this shared policy.
-
-### LLM tuning
-
-| Variable                            | Default | Validation  |
-| ----------------------------------- | ------- | ----------- |
-| `SYNTHESIS_LLM_TEMPERATURE`         | `0.1`   | clamped 0–2 |
-| `SYNTHESIS_EXTRACT_TEMPERATURE`     | `0`     | clamped 0–2 |
-| `SYNTHESIS_CONSOLIDATE_TEMPERATURE` | `0.1`   | clamped 0–2 |
-| `SYNTHESIS_INTEGRATE_TEMPERATURE`   | `0.1`   | clamped 0–2 |
-| `SYNTHESIS_EXTRACT_MAX_TOKENS`      | `2000`  | min 256     |
-| `SYNTHESIS_CONSOLIDATE_MAX_TOKENS`  | `4000`  | min 256     |
-| `SYNTHESIS_INTEGRATE_MAX_TOKENS`    | `2000`  | min 256     |
-| `SYNTHESIS_REWRITE_MAX_TOKENS`      | `2000`  | min 256     |
-| `SYNTHESIS_MAX_TOKENS`              | `800`   | min 256     |
-
-### Embeddings
-
-| Variable                     | Default                          | Notes                           |
-| ---------------------------- | -------------------------------- | ------------------------------- |
-| `SYNTHESIS_EMBED_API_BASE`   | inherits `SYNTHESIS_API_BASE`    | Separate endpoint if needed     |
-| `SYNTHESIS_EMBED_API_KEY`    | inherits `SYNTHESIS_API_KEY`     | -                               |
-| `SYNTHESIS_EMBED_MODEL`      | `nomic-embed-text-v2-moe:latest` | -                               |
-| `SYNTHESIS_EMBED_DIMENSIONS` | `768`                            | min 64; requested and validated |
-
-The default width is the Nomic model's native 768-dimensional output. Synthesis
-adds its required `search_document:` prefix to wiki pages and `search_query:`
-prefix to retrieval queries. This input format is part of the semantic-index
-identity, so existing unprefixed vectors are invalidated rather than mixed with
-the corrected vector space.
-
-### Ingest
-
-| Variable                            | Default                            | Notes                   |
-| ----------------------------------- | ---------------------------------- | ----------------------- |
-| `SYNTHESIS_MAX_CHARS`               | `12000`                            | min 1000; input ceiling |
-| `SYNTHESIS_CHUNK_OVERLAP`           | `500`                              | structural; max 2000    |
-| `SYNTHESIS_MAX_UPLOAD_BYTES`        | `26214400`                         | clamped 1–100 MiB       |
-| `SYNTHESIS_MAX_PDF_PAGES`           | `500`                              | clamped 1–5000          |
-| `SYNTHESIS_PDF_PARSE_TIMEOUT_MS`    | `30000`                            | clamped 1 second–5 mins |
-| `SYNTHESIS_YT_DLP_PATH`             | `yt-dlp` (`yt-dlp.exe` on Windows) | downloader executable   |
-| `SYNTHESIS_SUBTITLES_LANG`          | `en`                               | yt-dlp `--sub-lang`     |
-| `SYNTHESIS_PLAYLIST_ENABLED`        | `true`                             | enable playlist route   |
-| `SYNTHESIS_MAX_PLAYLIST_ITEMS`      | `10`                               | clamped 1–100           |
-| `SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS` | `100`                              | clamped 1–100           |
-
-### Linking
-
-| Variable                    | Default | Notes                                       |
-| --------------------------- | ------- | ------------------------------------------- |
-| `SYNTHESIS_LINK_K`          | `8`     | clamped 1–32; stored neighbours per page    |
-| `SYNTHESIS_GRAPH_NEIGHBORS` | `3`     | clamped 0–32 and capped to the stored count |
-
-### Search
-
-| Variable                 | Default | Notes              |
-| ------------------------ | ------- | ------------------ |
-| `SYNTHESIS_SEARCH_LIMIT` | `20`    | min 1; max results |
-
-### UI
-
-| Variable                         | Default | Notes                                                                                                    |
-| -------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `SYNTHESIS_LABEL_ZOOM_THRESHOLD` | `1.5`   | clamped 0–10; switches from spacious overview labels to tighter detail labels, without hiding all titles |
-
-The connections view places collision-aware, screen-sized titles at every zoom.
-Hovered/keyboard-focused pages and the selected page take priority, followed by
-search matches and neighbours. The linked page list shows full titles and
-distinguishes reviewed links from semantic suggestions; its title filter is
-local and requires no provider. Selecting a listed page preserves the layout and
-brings an off-screen selection into view. Open the page to inspect evidence.
-
-## Extending
-
-### Adding a new ingestion source
-
-1. Add a function to `src/ingest/ingest.ts` returning `IngestResult`:
-   ```typescript
-   {
-     transcript: string;
-     sourceUrl: string;
-     title: string;
-     sourceType: "youtube" | "text" | "markdown" | "pdf";
-     originalFile?: { fileName: string; mediaType: string; bytes: Uint8Array };
-     pageCount?: number;
-   }
-   ```
-2. Wire it into the `POST /api/ingest` handler in
-   `src/http/routes/ingest_routes.ts`
-3. Preserve immutable-source and page provenance in `src/ingest/orchestrate.ts`
-
-### Customising the distillation prompt
-
-Edit the prompt constants in `src/ingest/distil.ts`:
-
-- `EXTRACT_PROMPT` - per-chunk extraction of substantial topical evidence
-  candidates
-- `CONSOLIDATE_PROMPT` - source-level composition into coherent wiki pages
-- Integrate and rewrite prompts are inline in their respective functions
-
-Keep these stages asymmetrical: extraction should preserve relevant evidence and
-qualifications, while consolidation should decide the smallest useful page set.
-Do not reintroduce fixed page quotas or one-claim-per-page instructions.
-
-### Changing the embedding model
-
-Set `SYNTHESIS_EMBED_MODEL` and ensure `SYNTHESIS_EMBED_DIMENSIONS` is supported
-by the provider and model. Synthesis sends that width in each embedding request
-and rejects a response of another size. Provider URL, model, dimensions, and
-recognised model-specific input format form the derived semantic-index identity.
-Selecting a different identity invalidates embeddings and links instead of
-mixing incompatible vector spaces. Use **Build semantic index** or
-`POST /api/semantic-index/rebuild` to repopulate the vault in bounded resumable
-batches. A different vector width still requires a new database because the
-sqlite-vec virtual-table width is fixed.
-
-## API reference
-
-See the README for the endpoint table. Additional details:
-
-### `POST /api/ingest` (SSE)
-
-Request body: `{ "url": "..." }` or `{ "text": "...", "title": "..." }`
-
-Response is a `text/event-stream` with `data:` events:
-
-| Stage        | Data                                        |
-| ------------ | ------------------------------------------- |
-| `ingesting`  | `{ title }`                                 |
-| `ingested`   | `{ title }`                                 |
-| `extracting` | -                                           |
-| `distilled`  | `{ noteCount }`                             |
-| `proposal`   | `{ proposal, new, merge, contradict }`      |
-| `done`       | `{ notes: [] }` for a newly staged proposal |
-| `error`      | `{ error, code, requestId }`                |
-
-Staging archives the source but does not mutate wiki pages. A reviewer inspects
-the proposal through `GET /api/proposals/:id` and applies it with
-`POST /api/proposals/:id/approve`. Manual approval must contain a non-empty
-`changes` array with exact reviewed proposal indexes and optional edited body
-text; `{}` is rejected. The separately confirmed trusted-batch path is the only
-flow that selects every staged change automatically. Approval streams
-`embedding`, `integrating`, `integrated`, `linking`, optional cross-source
-`discoveries` or `warning`, and `done` events. The synthesis pass treats
-accepted pages as seeds but compares them with candidates from other sources
-across the vault. Reject a pending proposal with
-`POST /api/proposals/:id/reject`.
-
-### `POST /api/ingest/batch` (SSE)
-
-Request body:
-
-```json
-{
-  "urls": ["<YouTube video ID or URL>", "<another video URL>"],
-  "reviewMode": "automatic",
-  "confirm": "AUTO APPLY 2 TRUSTED SOURCES"
-}
-```
-
-The server normalises and rejects duplicate videos, enforces
-`SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS`, and requires the exact count-specific
-confirmation. It resolves one provider configuration, then processes sources
-sequentially through the ordinary stage, validation, stale-hash, embedding,
-history, and recoverable-apply path. Every proposed change is selected. The
-stream adds `batch_started`, `batch_source`, `automatic_proposal`,
-`automatic_applied`, optional `batch_skipped`, `synthesizing`, optional
-`synthesis_progress`, `discoveries`, and `batch_complete` events. Cross-source
-synthesis runs a resumable candidate generation over the completed vault rather
-than once after every trusted video. It continues bounded model chunks until the
-current frontier is complete; its proposals remain pending for human review.
-
-The batch stops at the first source or apply failure. Cross-source synthesis
-failures after committed sources remain warnings. Re-submit the same list to
-resume; applied source identities are skipped, while a pending proposal is
-staged again and automatically applied. Automatic history records contain
-`reviewMode` and the shared `batchId`. Cancelling the response stream requests a
-cooperative stop before the next source or discovery batch; an in-flight
-download, provider request, or atomic apply may finish first. Clients resume by
-opening a new SSE request with the same exact input.
-
-### Export, rebuild, and undo
-
-`GET /api/export` streams the authoritative vault as tar. The exporter rejects
-symlinks and unsafe/overlong archive paths and excludes SQLite and app-data
-secrets. Its test extracts the archive into a fresh vault, creates a new SQLite
-database, rebuilds the catalogue, and verifies keyword search.
-
-`POST /api/rebuild` requires `{ "confirm": "REBUILD" }`. Files are fully
-preflighted before `DB.replaceCatalogue()` transactionally replaces derived
-rows. Rebuild clears embeddings, semantic links, proposals, discovery candidate
-coverage, and discoveries. Do not add a provider call to this path.
-
-`GET /api/semantic-index` reports whether the index has a recorded model
-identity and its page coverage, without disclosing that identity or requiring a
-provider. `POST /api/semantic-index/rebuild` requires
-`{ "confirm": "REBUILD SEMANTIC INDEX", "limit": 20 }`, resolves the explicitly
-configured embedding provider, and processes 1-100 missing pages. Each vector is
-committed only if its page stayed unchanged. Repeating the request resumes from
-missing pages; semantic search remains unavailable and links remain empty until
-coverage is complete. Completion rebuilds positive mutual cross-source
-nearest-neighbour links. The browser automatically repeats 20-page requests to
-cover the whole wiki, with a stop control that takes effect between batches.
-Rebuild batches use the serial job gate but do not consume the interactive
-semantic-search-per-minute allowance.
-
-### `POST /api/discoveries/generate`
-
-An empty JSON object stages the current cross-source candidate frontier and
-evaluates the next bounded chunk. The response contains `discoveries` plus
-`coverage` with `generation`, eligible-page and candidate counts, evaluated and
-proposed counts, remaining work, and completion state. Send the returned
-`generation` in the next request to continue without rebuilding or repeating the
-frontier:
-
-```json
-{ "generation": "<returned UUID>" }
-```
-
-Model omissions are checkpointed for the exact page content, model, prompt
-version, sweep scope, seed set, and eligible-page snapshot. A resume token
-cannot be reused for another scope or a changed wiki. Provider or validation
-failure leaves the current chunk queued. A new empty request refreshes the
-frontier and reuses unchanged decisions. Prompt source metadata is bounded, but
-complete provenance remains part of candidate identity; highly consolidated
-pages are not excluded merely because many sources contributed. No model
-response becomes a wiki link until a person confirms its proposal.
-
-### `POST /api/discoveries/batch`
-
-Review an exact selection of 1-500 open synthesis proposals without a provider:
-
-```json
-{
-  "action": "confirm",
-  "ids": [17, 21, 24],
-  "confirm": "CONFIRM 3 LINKS"
-}
-```
-
-Use `"action": "reject"` with `"REJECT 3 PROPOSALS"` to reject the same
-selection. IDs must be unique positive integers and every item must still be
-pending or investigating. Confirmation also requires every proposal to retain an
-unlinked pair and the exact page hashes seen by the proposing model. The server
-preflights all selected pages, prepares the final Markdown for every affected
-file, and pairs recoverable file replacement with one SQLite status transaction.
-Confirmation stores type, explanation, significance, evidence page hashes, and
-confirmation time in portable frontmatter while retaining a normal `links`
-entry. Any invalid or stale item aborts the entire batch. The browser never
-preselects proposals; filtering and selection only define the exact
-user-confirmed batch.
-
-`POST /api/ingest/undo` requires `{ "confirm": "UNDO" }`. Undo accepts only the
-newest not-yet-undone history record and refuses any affected page whose current
-hash differs from its recorded approved hash. Files are restored with rollback,
-then `DB.undoIngest()` updates the catalogue transactionally. Immutable sources
-and archived after-images remain in the vault.
-
-### `POST /api/ingest/file` (SSE)
-
-Send `multipart/form-data` with exactly one `file` and an optional `title`.
-Accepted formats are PDF, UTF-8 Markdown (`.md` or `.markdown`), and UTF-8 text
-(`.txt`). The route applies a separate bounded upload limit and then uses the
-same proposal-review SSE flow as pasted text. PDF text is extracted page by page
-with the pinned Mozilla PDF.js package; no system `pdftotext` executable is
-required. Password-protected and image-only PDFs are rejected, so run OCR before
-uploading a scanned document.
-
-### `POST /api/ingest/playlist` (SSE)
-
-Request body: `{ "url": "<playlist ID or YouTube URL containing list=...>" }`
-
-Same SSE stages, but with `distilling` events per video
-(`{ title: "Video N/M" }`). Partial failures emit `warning`; total failure emits
-`error` with code `PLAYLIST_INGEST_FAILED`.
-
-### `GET /api/search`
-
-Query parameters:
-
-- `q` - search query (required)
-- `mode` - `hybrid` (default), `semantic`, or `keyword`
-
-Returns `{ results: [{ id, title, score, matchType }], query }`, ordered by
-descending score. Semantic scores are cosine similarities; keyword scores are
-negated SQLite FTS ranks. Higher means more relevant within that query, not a
-confidence probability. Semantic mode returns `409 SEMANTIC_INDEX_INCOMPLETE`
-until every current page has a compatible embedding. Rate limits retain their
-structured `429 RATE_LIMITED` response.
+After verifying the release assets, archive the repository. Further releases
+belong in a fork.
+
+## Troubleshooting
+
+- **Provider unavailable:** open **Provider**, run diagnostics, and verify the
+  explicit endpoint and models. Offline wiki functions remain available.
+- **Semantic index incomplete:** use **Build semantic index**; it resumes in
+  bounded batches.
+- **PDF has no text:** OCR it before upload.
+- **YouTube fails:** install `yt-dlp` beside the executable or on `PATH`.
+- **Moved or restored vault:** rebuild the catalogue, then rebuild embeddings if
+  semantic search is needed.
+- **Interrupted ingest:** reopen the pending proposal or resubmit the same
+  source; immutable source identity prevents duplicate application.
+
+## Frozen boundaries
+
+Do not treat the MVP as multi-tenant, serverless, clinical, or production-ready.
+It has no supported deployment, update, telemetry, incident-response, or
+security-maintenance service. Preserve the local-first trust boundary, exact
+review, portable files, and recoverable mutation design in any fork.
