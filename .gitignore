@@ -1,6 +1,7 @@
 # Temporary files, for example, from tests.
 /tmp/
 /output/
+/output.*
 
 # Ignore database
 *.db*
@@ -18,3 +19,7 @@ web/app.bundle.js
 
 # Desktop build artefacts
 desktop-app/
+
+# Repository-local homes for sandboxed development tooling and test temporaries.
+.tooling/
+.tmp/
