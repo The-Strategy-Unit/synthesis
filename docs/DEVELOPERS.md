@@ -61,15 +61,16 @@ formatter and linter commands above for review.
 
 ## Configuration
 
-All variables are validated in `src/app/config.ts`; `.env.example` contains the
-complete list and defaults.
+Deployment, provider, and external-tool variables are validated in
+`src/app/config.ts`; `.env.example` contains the complete supported list.
+Low-level product tuning and safety bounds are code constants.
 
 ### Runtime and access
 
 | Variable                            | Default              | Purpose                          |
 | ----------------------------------- | -------------------- | -------------------------------- |
 | `SYNTHESIS_VAULT`                   | `~/Synthesis`        | Authoritative vault              |
-| `SYNTHESIS_APP_DATA`                | Platform config dir  | Provider profiles and secrets    |
+| `SYNTHESIS_APP_DATA`                | Platform config dir  | Provider profile and usage data  |
 | `SYNTHESIS_HOST` / `SYNTHESIS_PORT` | `127.0.0.1` / `8000` | Listener                         |
 | `SYNTHESIS_OPEN_BROWSER`            | `true`               | Launch browser                   |
 | `SYNTHESIS_PUBLIC_ORIGIN`           | unset                | Required protected origin        |
@@ -93,12 +94,11 @@ trusted proxy.
 | `SYNTHESIS_REWRITE_MODEL`                              | `qwen3.6:27b`                    |
 | `SYNTHESIS_EMBED_MODEL`                                | `nomic-embed-text-v2-moe:latest` |
 | `SYNTHESIS_EMBED_DIMENSIONS`                           | `768`                            |
-| `SYNTHESIS_REASONING_EFFORT`                           | `none`                           |
 
-Temperature and token limits are independently configurable for extract,
-consolidate, integrate, rewrite, and query roles; see `.env.example`. Changing
-embedding identity invalidates vectors and derived links. A different vector
-width requires a new database.
+Changing embedding identity invalidates vectors and derived links. A different
+vector width requires a new database. Temperatures, output ceilings, timeouts,
+and other product-level behaviour use reviewed constants in `config.ts` rather
+than environment overrides.
 
 ### Bounds
 
@@ -108,12 +108,21 @@ width requires a new database.
 | Source  | transcript 500,000 characters; subtitles 10 MiB                    |
 | PDF     | 500 pages; 30-second parse timeout                                 |
 | Models  | 10-minute request timeout; 12,000-character extraction input       |
-| Queue   | 4 waiting; 5 jobs/user/day; 20 jobs/day globally                   |
+| Queue   | 4 waiting; one active ingest per identity                          |
 | YouTube | 2-minute `yt-dlp`; playlist 10; manual queue 20; trusted batch 100 |
-| Search  | 500-character query; 20 results; 5 semantic searches/minute        |
+| Search  | 500-character query; 20 results                                    |
 | Graph   | retain 8 semantic neighbours; display 3 initially                  |
 
-Every bound can be overridden within the clamps defined in `config.ts`.
+These bounds are fixed application safeguards. Synthesis does not impose daily
+ingest or semantic-search quotas.
+
+For remote chat endpoints, Synthesis records provider-reported
+`completion_tokens` or `output_tokens` in `provider-usage.json` under the app
+data directory. The ledger contains only the UTC calendar month and cumulative
+output-token count. It resets on the next reported request in a new month and
+shows a non-blocking browser warning above 1,000,000 output tokens. Loopback
+providers are excluded, missing usage metadata is not estimated, and the
+provider billing dashboard remains authoritative for costs and limits.
 
 ## Permissions and trust
 
@@ -134,7 +143,7 @@ modules are authoritative.
 | Area        | Routes                                                                                                                                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | System      | `GET /api/config`, `/status`, `/schema`, `/export`, `/semantic-index`; `PUT /api/schema`; `POST /api/rebuild`, `/semantic-index/rebuild`                              |
-| Provider    | `GET /api/provider`, `/provider/readiness`; `POST /api/provider`, `/provider/diagnose`                                                                                |
+| Provider    | `GET /api/provider`, `/provider/readiness`, `/provider/usage`; `POST /api/provider`, `/provider/diagnose`                                                             |
 | Wiki        | `GET /api/notes`, `/notes/:id`, `/sources`, `/sources/:id`, `/search`, `/graph`, `/lint`; `POST /api/lint/analyze`, `/query`, `/query/save`                           |
 | Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/queue`, `/ingest/batch`, `/ingest/undo`                                                              |
 | Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`, `/api/proposals/:id/reprocess`                            |

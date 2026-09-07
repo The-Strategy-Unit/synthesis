@@ -32,10 +32,25 @@ export const handleProviderRoutes: ApiRoute = async (context) => {
     method,
     path,
     providerSettings,
+    providerUsage,
     req,
     requestId,
     resolveProviders,
   } = context;
+
+  if (path === "/api/provider/usage" && method === "GET") {
+    try {
+      return json({ usage: await providerUsage.summary() });
+    } catch (error) {
+      logFailure(requestId, "Provider usage", error);
+      return errorResponse(
+        500,
+        "PROVIDER_USAGE_UNAVAILABLE",
+        "Remote AI usage is temporarily unavailable",
+        requestId,
+      );
+    }
+  }
 
   if (path === "/api/provider" && method === "GET") {
     if (!providerSettings) {

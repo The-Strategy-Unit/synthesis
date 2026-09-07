@@ -22,12 +22,14 @@ Deno.test({
       const finished = new Promise<void>((resolve) => {
         finish = resolve;
       });
-      closeCatalogueOnServerFinish({ finished }, db);
+      let cleanups = 0;
+      closeCatalogueOnServerFinish({ finished }, db, () => cleanups++);
 
       finish();
       await finished;
 
       assert.throws(() => db.notes.getAllNotes(), /database is not open/i);
+      assert.equal(cleanups, 1);
       assert.deepEqual(
         [...Deno.readDirSync(directory)].map((entry) => entry.name).sort(),
         ["synthesis.db"],

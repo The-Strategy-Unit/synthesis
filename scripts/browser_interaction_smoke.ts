@@ -359,20 +359,29 @@ async function run(): Promise<void> {
   const debugPort = availablePort();
   const origin = `http://127.0.0.1:${appPort}`;
   const vault = await Deno.makeTempDir({ prefix: "synthesis-browser-smoke-" });
+  const appData = `${vault}/app-data`;
   const browserProfile = await Deno.makeTempDir({
     prefix: "synthesis-browser-profile-",
   });
   await seedWiki(vault);
+  await Deno.mkdir(appData, { recursive: true });
+  await Deno.writeTextFile(
+    `${appData}/provider-usage.json`,
+    JSON.stringify({
+      version: 1,
+      period: new Date().toISOString().slice(0, 7),
+      outputTokens: 1_000_001,
+    }),
+  );
 
   const app = new Deno.Command(Deno.execPath(), {
     args: ["run", "--allow-all", join(PROJECT_DIRECTORY, "scripts/start.ts")],
     cwd: PROJECT_DIRECTORY,
     env: {
       SYNTHESIS_API_BASE: `http://127.0.0.1:${providerPort}/v1`,
-      SYNTHESIS_APP_DATA: `${vault}/app-data`,
+      SYNTHESIS_APP_DATA: appData,
       SYNTHESIS_EMBED_API_BASE: `http://127.0.0.1:${providerPort}/v1`,
       SYNTHESIS_HOST: "127.0.0.1",
-      SYNTHESIS_MODEL_TIMEOUT_MS: "500",
       SYNTHESIS_OPEN_BROWSER: "false",
       SYNTHESIS_PORT: String(appPort),
       SYNTHESIS_PUBLIC_ORIGIN: origin,
@@ -430,6 +439,20 @@ async function run(): Promise<void> {
         ),
       (count) => count === 34,
       "Wiki pages did not render in the browser",
+    );
+    await waitFor(
+      () =>
+        client!.evaluate<string>(
+          "document.querySelector('#provider-usage-warning-text')?.textContent ?? ''",
+        ),
+      (text) => text.includes("1,000,001 output tokens"),
+      "Remote AI usage warning did not render",
+    );
+    assert.equal(
+      await client.evaluate<boolean>(
+        "document.querySelector('#provider-usage-warning').classList.contains('hidden')",
+      ),
+      false,
     );
     console.log("Browser smoke: checking the manual source queue.");
     const queuedSources = [

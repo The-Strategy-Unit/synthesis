@@ -1,6 +1,10 @@
 // HTTP composition: authenticate once, then dispatch to capability routes.
 
 import type { DB } from "../catalogue/db.ts";
+import {
+  emptyOutputTokenUsageSummary,
+  type OutputTokenUsageReader,
+} from "../provider/output_token_usage.ts";
 import { environmentProviders } from "../provider/provider_runtime.ts";
 import { handleIngestRoutes } from "./routes/ingest_routes.ts";
 import { handleProviderRoutes } from "./routes/provider_routes.ts";
@@ -16,7 +20,6 @@ import {
   type ProviderResolver,
   type ProviderSettingsDependencies,
   routeErrorResponse,
-  SemanticSearchGate,
   serveStatic,
   validateMutation,
 } from "./support.ts";
@@ -30,15 +33,19 @@ const API_ROUTES: readonly ApiRoute[] = [
   handleIngestRoutes,
 ];
 
+const emptyProviderUsage: OutputTokenUsageReader = {
+  summary: () => Promise.resolve(emptyOutputTokenUsageSummary()),
+};
+
 export function createHandler(
   db: DB,
   resolveProviders: ProviderResolver = () =>
     Promise.resolve(environmentProviders()),
   providerSettings?: ProviderSettingsDependencies,
   ingestDependencies: IngestDependencies = { ingestYouTube },
+  providerUsage: OutputTokenUsageReader = emptyProviderUsage,
 ): (req: Request) => Promise<Response> {
   const ingestGate = new IngestGate();
-  const semanticSearchGate = new SemanticSearchGate();
 
   return async function handle(req: Request): Promise<Response> {
     const requestId = crypto.randomUUID();
@@ -61,10 +68,10 @@ export function createHandler(
         method,
         path,
         providerSettings,
+        providerUsage,
         req,
         requestId,
         resolveProviders,
-        semanticSearchGate,
         url,
       };
       for (const route of API_ROUTES) {

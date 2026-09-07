@@ -39,7 +39,6 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     req,
     requestId,
     resolveProviders,
-    semanticSearchGate,
     url,
   } = context;
 
@@ -196,10 +195,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     const pageIds = body.pageIds === undefined
       ? db.notes.getAllNotes().map((note) => note.id)
       : positiveIdArray(body.pageIds, "pageIds", 12);
-    semanticSearchGate.check(identity);
-    const release = await ingestGate.acquire(identity, req.signal, {
-      countTowardsQuota: false,
-    });
+    const release = await ingestGate.acquire(identity, req.signal);
     try {
       const providers = await resolveProviders();
       return json(
@@ -223,9 +219,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
   if (path === "/api/discoveries/batch" && method === "POST") {
     requireIngester(identity);
     const batch = validateDiscoveryBatchRequest(await readJson(req));
-    const release = await ingestGate.acquire(identity, req.signal, {
-      countTowardsQuota: false,
-    });
+    const release = await ingestGate.acquire(identity, req.signal);
     try {
       return json(await reviewDiscoveryBatch(db, batch));
     } finally {
@@ -246,9 +240,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     }
     if (action && method === "POST") {
       requireIngester(identity);
-      const release = await ingestGate.acquire(identity, req.signal, {
-        countTowardsQuota: false,
-      });
+      const release = await ingestGate.acquire(identity, req.signal);
       try {
         const discovery = action === "confirm"
           ? await confirmDiscovery(db, discoveryId)

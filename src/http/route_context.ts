@@ -1,10 +1,10 @@
 import type { DB } from "../catalogue/db.ts";
+import type { OutputTokenUsageReader } from "../provider/output_token_usage.ts";
 import type {
   IngestDependencies,
   IngestGate,
   ProviderResolver,
   ProviderSettingsDependencies,
-  SemanticSearchGate,
 } from "./support.ts";
 
 export interface ApiRouteContext {
@@ -15,10 +15,10 @@ export interface ApiRouteContext {
   method: string;
   path: string;
   providerSettings?: ProviderSettingsDependencies;
+  providerUsage: OutputTokenUsageReader;
   req: Request;
   requestId: string;
   resolveProviders: ProviderResolver;
-  semanticSearchGate: SemanticSearchGate;
   url: URL;
 }
 

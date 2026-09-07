@@ -42,7 +42,6 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
     req,
     requestId,
     resolveProviders,
-    semanticSearchGate,
     url,
   } = context;
 
@@ -51,7 +50,6 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
   }
   if (path === "/api/lint/analyze" && method === "POST") {
     try {
-      semanticSearchGate.check(identity);
       const report = await lintWiki(db);
       const lintContext = await wikiLintContext(
         db,
@@ -209,7 +207,6 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
       config.security.maxSearchChars,
     );
     try {
-      semanticSearchGate.check(identity);
       const providers = await resolveProviders();
       const queryContext = await retrieveWikiContext(db, question, providers);
       if (queryContext.length === 0) {
@@ -341,16 +338,12 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
         ? await semanticSearch(
           db,
           q,
-          identity,
           resolveProviders,
-          semanticSearchGate,
         )
         : await hybridSearch(
           db,
           q,
-          identity,
           resolveProviders,
-          semanticSearchGate,
         );
       return json({ results: orderSearchResults(results), query: q });
     } catch (error) {

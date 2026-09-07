@@ -55,11 +55,12 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100vh;
 }
 
 #topbar {
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -72,6 +73,7 @@ body {
 }
 
 #operation-feedback {
+  grid-row: 3;
   display: grid;
   gap: 0.35rem;
   padding: 0.45rem 1rem 0.55rem;
@@ -79,6 +81,18 @@ body {
   background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: 0.8rem;
+  position: relative;
+  z-index: 39;
+}
+
+#provider-usage-warning {
+  grid-row: 2;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #9a7d2b;
+  background: #403719;
+  color: #fff1b8;
+  font-size: 0.82rem;
+  line-height: 1.4;
   position: relative;
   z-index: 39;
 }
@@ -199,6 +213,7 @@ body {
 }
 
 #workspace {
+  grid-row: 4;
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr);
   min-height: 0;
