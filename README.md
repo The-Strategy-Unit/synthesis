@@ -16,7 +16,7 @@ tool and is not intended for production or regulated workloads.
 ## Five-minute start
 
 Download and extract the archive for your platform from the
-[final v0.2.5 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.5).
+[v0.2.6 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.6).
 The executables are unsigned; macOS builds are not notarised.
 
 Try the disposable, provider-free example:
@@ -155,8 +155,6 @@ deno task compile
 - AI-generated text requires human judgement and source verification.
 - PDF extraction handles text, not OCR or document-layout understanding.
 - Provider quality, privacy, cost, and availability vary.
-- The archived project has no maintenance, security-response, or support
-  commitment.
 
 ## Licence
 

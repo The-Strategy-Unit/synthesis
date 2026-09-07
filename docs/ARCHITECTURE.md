@@ -4,8 +4,8 @@ Synthesis is a local-first, single-process knowledge compiler. It stores durable
 knowledge as ordinary files and treats models, SQLite, embeddings, and graph
 layout as replaceable machinery.
 
-This document describes the frozen 0.2.5 MVP. It is a design reference, not a
-production-deployment specification.
+This document describes the 0.2.6 MVP. It is a design reference,
+not a production-deployment specification.
 
 ## System map
 
@@ -137,15 +137,15 @@ type before their bounded bodies are consumed.
 Local mode uses the `local` identity. Optional protected hosting trusts
 `Cf-Access-Authenticated-User-Email` only when proxy authentication and a public
 origin are explicitly configured. Allowed viewers and ingesters are separate.
-The frozen project does not include a supported production-deployment runbook.
+The MVP does not include a supported production-deployment runbook.
 
 Ingestion is serialized by an in-memory identity-aware gate with a bounded
 waiting queue. Synthesis imposes no daily ingest or semantic-search quota. Long
 operations use SSE and cooperative cancellation; cancellation never interrupts
 an atomic apply.
 
-Only one process may own a writable vault. Version 0.2.5 documents this
-requirement but does not enforce a cross-process vault lock.
+Only one process may own a writable vault. Synthesis documents this requirement
+but does not enforce a cross-process vault lock.
 
 Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback
 HTTP for local providers. Remote providers are never selected implicitly.
