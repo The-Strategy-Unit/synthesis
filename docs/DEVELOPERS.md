@@ -1,7 +1,6 @@
 # Developer guide
 
-Synthesis 0.2.5 is a frozen MIT-licensed MVP. This repository is not accepting
-further product development or providing support. Fork it before extending it.
+Synthesis 0.2.6 is an MIT-licensed MVP.
 
 ## Setup
 
@@ -193,15 +192,18 @@ The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
 releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
 Windows, and publish immutable platform archives plus `SHA256SUMS`.
 
-Version 0.2.5 is the final release of this repository:
+Prepare and merge a release commit that updates `deno.json` and versioned
+documentation. From an up-to-date `main`, create the matching annotated tag:
 
 ```bash
-git tag -a v0.2.5 -m "Synthesis v0.2.5"
-git push origin v0.2.5
+VERSION=0.2.6
+test "$(jq -r '.version' deno.json)" = "$VERSION"
+git tag -a "v$VERSION" -m "Synthesis v$VERSION"
+git push origin "v$VERSION"
 ```
 
-After verifying the release assets, archive the repository. Further releases
-belong in a fork.
+Do not move a published release tag. Verify the generated checksums and run each
+archive on its target operating system before announcing the release.
 
 ## Troubleshooting
 
