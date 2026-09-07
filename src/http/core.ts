@@ -81,43 +81,16 @@ class IngestGate {
     reject: (reason: unknown) => void;
     onAbort: () => void;
   }> = [];
-  private day = "";
-  private globalJobs = 0;
-  private userJobs = new Map<string, number>();
 
   acquire(
     identity: string,
     signal: AbortSignal,
-    options: { countTowardsQuota?: boolean } = {},
   ): Promise<() => void> {
-    this.resetDay();
-    const countTowardsQuota = options.countTowardsQuota !== false;
     if (
       this.activeIdentity === identity ||
       this.queue.some((entry) => entry.identity === identity)
     ) {
       throw new ApiError(429, "BUSY", "An ingest job is already pending", 30);
-    }
-    if (
-      countTowardsQuota &&
-      (this.userJobs.get(identity) ?? 0) >= config.security.perUserDailyJobs
-    ) {
-      throw new ApiError(
-        429,
-        "QUOTA_EXCEEDED",
-        "Daily ingest quota reached",
-        3600,
-      );
-    }
-    if (
-      countTowardsQuota && this.globalJobs >= config.security.globalDailyJobs
-    ) {
-      throw new ApiError(
-        429,
-        "QUOTA_EXCEEDED",
-        "Daily ingest quota reached",
-        3600,
-      );
     }
     if (
       this.activeIdentity !== null &&
@@ -129,10 +102,6 @@ class IngestGate {
       throw new ApiError(400, "REQUEST_CANCELLED", "Request cancelled");
     }
 
-    if (countTowardsQuota) {
-      this.globalJobs++;
-      this.userJobs.set(identity, (this.userJobs.get(identity) ?? 0) + 1);
-    }
     if (this.activeIdentity === null) {
       this.activeIdentity = identity;
       return Promise.resolve(this.releaseFor(identity));
@@ -170,36 +139,6 @@ class IngestGate {
         break;
       }
     };
-  }
-
-  private resetDay(): void {
-    const today = new Date().toISOString().slice(0, 10);
-    if (today === this.day) return;
-    this.day = today;
-    this.globalJobs = 0;
-    this.userJobs.clear();
-  }
-}
-
-class SemanticSearchGate {
-  private windows = new Map<string, { startedAt: number; count: number }>();
-
-  check(identity: string): void {
-    const now = Date.now();
-    const current = this.windows.get(identity);
-    if (!current || now - current.startedAt >= 60_000) {
-      this.windows.set(identity, { startedAt: now, count: 1 });
-      return;
-    }
-    if (current.count >= config.security.semanticSearchesPerMinute) {
-      throw new ApiError(
-        429,
-        "RATE_LIMITED",
-        "Semantic search rate limit reached",
-        Math.max(1, Math.ceil((60_000 - (now - current.startedAt)) / 1000)),
-      );
-    }
-    current.count++;
   }
 }
 
@@ -494,7 +433,6 @@ export {
   requireIngester,
   responseHeaders,
   routeErrorResponse,
-  SemanticSearchGate,
   serveStatic,
   validateDeclaredSize,
   validateMutation,

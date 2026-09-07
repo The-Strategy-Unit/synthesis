@@ -84,8 +84,19 @@ async function fetchWhenReady(url: string): Promise<Response> {
 Deno.test("the running app serves the task-based UI shell", async () => {
   const port = availablePort();
   const vault = await Deno.makeTempDir({ prefix: "synthesis-ui-shell-" });
+  const appData = `${vault}/app-data`;
   const origin = `http://127.0.0.1:${port}`;
+  const usagePeriod = new Date().toISOString().slice(0, 7);
   await seedWiki(vault);
+  await Deno.mkdir(appData, { recursive: true });
+  await Deno.writeTextFile(
+    `${appData}/provider-usage.json`,
+    JSON.stringify({
+      version: 1,
+      period: usagePeriod,
+      outputTokens: 1_000_001,
+    }),
+  );
   const child = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -94,7 +105,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     ],
     cwd: PROJECT_DIRECTORY,
     env: {
-      SYNTHESIS_APP_DATA: `${vault}/app-data`,
+      SYNTHESIS_APP_DATA: appData,
       SYNTHESIS_HOST: "127.0.0.1",
       SYNTHESIS_OPEN_BROWSER: "false",
       SYNTHESIS_PORT: String(port),
@@ -116,7 +127,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
       method: "POST",
     });
     assert.equal(rebuild.status, 200);
-    const [index, style, bundle, status] = await Promise.all([
+    const [index, style, bundle, status, usage] = await Promise.all([
       fetchWhenReady(`${origin}/`).then((response) => response.text()),
       fetchWhenReady(`${origin}/style.css`).then((response) => response.text()),
       fetchWhenReady(`${origin}/app.bundle.js`).then((response) =>
@@ -125,10 +136,14 @@ Deno.test("the running app serves the task-based UI shell", async () => {
       fetchWhenReady(`${origin}/api/status`).then((response) =>
         response.json()
       ),
+      fetchWhenReady(`${origin}/api/provider/usage`).then((response) =>
+        response.json()
+      ),
     ]);
 
     assert.match(index, /id="primary-nav"/);
     assert.match(index, /id="add-source-btn"/);
+    assert.match(index, /id="provider-usage-warning" class="hidden"/);
     assert.match(index, /id="source-panel" class="source-panel hidden"/);
     assert.match(index, /id="reader-panel"/);
     assert.match(index, /id="evidence-panel" class="hidden"/);
@@ -158,6 +173,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /<dialog id="sources-modal" class="modal"/);
     assert.doesNotMatch(index, /<div id="[^"]+-modal" class="modal/);
     assert.match(style, /#primary-nav/);
+    assert.match(style, /#provider-usage-warning/);
     assert.match(style, /\.source-panel/);
     assert.match(style, /#knowledge-layout/);
     assert.match(style, /#graph-panel\.is-maximized/);
@@ -165,6 +181,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(style, /\.modal::backdrop/);
     assert.match(bundle, /add-source-btn/);
     assert.match(bundle, /reader_workspace/);
+    assert.match(bundle, /provider\/usage/);
     assert.match(bundle, /review_workflow/);
     assert.match(bundle, /searchContextGraph/);
     assert.match(bundle, /graphFocusNodeIds/);
@@ -176,6 +193,12 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /Semantic similarity/);
     assert.match(bundle, /\/api\/ingest\/batch/);
     assert.equal(status.status, "ok");
+    assert.deepEqual(usage.usage, {
+      period: usagePeriod,
+      outputTokens: 1_000_001,
+      warningThreshold: 1_000_000,
+      hasWarning: true,
+    });
 
     const notes = await fetch(`${origin}/api/notes`).then((response) =>
       response.json()

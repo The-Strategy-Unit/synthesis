@@ -68,9 +68,7 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
         "Set 'confirm' to 'REBUILD' to rebuild the local catalogue",
       );
     }
-    const release = await ingestGate.acquire(identity, req.signal, {
-      countTowardsQuota: false,
-    });
+    const release = await ingestGate.acquire(identity, req.signal);
     try {
       return json({ rebuild: await rebuildVaultCatalogue(db) });
     } catch (error) {
@@ -107,9 +105,7 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
     } catch (error) {
       throw new ApiError(400, "INVALID_INPUT", errMsg(error));
     }
-    const release = await ingestGate.acquire(identity, req.signal, {
-      countTowardsQuota: false,
-    });
+    const release = await ingestGate.acquire(identity, req.signal);
     try {
       return json({
         semanticIndex: semanticIndexView(

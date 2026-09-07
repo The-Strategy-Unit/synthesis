@@ -4,17 +4,97 @@ import { config } from "../app/config.ts";
 import {
   chatCompletion,
   parseJsonResponse,
+  setChatCompletionUsageRecorder,
   structuredChatCompletion,
 } from "./llm.ts";
 
-function completion(content: string, finishReason = "stop"): Response {
+function completion(
+  content: string,
+  finishReason = "stop",
+  usage?: Record<string, unknown>,
+): Response {
   return Response.json({
     choices: [{
       finish_reason: finishReason,
       message: { content },
     }],
+    ...(usage ? { usage } : {}),
   });
 }
+
+Deno.test("chat completions account only reported remote output tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  const recorded: number[] = [];
+  const stopRecording = setChatCompletionUsageRecorder(({ outputTokens }) => {
+    recorded.push(outputTokens);
+    return Promise.resolve();
+  });
+  try {
+    globalThis.fetch = () =>
+      Promise.resolve(completion("result", "stop", {
+        completion_tokens: 321,
+      }));
+    for (
+      const apiBase of [
+        "http://127.0.0.1:11434/v1",
+        "https://provider.example/v1",
+      ]
+    ) {
+      await chatCompletion(
+        apiBase,
+        "key",
+        "model",
+        "System",
+        "User",
+      );
+    }
+    globalThis.fetch = () =>
+      Promise.resolve(completion("result", "stop", {
+        completion_tokens: "untrusted",
+      }));
+    await chatCompletion(
+      "https://provider.example/v1",
+      "key",
+      "model",
+      "System",
+      "User",
+    );
+    assert.deepEqual(recorded, [321]);
+  } finally {
+    stopRecording();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("usage accounting failures do not interrupt chat completions", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  const stopRecording = setChatCompletionUsageRecorder(() =>
+    Promise.reject(new Error("sensitive ledger detail"))
+  );
+  try {
+    globalThis.fetch = () =>
+      Promise.resolve(completion("result", "stop", { output_tokens: 42 }));
+    console.error = (...values: unknown[]) => errors.push(values.join(" "));
+
+    assert.equal(
+      await chatCompletion(
+        "https://provider.example/v1",
+        "key",
+        "model",
+        "System",
+        "User",
+      ),
+      "result",
+    );
+    assert.deepEqual(errors, ["Remote AI usage accounting failed"]);
+  } finally {
+    stopRecording();
+    console.error = originalConsoleError;
+    globalThis.fetch = originalFetch;
+  }
+});
 
 Deno.test("chat completions normalise local and remote provider requests", async () => {
   const originalFetch = globalThis.fetch;

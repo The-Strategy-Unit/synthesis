@@ -5,11 +5,7 @@ import {
 } from "../provider/provider_runtime.ts";
 import type { WikiQueryPage } from "../wiki/query.ts";
 import { buildWikiGraph } from "../wiki/wiki_graph.ts";
-import {
-  ApiError,
-  type ProviderResolver,
-  type SemanticSearchGate,
-} from "./core.ts";
+import { ApiError, type ProviderResolver } from "./core.ts";
 
 function semanticIndexView(
   status: ReturnType<DB["search"]["semanticIndexStatus"]> & {
@@ -144,11 +140,8 @@ async function wikiLintContext(
 async function semanticSearch(
   db: DB,
   query: string,
-  identity: string,
   resolveProviders: ProviderResolver,
-  gate: SemanticSearchGate,
 ) {
-  gate.check(identity);
   const provider = await resolveProviders();
   requireSemanticIndex(db, provider);
   return db.search.searchSemantic(
@@ -181,24 +174,18 @@ function keywordSearch(db: DB, query: string) {
 async function hybridSearch(
   db: DB,
   query: string,
-  identity: string,
   resolveProviders: ProviderResolver,
-  gate: SemanticSearchGate,
 ) {
   try {
     const provider = await resolveProviders();
     requireSemanticIndex(db, provider);
-    gate.check(identity);
     return await db.search.search(
       query,
       provider.embedding.apiBase,
       provider.embedding.apiKey,
       provider.embedding.model,
     );
-  } catch (error) {
-    if (error instanceof ApiError && error.code === "RATE_LIMITED") {
-      throw error;
-    }
+  } catch {
     return keywordSearch(db, query);
   }
 }

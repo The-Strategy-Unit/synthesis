@@ -14,6 +14,17 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
 }
 
+export interface ChatCompletionUsage {
+  outputTokens: number;
+  recordedAt: Date;
+}
+
+type ChatCompletionUsageRecorder = (
+  usage: ChatCompletionUsage,
+) => Promise<void>;
+
+let remoteUsageRecorder: ChatCompletionUsageRecorder | undefined;
+
 const MAX_TRUNCATION_RETRY_TOKENS = 16_000;
 const OUTPUT_TOKEN_LIMIT_ERROR = "LLM response exceeded the output token limit";
 
@@ -31,6 +42,52 @@ function isOllamaApi(apiBase: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isLoopbackApi(apiBase: string): boolean {
+  try {
+    const host = new URL(apiBase).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" ||
+      host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+function reportedOutputTokens(
+  response: Record<string, unknown>,
+): number | null {
+  const usage = response.usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
+  const fields = usage as Record<string, unknown>;
+  const value = fields.output_tokens ?? fields.completion_tokens;
+  return Number.isSafeInteger(value) && Number(value) >= 0
+    ? Number(value)
+    : null;
+}
+
+async function recordRemoteUsage(
+  apiBase: string,
+  response: Record<string, unknown>,
+): Promise<void> {
+  const outputTokens = reportedOutputTokens(response);
+  if (isLoopbackApi(apiBase) || outputTokens === null || !remoteUsageRecorder) {
+    return;
+  }
+  try {
+    await remoteUsageRecorder({ outputTokens, recordedAt: new Date() });
+  } catch {
+    console.error("Remote AI usage accounting failed");
+  }
+}
+
+export function setChatCompletionUsageRecorder(
+  recorder: ChatCompletionUsageRecorder,
+): () => void {
+  remoteUsageRecorder = recorder;
+  return () => {
+    if (remoteUsageRecorder === recorder) remoteUsageRecorder = undefined;
+  };
 }
 
 export async function chatCompletion(
@@ -106,6 +163,7 @@ export async function chatCompletion(
       cause: error,
     });
   }
+  await recordRemoteUsage(apiBase, responseBody);
   if (
     !Array.isArray(responseBody.choices) || responseBody.choices.length === 0
   ) {

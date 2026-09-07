@@ -798,12 +798,10 @@ routeTest(
 );
 
 routeTest(
-  "semantic search uses the resolved provider without exposing its key",
+  "semantic search remains available without an application rate quota",
   async () => {
     const originalFetch = globalThis.fetch;
-    const originalSearchLimit = config.security.semanticSearchesPerMinute;
     try {
-      config.security.semanticSearchesPerMinute = 1;
       await withTempHandler(async (_defaultHandler, db) => {
         const embeddingProvider = {
           apiBase: "https://embed.example.test/v1",
@@ -883,18 +881,50 @@ routeTest(
           [noteId, relatedId],
         );
         assert.ok(body.results[0].score > body.results[1].score);
-        const limited = await handle(
+        const repeated = await handle(
           new Request("http://localhost/api/search?q=stored&mode=semantic"),
         );
-        assert.equal(limited.status, 429);
-        assert.equal((await limited.json()).code, "RATE_LIMITED");
+        assert.equal(repeated.status, 200);
+        assert.equal((await repeated.json()).results.length, 2);
+        assert.equal(resolveCalls, 2);
       });
     } finally {
       globalThis.fetch = originalFetch;
-      config.security.semanticSearchesPerMinute = originalSearchLimit;
     }
   },
 );
+
+routeTest("provider usage exposes only a safe monthly summary", async () => {
+  await withTempHandler(async (_defaultHandler, db) => {
+    const handle = createHandler(
+      db,
+      undefined,
+      undefined,
+      undefined,
+      {
+        summary: () =>
+          Promise.resolve({
+            period: "2026-09",
+            outputTokens: 1_000_001,
+            warningThreshold: 1_000_000,
+            hasWarning: true,
+          }),
+      },
+    );
+    const response = await handle(
+      new Request("http://localhost/api/provider/usage"),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      usage: {
+        period: "2026-09",
+        outputTokens: 1_000_001,
+        warningThreshold: 1_000_000,
+        hasWarning: true,
+      },
+    });
+  });
+});
 
 routeTest(
   "wiki query returns citations and saves reviewed synthesis",
@@ -2662,7 +2692,7 @@ routeTest(
 );
 
 routeTest(
-  "SSE ingestion serialises identities and enforces queue and quota limits",
+  "SSE ingestion serialises identities without imposing a daily quota",
   async () => {
     const originalFetch = globalThis.fetch;
     const original = {
@@ -2672,8 +2702,6 @@ routeTest(
       allowedEmails: config.security.allowedEmails,
       ingesterEmails: config.security.ingesterEmails,
       ingestQueueSize: config.security.ingestQueueSize,
-      perUserDailyJobs: config.security.perUserDailyJobs,
-      globalDailyJobs: config.security.globalDailyJobs,
     };
     let resolveExtraction: ((response: Response) => void) | undefined;
     const extraction = new Promise<Response>((resolve) => {
@@ -2694,8 +2722,6 @@ routeTest(
       ];
       config.security.ingesterEmails = [...config.security.allowedEmails];
       config.security.ingestQueueSize = 1;
-      config.security.perUserDailyJobs = 1;
-      config.security.globalDailyJobs = 10;
 
       await withTempHandler(async (handle, db, dir) => {
         config.vaultDir = dir;
@@ -2816,10 +2842,9 @@ routeTest(
           );
           assert.equal(db.notes.getAllNotes().length, 0);
 
-          const quota = await handle(ingestRequest("first@example.com"));
-          assert.equal(quota.status, 429);
-          assert.equal(quota.headers.get("Retry-After"), "3600");
-          assert.equal((await quota.json()).code, "QUOTA_EXCEEDED");
+          const repeated = await handle(ingestRequest("first@example.com"));
+          assert.equal(repeated.status, 200);
+          assert.match(await repeated.text(), /"stage":"done"/);
           assert.deepEqual(modelRequests, [
             {
               url: `${config.llm.apiBase}/chat/completions`,
@@ -2853,19 +2878,15 @@ routeTest(
       config.security.allowedEmails = original.allowedEmails;
       config.security.ingesterEmails = original.ingesterEmails;
       config.security.ingestQueueSize = original.ingestQueueSize;
-      config.security.perUserDailyJobs = original.perUserDailyJobs;
-      config.security.globalDailyJobs = original.globalDailyJobs;
     }
   },
 );
 
 routeTest(
-  "semantic index rebuild resumes bounded work without consuming search quota",
+  "semantic index rebuild resumes bounded work",
   async () => {
     const originalFetch = globalThis.fetch;
-    const originalSearchLimit = config.security.semanticSearchesPerMinute;
     try {
-      config.security.semanticSearchesPerMinute = 1;
       await withTempHandler(async (_defaultHandler, db, dir) => {
         for (let index = 0; index < 2; index++) {
           const path = `${dir}/semantic-${index + 1}.md`;
@@ -2954,7 +2975,6 @@ routeTest(
       });
     } finally {
       globalThis.fetch = originalFetch;
-      config.security.semanticSearchesPerMinute = originalSearchLimit;
     }
   },
 );

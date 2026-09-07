@@ -1,9 +1,8 @@
-// Central configuration — all settings in one place.
-// Values can be overridden via environment variables, with validation.
+// Central configuration — deployment and provider choices may be overridden
+// through the environment. Product behaviour and safety bounds stay fixed so
+// ordinary installations do not expose low-level tuning controls.
 
 import { posix, win32 } from "node:path";
-
-type ReasoningEffort = "high" | "medium" | "low" | "max" | "none";
 
 function envValue(key: string): string | undefined {
   try {
@@ -21,15 +20,6 @@ function env(key: string, fallback: string): string {
 function envInt(key: string, fallback: number): number {
   const v = parseInt(envValue(key) ?? "", 10);
   return isNaN(v) ? fallback : v;
-}
-
-function envIntClamped(
-  key: string,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  return Math.min(max, Math.max(min, envInt(key, fallback)));
 }
 
 function envBool(key: string, fallback: boolean): boolean {
@@ -72,26 +62,51 @@ function envOrigin(key: string): string | undefined {
   return url.origin;
 }
 
-function envClamped(
-  key: string,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  const v = parseFloat(envValue(key) ?? "");
-  return isNaN(v) ? fallback : Math.min(max, Math.max(min, v));
-}
-
-function envEnum<T extends string>(
-  key: string,
-  allowed: readonly T[],
-  fallback: T,
-): T {
-  const v = envValue(key) as T | undefined;
-  return v && allowed.includes(v) ? v : fallback;
-}
-
 const home = envValue("HOME") ?? envValue("USERPROFILE") ?? ".";
+
+const SAFETY_LIMITS = {
+  maxBodyBytes: 1024 * 1024,
+  maxUploadBytes: 25 * 1024 * 1024,
+  maxPastedTextChars: 250_000,
+  maxTitleChars: 200,
+  maxSearchChars: 500,
+  maxTranscriptChars: 500_000,
+  maxSubtitleBytes: 10 * 1024 * 1024,
+  ytDlpTimeoutMs: 2 * 60 * 1000,
+  modelTimeoutMs: 10 * 60 * 1000,
+  pdfParseTimeoutMs: 30 * 1000,
+  ingestQueueSize: 4,
+};
+
+const MODEL_SETTINGS = {
+  temperature: 0.1,
+  extractTemperature: 0,
+  consolidateTemperature: 0.1,
+  integrateTemperature: 0.1,
+  reasoningEffort: "none" as const,
+  extractMaxTokens: 2_000,
+  consolidateMaxTokens: 4_000,
+  integrateMaxTokens: 2_000,
+  rewriteMaxTokens: 2_000,
+  maxTokens: 800,
+};
+
+const INGEST_SETTINGS = {
+  maxChars: 12_000,
+  overlap: 500,
+  playlistEnabled: true,
+  maxPlaylistItems: 10,
+  maxManualQueueItems: 20,
+  maxTrustedBatchItems: 100,
+  maxPdfPages: 500,
+};
+
+const PRESENTATION_SETTINGS = {
+  semanticLinksPerPage: 8,
+  visibleSemanticNeighbors: 3,
+  searchResultLimit: 20,
+  labelZoomThreshold: 1.5,
+};
 
 function defaultAppDataDir(): string {
   const explicit = envValue("SYNTHESIS_APP_DATA");
@@ -134,90 +149,7 @@ export const config = {
     trustProxyAuth: envBool("SYNTHESIS_TRUST_PROXY_AUTH", false),
     allowedEmails: envCsv("SYNTHESIS_ALLOWED_EMAILS"),
     ingesterEmails: envCsv("SYNTHESIS_INGESTER_EMAILS"),
-    maxBodyBytes: envIntClamped(
-      "SYNTHESIS_MAX_BODY_BYTES",
-      1024,
-      10 * 1024 * 1024,
-      1024 * 1024,
-    ),
-    maxUploadBytes: envIntClamped(
-      "SYNTHESIS_MAX_UPLOAD_BYTES",
-      1024 * 1024,
-      100 * 1024 * 1024,
-      25 * 1024 * 1024,
-    ),
-    maxPastedTextChars: envIntClamped(
-      "SYNTHESIS_MAX_PASTED_TEXT_CHARS",
-      1000,
-      1_000_000,
-      250_000,
-    ),
-    maxTitleChars: envIntClamped(
-      "SYNTHESIS_MAX_TITLE_CHARS",
-      20,
-      1000,
-      200,
-    ),
-    maxSearchChars: envIntClamped(
-      "SYNTHESIS_MAX_SEARCH_CHARS",
-      20,
-      5000,
-      500,
-    ),
-    maxTranscriptChars: envIntClamped(
-      "SYNTHESIS_MAX_TRANSCRIPT_CHARS",
-      1000,
-      2_000_000,
-      500_000,
-    ),
-    maxSubtitleBytes: envIntClamped(
-      "SYNTHESIS_MAX_SUBTITLE_BYTES",
-      1024 * 1024,
-      100 * 1024 * 1024,
-      10 * 1024 * 1024,
-    ),
-    ytDlpTimeoutMs: envIntClamped(
-      "SYNTHESIS_YT_DLP_TIMEOUT_MS",
-      5000,
-      30 * 60 * 1000,
-      2 * 60 * 1000,
-    ),
-    modelTimeoutMs: envIntClamped(
-      "SYNTHESIS_MODEL_TIMEOUT_MS",
-      5000,
-      30 * 60 * 1000,
-      10 * 60 * 1000,
-    ),
-    pdfParseTimeoutMs: envIntClamped(
-      "SYNTHESIS_PDF_PARSE_TIMEOUT_MS",
-      1000,
-      5 * 60 * 1000,
-      30 * 1000,
-    ),
-    ingestQueueSize: envIntClamped(
-      "SYNTHESIS_INGEST_QUEUE_SIZE",
-      0,
-      100,
-      4,
-    ),
-    perUserDailyJobs: envIntClamped(
-      "SYNTHESIS_PER_USER_DAILY_JOBS",
-      1,
-      10_000,
-      5,
-    ),
-    globalDailyJobs: envIntClamped(
-      "SYNTHESIS_GLOBAL_DAILY_JOBS",
-      1,
-      100_000,
-      20,
-    ),
-    semanticSearchesPerMinute: envIntClamped(
-      "SYNTHESIS_SEMANTIC_SEARCHES_PER_MINUTE",
-      1,
-      1_000,
-      5,
-    ),
+    ...SAFETY_LIMITS,
   },
 
   llm: {
@@ -231,44 +163,7 @@ export const config = {
     integrateModel: env("SYNTHESIS_INTEGRATE_MODEL", "qwen3.6:27b"),
     rewriteModel: env("SYNTHESIS_REWRITE_MODEL", "qwen3.6:27b"),
 
-    temperature: envClamped("SYNTHESIS_LLM_TEMPERATURE", 0, 2, 0.1),
-    extractTemperature: envClamped("SYNTHESIS_EXTRACT_TEMPERATURE", 0, 2, 0),
-    consolidateTemperature: envClamped(
-      "SYNTHESIS_CONSOLIDATE_TEMPERATURE",
-      0,
-      2,
-      0.1,
-    ),
-    integrateTemperature: envClamped(
-      "SYNTHESIS_INTEGRATE_TEMPERATURE",
-      0,
-      2,
-      0.1,
-    ),
-
-    reasoningEffort: envEnum(
-      "SYNTHESIS_REASONING_EFFORT",
-      ["high", "medium", "low", "max", "none"] as const,
-      "none" as ReasoningEffort,
-    ),
-
-    extractMaxTokens: Math.max(
-      256,
-      envInt("SYNTHESIS_EXTRACT_MAX_TOKENS", 2000),
-    ),
-    consolidateMaxTokens: Math.max(
-      256,
-      envInt("SYNTHESIS_CONSOLIDATE_MAX_TOKENS", 4000),
-    ),
-    integrateMaxTokens: Math.max(
-      256,
-      envInt("SYNTHESIS_INTEGRATE_MAX_TOKENS", 2000),
-    ),
-    rewriteMaxTokens: Math.max(
-      256,
-      envInt("SYNTHESIS_REWRITE_MAX_TOKENS", 2000),
-    ),
-    maxTokens: Math.max(256, envInt("SYNTHESIS_MAX_TOKENS", 800)),
+    ...MODEL_SETTINGS,
   },
 
   embed: {
@@ -285,58 +180,22 @@ export const config = {
   },
 
   ingest: {
-    maxChars: Math.max(1000, envInt("SYNTHESIS_MAX_CHARS", 12000)),
-    overlap: envClamped("SYNTHESIS_CHUNK_OVERLAP", 0, 2000, 500),
+    ...INGEST_SETTINGS,
     ytDlpPath: env("SYNTHESIS_YT_DLP_PATH", defaultYtDlpExecutable()),
     ytDlpLang: env("SYNTHESIS_SUBTITLES_LANG", "en"),
-    playlistEnabled: envBool("SYNTHESIS_PLAYLIST_ENABLED", true),
-    maxPlaylistItems: envIntClamped(
-      "SYNTHESIS_MAX_PLAYLIST_ITEMS",
-      1,
-      100,
-      10,
-    ),
-    maxManualQueueItems: envIntClamped(
-      "SYNTHESIS_MAX_MANUAL_QUEUE_ITEMS",
-      1,
-      100,
-      20,
-    ),
-    maxTrustedBatchItems: envIntClamped(
-      "SYNTHESIS_MAX_TRUSTED_BATCH_ITEMS",
-      1,
-      100,
-      100,
-    ),
-    maxPdfPages: envIntClamped(
-      "SYNTHESIS_MAX_PDF_PAGES",
-      1,
-      5000,
-      500,
-    ),
   },
 
   link: {
-    k: envIntClamped("SYNTHESIS_LINK_K", 1, 32, 8),
-    visibleNeighbors: envIntClamped(
-      "SYNTHESIS_GRAPH_NEIGHBORS",
-      0,
-      32,
-      3,
-    ),
+    k: PRESENTATION_SETTINGS.semanticLinksPerPage,
+    visibleNeighbors: PRESENTATION_SETTINGS.visibleSemanticNeighbors,
   },
 
   search: {
-    resultLimit: Math.max(1, envInt("SYNTHESIS_SEARCH_LIMIT", 20)),
+    resultLimit: PRESENTATION_SETTINGS.searchResultLimit,
   },
 
   ui: {
-    labelZoomThreshold: envClamped(
-      "SYNTHESIS_LABEL_ZOOM_THRESHOLD",
-      0,
-      10,
-      1.5,
-    ),
+    labelZoomThreshold: PRESENTATION_SETTINGS.labelZoomThreshold,
   },
 
   build: {
@@ -370,4 +229,8 @@ export function sourcesDir(): string {
 
 export function providerSettingsPath(): string {
   return `${config.appDataDir}/provider-profile.json`;
+}
+
+export function providerUsagePath(): string {
+  return `${config.appDataDir}/provider-usage.json`;
 }

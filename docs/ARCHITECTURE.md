@@ -139,9 +139,10 @@ Local mode uses the `local` identity. Optional protected hosting trusts
 origin are explicitly configured. Allowed viewers and ingesters are separate.
 The frozen project does not include a supported production-deployment runbook.
 
-Ingestion is serialized by an in-memory identity-aware gate with queue and daily
-quota limits. Semantic search has a per-identity rate limit. Long operations use
-SSE and cooperative cancellation; cancellation never interrupts an atomic apply.
+Ingestion is serialized by an in-memory identity-aware gate with a bounded
+waiting queue. Synthesis imposes no daily ingest or semantic-search quota. Long
+operations use SSE and cooperative cancellation; cancellation never interrupts
+an atomic apply.
 
 Only one process may own a writable vault. Version 0.2.5 documents this
 requirement but does not enforce a cross-process vault lock.
@@ -150,6 +151,12 @@ Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback
 HTTP for local providers. Remote providers are never selected implicitly.
 Credentials live in the OS keyring or process environment, never the vault,
 browser state, exports, or errors.
+
+The central chat transport records valid output-token usage reported by remote
+providers in a small monthly ledger under the app data directory. Loopback calls
+and responses without usage metadata are not counted. Crossing the fixed
+1,000,000-token advisory threshold exposes a safe summary to the browser but
+never blocks work; provider billing remains authoritative.
 
 ## Packaging
 

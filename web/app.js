@@ -52,6 +52,7 @@ import {
   providerEmptyState,
   providerPresentation,
 } from "./provider_readiness.js";
+import { providerUsagePresentation } from "./provider_usage.js";
 import {
   searchMethodSummary,
   searchResultMetric,
@@ -257,6 +258,7 @@ async function api(path, opts = {}) {
       error.data = data;
       throw error;
     }
+    if (fetchOptions.method === "POST") void refreshProviderUsage();
     return data;
   } finally {
     finishOperation();
@@ -307,31 +309,35 @@ async function refreshShellCounts() {
 }
 
 async function consumeSse(response, onEvent) {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `Request failed (${response.status})`);
-  }
-  if (!response.body) throw new Error("No response stream");
+  try {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `Request failed (${response.status})`);
+    }
+    if (!response.body) throw new Error("No response stream");
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const consumeBlock = async (block) => {
-    const line = block.split("\n").find((line) => line.startsWith("data: "));
-    if (!line) return;
-    await onEvent(JSON.parse(line.slice(6)));
-  };
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const consumeBlock = async (block) => {
+      const line = block.split("\n").find((line) => line.startsWith("data: "));
+      if (!line) return;
+      await onEvent(JSON.parse(line.slice(6)));
+    };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) await consumeBlock(block);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) await consumeBlock(block);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) await consumeBlock(buffer);
+  } finally {
+    void refreshProviderUsage();
   }
-  buffer += decoder.decode();
-  if (buffer.trim()) await consumeBlock(buffer);
 }
 
 const rebuildCatalogueButton = document.getElementById(
@@ -1352,7 +1358,7 @@ async function reprocessSelectedProposal() {
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    await consumeSse(response, async (data) => {
+    await consumeSse(response, (data) => {
       const labels = {
         ingesting: "Loading the archived source...",
         extracting: "Extracting durable knowledge again...",
@@ -1955,6 +1961,25 @@ const ingestCancelButton = document.getElementById("ingest-cancel-btn");
 let activeIngestController = null;
 let providerState = { phase: "checking", mode: "unknown" };
 let vaultEmbeddingDimensions = 768;
+const providerUsageWarning = document.getElementById(
+  "provider-usage-warning",
+);
+const providerUsageWarningText = document.getElementById(
+  "provider-usage-warning-text",
+);
+
+async function refreshProviderUsage() {
+  try {
+    const response = await fetch("/api/provider/usage");
+    if (!response.ok) return;
+    const data = await response.json();
+    const presentation = providerUsagePresentation(data.usage);
+    providerUsageWarningText.textContent = presentation.text;
+    providerUsageWarning.classList.toggle("hidden", presentation.hidden);
+  } catch {
+    // Usage accounting must never interrupt local knowledge work.
+  }
+}
 
 function setProviderBusy(busy) {
   for (const control of providerForm.elements) control.disabled = busy;
@@ -3959,7 +3984,7 @@ function renderGraphFocusContext() {
 // --- Init ---
 
 await fetchConfig();
-void refreshProviderMode();
+void Promise.all([refreshProviderMode(), refreshProviderUsage()]);
 await refreshShellCounts();
 const [initialNotes, initialGraph] = await Promise.allSettled([
   loadNoteList(),
