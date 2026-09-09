@@ -84,9 +84,10 @@ never silently switches from local to remote.
 
 ## Everyday workflow
 
-1. **Add source**: upload a born-digital PDF, Markdown, or text file; paste
-   text; provide a YouTube URL; or queue up to 20 YouTube videos for sequential
-   preparation.
+1. **Add source**: upload a born-digital PDF, Markdown, or text file; paste text;
+   or provide a YouTube URL. To add separate YouTube videos, open **More
+   options** → **YouTube queue · manual review**, paste up to 20 unique URLs or
+   video IDs (one per line), then select **Queue for review**.
 2. **Review**: inspect proposed `new`, `merge`, or `contradict` changes and
    their evidence. Edit, select, approve, or reject them.
 3. **Read**: navigate wiki pages, source evidence, keyword or semantic search,
@@ -102,12 +103,12 @@ never silently switches from local to remote.
 Scanned or encrypted PDFs are rejected; run OCR first. YouTube ingestion needs
 `yt-dlp` beside the executable or on `PATH`.
 
-The manual YouTube queue validates and deduplicates the complete list, then
-prepares one source at a time as a separate proposal. No queued proposal changes
-the wiki before review. Stop safely or resubmit the same list after a failure;
-existing proposals are reused. If an earlier approval makes a later proposal
-stale, explicitly reprocess it against the current wiki from its immutable
-source archive.
+The manual YouTube queue validates the complete list before preparing each video
+as a separate proposal. Invalid or duplicate entries are rejected. No queued
+proposal changes the wiki before review. Stop safely or resubmit the same list
+after a failure; existing proposals are reused. If an earlier approval makes a
+later proposal stale, explicitly reprocess it against the current wiki from its
+immutable source archive.
 
 Trusted-video batches can automatically select every staged change only after an
 exact, count-specific confirmation. This saves review clicks; it does not make
