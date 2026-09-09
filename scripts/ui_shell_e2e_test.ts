@@ -19,6 +19,18 @@ async function seedWiki(vault: string): Promise<void> {
   const sourceDir = `${vault}/sources/${sourceHash}`;
   await Deno.mkdir(sourceDir, { recursive: true });
   await Deno.mkdir(`${vault}/notes`, { recursive: true });
+  await Deno.writeTextFile(
+    `${vault}/vault.json`,
+    JSON.stringify(
+      {
+        formatVersion: 1,
+        vaultId: "3f4db942-2253-43ba-8f8f-808fad02f10f",
+        createdAt: "2026-09-08T10:30:00.000Z",
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   await Deno.writeTextFile(`${sourceDir}/source.txt`, sourceText);
   await Deno.writeTextFile(
     `${sourceDir}/summary.md`,
@@ -227,5 +239,88 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     }
     await child.status;
     await Deno.remove(vault, { recursive: true });
+  }
+});
+
+Deno.test("the startup GUI opens an existing vault", async () => {
+  const port = availablePort();
+  const root = await Deno.makeTempDir({ prefix: "synthesis-vault-chooser-" });
+  const vault = join(root, "chosen-vault");
+  const origin = `http://127.0.0.1:${port}`;
+  await seedWiki(vault);
+  const child = new Deno.Command(Deno.execPath(), {
+    args: [
+      "run",
+      "--allow-all",
+      join(PROJECT_DIRECTORY, "scripts/start.ts"),
+    ],
+    cwd: PROJECT_DIRECTORY,
+    env: {
+      SYNTHESIS_APP_DATA: join(root, "app-data"),
+      SYNTHESIS_HOST: "127.0.0.1",
+      SYNTHESIS_OPEN_BROWSER: "false",
+      SYNTHESIS_PORT: String(port),
+      SYNTHESIS_VAULT: "",
+    },
+    stdout: "null",
+    stderr: "null",
+  }).spawn();
+
+  try {
+    const chooser = await fetchWhenReady(`${origin}/`);
+    assert.match(await chooser.text(), /<h1>Open a vault<\/h1>/);
+    assert.deepEqual(
+      await fetchWhenReady(`${origin}/api/status`).then((response) =>
+        response.json()
+      ),
+      { status: "choosing-vault" },
+    );
+
+    const opened = await fetch(`${origin}/api/vault/open`, {
+      body: JSON.stringify({ path: vault }),
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      method: "POST",
+    });
+    assert.equal(opened.status, 200);
+    assert.equal((await opened.json()).vaultDirectory, vault);
+
+    let status = "";
+    for (let attempt = 0; attempt < 200 && status !== "ok"; attempt++) {
+      try {
+        status = await fetch(`${origin}/api/status`).then(async (response) =>
+          (await response.json()).status
+        );
+      } catch {
+        // The startup chooser and application briefly exchange the port.
+      }
+      if (status !== "ok") {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    assert.equal(status, "ok");
+    const rebuild = await fetch(`${origin}/api/rebuild`, {
+      body: JSON.stringify({ confirm: "REBUILD" }),
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      method: "POST",
+    });
+    assert.equal(rebuild.status, 200);
+    const notes = await fetch(`${origin}/api/notes`).then((response) =>
+      response.json()
+    );
+    assert.equal(notes.notes.length, 2);
+  } finally {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // The child may already have exited after a startup failure.
+    }
+    await child.status;
+    await Deno.remove(root, { recursive: true });
   }
 });

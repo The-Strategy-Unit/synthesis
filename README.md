@@ -19,6 +19,20 @@ Download and extract the archive for your platform from the
 [v0.2.6 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.6).
 The executables are unsigned; macOS builds are not notarised.
 
+Start the executable without a vault flag. Synthesis opens a local startup
+screen where you can choose an existing vault folder or open the default vault
+in your operating-system profile: `~/Synthesis` on Linux and macOS, or
+`%USERPROFILE%\Synthesis` on Windows:
+
+```bash
+./synthesis-linux-x86_64       # Linux
+./synthesis-macos-aarch64      # macOS ARM64
+.\synthesis-windows-x86_64.exe # Windows PowerShell
+```
+
+The operating-system folder picker is used when available. The startup screen
+also accepts a folder path, so it remains usable on minimal Linux desktops.
+
 Try the disposable, provider-free example:
 
 ```bash
@@ -31,7 +45,8 @@ chmod +x synthesis-*
 .\synthesis-windows-x86_64.exe --trial
 ```
 
-Or explore the included HACA 2025 vault:
+To explore the included HACA 2025 vault, choose its folder on the startup
+screen. The command-line option remains available for scripts:
 
 ```bash
 ./synthesis-linux-x86_64 --vault haca-2025-vault
@@ -55,9 +70,11 @@ deno task setup
 deno task app
 ```
 
-The app opens `http://localhost:8000` and uses `~/Synthesis` by default.
-Override the vault with `SYNTHESIS_VAULT=/path/to/vault`. Use only one running
-Synthesis process per writable vault.
+The app opens `http://localhost:8000` and asks which vault to open. Choose the
+default option to use `~/Synthesis` on Linux and macOS or
+`%USERPROFILE%\Synthesis` on Windows. Set `SYNTHESIS_VAULT` to an absolute vault
+path to bypass the chooser for automation. Use only one running Synthesis
+process per writable vault.
 
 The default Ollama models are `qwen3.6:27b` for writing and
 `nomic-embed-text-v2-moe:latest` for embeddings. The **Provider** screen can
@@ -120,9 +137,9 @@ synthesis.db     rebuildable search, vector, and graph state
 
 Use **Vault tools → Export vault** for a portable tar archive. Exports exclude
 SQLite and provider credentials. To restore, extract into an empty directory,
-open it as the vault, and choose **Rebuild catalogue**. Rebuild is
-provider-free; semantic search requires a separate **Build semantic index**
-operation.
+choose that folder on the startup screen, and select **Rebuild catalogue**.
+Rebuild is provider-free; semantic search requires a separate **Build semantic
+index** operation.
 
 **Undo ingest** restores only the newest accepted ingest and refuses to
 overwrite pages changed since approval. Immutable sources and history remain

@@ -8,12 +8,17 @@ import {
   announceAndOpen,
   environmentBoolean,
   hostPort,
+  waitForServer,
 } from "../src/app/browser_launcher.ts";
 import {
   cleanTrialRun,
   prepareTrialRun,
   printTrialGuide,
 } from "../src/app/trial_vault.ts";
+import {
+  chooseVaultAtStartup,
+  isLoopbackHostname,
+} from "../src/app/vault_chooser.ts";
 
 if (
   Deno.args.length > 1 || (Deno.args.length === 1 && Deno.args[0] !== "--trial")
@@ -22,9 +27,10 @@ if (
 }
 const trial = Deno.args[0] === "--trial" ? await prepareTrialRun() : undefined;
 const { config } = await import("../src/app/config.ts");
-const vaultDir = config.vaultDir;
 const port = config.port;
 const isDev = Deno.env.get("SYNTHESIS_WATCH") === "true";
+const openBrowser = environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
+let usedVaultChooser = false;
 
 const frontendBundleCommand = (watch = false): Deno.Command => {
   return new Deno.Command(Deno.execPath(), {
@@ -51,8 +57,6 @@ const bundleFrontend = async (): Promise<void> => {
     throw new Error("Frontend bundle failed; server was not started.");
   }
 };
-
-const openBrowser = environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
 
 const os = Deno.build.os;
 const bundledYtDlpPath = os === "windows" ? "./yt-dlp.exe" : "./yt-dlp";
@@ -101,7 +105,26 @@ const assertPortAvailable = (hostname: string, port: number): void => {
   }
 };
 
+const permissionPath = (path: string): string => path.replaceAll(",", ",,");
+
 assertPortAvailable(config.host, port);
+if (
+  !trial && !Deno.env.get("SYNTHESIS_VAULT")?.trim() &&
+  isLoopbackHostname(config.host) &&
+  config.security.publicOrigin === undefined &&
+  !config.security.trustProxyAuth
+) {
+  config.vaultDir = await chooseVaultAtStartup({
+    announceAndOpen,
+    defaultDirectory: config.vaultDir,
+    hostname: config.host,
+    openBrowser,
+    port,
+  });
+  Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
+  usedVaultChooser = true;
+}
+const vaultDir = config.vaultDir;
 await bundleFrontend();
 const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
 
@@ -110,6 +133,8 @@ const allowedEnv = [
   "DISABLE_SYSTEM_FONTS_LOAD",
   "FORCE_COLOR",
   "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
   "NO_COLOR",
   "TERM",
   "USERPROFILE",
@@ -149,10 +174,12 @@ args.push(
   "--ignore-env=NAPI_RS_FORCE_WASI,NAPI_RS_NATIVE_LIBRARY_PATH",
   "--allow-net",
   "--allow-ffi",
-  `--allow-read=web,${vaultDir},${config.appDataDir},${tempDir}${
-    os === "linux" ? ",/usr/bin/ldd" : ""
-  }`,
-  `--allow-write=${vaultDir},${config.appDataDir},${tempDir}`,
+  `--allow-read=web,${permissionPath(vaultDir)},${
+    permissionPath(config.appDataDir)
+  },${permissionPath(tempDir)}${os === "linux" ? ",/usr/bin/ldd" : ""}`,
+  `--allow-write=${permissionPath(vaultDir)},${
+    permissionPath(config.appDataDir)
+  },${permissionPath(tempDir)}`,
   `--allow-run=${ytDlpPath}`,
   `--allow-env=${allowedEnv}`,
   "main.ts",
@@ -181,7 +208,16 @@ Deno.addSignalListener("SIGINT", stop);
 
 let exitCode = 1;
 try {
-  const url = await announceAndOpen(config.host, port, openBrowser);
+  const url = usedVaultChooser
+    ? `http://${hostPort(config.host, port)}`
+    : await announceAndOpen(config.host, port, openBrowser);
+  if (usedVaultChooser) {
+    if (await waitForServer(url)) {
+      console.log(`\nOpened vault: ${url}\n`);
+    } else {
+      console.log(`\nVault did not become ready. Reload browser: ${url}\n`);
+    }
+  }
   if (trial) printTrialGuide(url);
   exitCode = (await process.status).code;
 } finally {

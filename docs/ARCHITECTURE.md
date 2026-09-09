@@ -25,6 +25,15 @@ main.ts
 One `DB` instance owns the SQLite connection and transaction boundary. Browser
 assets are served by the same loopback process.
 
+When local startup has no explicit vault configuration, a temporary loopback
+chooser runs before the application is composed. It validates an existing
+folder's `vault.json`, stops, and then the normal server opens exactly that one
+vault on the same address. The source launcher scopes the child process's file
+permissions only after selection. Trials, explicit `--vault` or
+`SYNTHESIS_VAULT` configuration, and hosted/proxy mode bypass the chooser.
+Default vault and application-data locations are resolved with the target
+operating system's environment variables and path semantics.
+
 ## Ingest and review
 
 ```text
@@ -146,6 +155,11 @@ an atomic apply.
 
 Only one process may own a writable vault. Synthesis documents this requirement
 but does not enforce a cross-process vault lock.
+
+The pre-application vault chooser is loopback-only, same-origin, bounded, and
+short-lived. Its native folder picker never runs in hosted/proxy mode. Selecting
+a different vault requires stopping and starting Synthesis, so database and
+filesystem operations cannot cross vault boundaries.
 
 Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback
 HTTP for local providers. Remote providers are never selected implicitly.

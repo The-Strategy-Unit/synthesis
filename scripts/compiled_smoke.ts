@@ -27,6 +27,24 @@ async function fetchWhenReady(url: string): Promise<Response> {
   throw lastError;
 }
 
+async function waitForStatus(origin: string, expected: string): Promise<void> {
+  let lastStatus = "unavailable";
+  for (let attempt = 0; attempt < 300; attempt++) {
+    try {
+      const response = await fetch(`${origin}/api/status`);
+      const body = await response.json();
+      lastStatus = typeof body.status === "string" ? body.status : "invalid";
+      if (lastStatus === expected) return;
+    } catch {
+      lastStatus = "unavailable";
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `Compiled Synthesis status remained ${lastStatus}; expected ${expected}`,
+  );
+}
+
 function pdfWithText(text: string): Uint8Array {
   const encoder = new TextEncoder();
   const escaped = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(")
@@ -210,6 +228,74 @@ async function smokeExecutable(
   }
 }
 
+async function smokeVaultChooser(
+  executable: string,
+  directory: string,
+  vault: string,
+): Promise<void> {
+  const port = availablePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const child = new Deno.Command(executable, {
+    args: ["--no-open"],
+    cwd: directory,
+    env: {
+      DISABLE_SYSTEM_FONTS_LOAD: "1",
+      SYNTHESIS_APP_DATA: join(directory, "chooser-app-data"),
+      SYNTHESIS_HOST: "127.0.0.1",
+      SYNTHESIS_OPEN_BROWSER: "false",
+      SYNTHESIS_PORT: String(port),
+      SYNTHESIS_PUBLIC_ORIGIN: "",
+      SYNTHESIS_TRUST_PROXY_AUTH: "false",
+      SYNTHESIS_VAULT: "",
+    },
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  const outputPromise = child.output();
+
+  let failure: unknown;
+  try {
+    await waitForStatus(origin, "choosing-vault");
+    const chooser = await fetch(`${origin}/`).then((response) =>
+      response.text()
+    );
+    assert.match(chooser, /<h1>Open a vault<\/h1>/);
+    const opened = await fetch(`${origin}/api/vault/open`, {
+      body: JSON.stringify({ path: vault }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    });
+    assert.equal(opened.status, 200);
+    await opened.body?.cancel();
+    await waitForStatus(origin, "ok");
+    const index = await fetch(`${origin}/`).then((response) => response.text());
+    assert.match(index, /id="primary-nav"/);
+  } catch (error) {
+    failure = error;
+  } finally {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // The executable may have exited while readiness was being checked.
+    }
+  }
+  const { output, forceStopped } = await collectChildOutput(
+    child,
+    outputPromise,
+  );
+  if (forceStopped && !failure) {
+    failure = new Error("Compiled Synthesis did not stop after SIGTERM");
+  }
+  if (failure) {
+    const decoder = new TextDecoder();
+    throw new Error(
+      `${failure instanceof Error ? failure.message : String(failure)}\n` +
+        `stdout:\n${decoder.decode(output.stdout)}\n` +
+        `stderr:\n${decoder.decode(output.stderr)}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const supplied = Deno.args[0];
   if (!supplied || Deno.args.length !== 1) {
@@ -234,12 +320,18 @@ async function main(): Promise<void> {
     assert.equal(help.success, true);
     assert.match(new TextDecoder().decode(help.stdout), /Usage: synthesis/);
     assert.equal(new TextDecoder().decode(help.stderr), "");
-    await smokeExecutable(copiedExecutable, join(directory, "normal"), {
+    const normalDirectory = join(directory, "normal");
+    await smokeExecutable(copiedExecutable, normalDirectory, {
       arguments: ["--no-open"],
       pageCount: 0,
       sourceCount: 0,
       verifyPdf: true,
     });
+    await smokeVaultChooser(
+      copiedExecutable,
+      normalDirectory,
+      join(normalDirectory, "vault"),
+    );
     const hacaDirectory = join(directory, "haca");
     await copyDirectory(
       join(PROJECT_DIRECTORY, "demos", "haca-2025-vault"),
@@ -258,7 +350,7 @@ async function main(): Promise<void> {
       verifyPdf: false,
     });
     console.log(
-      "Compiled Synthesis served its UI, extracted PDF text, and opened its HACA and trial vaults.",
+      "Compiled Synthesis served its vault chooser and UI, extracted PDF text, and opened its HACA and trial vaults.",
     );
   } finally {
     await Deno.remove(directory, { recursive: true });

@@ -75,6 +75,18 @@ async function seedWiki(vault: string): Promise<void> {
   const sourceDir = `${vault}/sources/${sourceHash}`;
   await Deno.mkdir(sourceDir, { recursive: true });
   await Deno.mkdir(`${vault}/notes`, { recursive: true });
+  await Deno.writeTextFile(
+    `${vault}/vault.json`,
+    JSON.stringify(
+      {
+        formatVersion: 1,
+        vaultId: "3f4db942-2253-43ba-8f8f-808fad02f10f",
+        createdAt: "2026-09-08T10:30:00.000Z",
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   await Deno.writeTextFile(`${sourceDir}/source.txt`, sourceText);
   await Deno.writeTextFile(
     `${sourceDir}/summary.md`,
@@ -351,6 +363,19 @@ async function stopProcess(
   );
 }
 
+async function removeTemporaryDirectory(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      await Deno.remove(path, { recursive: true });
+      return;
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) return;
+      if (attempt === 9) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+}
+
 async function run(): Promise<void> {
   console.log("Browser smoke: locating a Chromium-family browser.");
   const executable = await browserCommand();
@@ -384,8 +409,7 @@ async function run(): Promise<void> {
       SYNTHESIS_HOST: "127.0.0.1",
       SYNTHESIS_OPEN_BROWSER: "false",
       SYNTHESIS_PORT: String(appPort),
-      SYNTHESIS_PUBLIC_ORIGIN: origin,
-      SYNTHESIS_VAULT: vault,
+      SYNTHESIS_VAULT: "",
     },
     stdin: "null",
     stdout: "null",
@@ -395,19 +419,15 @@ async function run(): Promise<void> {
   let browser: Deno.ChildProcess | undefined;
   let client: CdpClient | undefined;
   try {
-    console.log("Browser smoke: starting Synthesis with a temporary vault.");
+    console.log("Browser smoke: starting the local vault chooser.");
     await waitFor(
-      () => fetch(`${origin}/api/status`).then((response) => response.ok),
-      Boolean,
-      "Synthesis did not become ready",
+      () =>
+        fetch(`${origin}/api/status`).then(async (response) =>
+          (await response.json()).status
+        ),
+      (status) => status === "choosing-vault",
+      "Vault chooser did not become ready",
     );
-    const rebuild = await fetch(`${origin}/api/rebuild`, {
-      body: JSON.stringify({ confirm: "REBUILD" }),
-      headers: { "Content-Type": "application/json", Origin: origin },
-      method: "POST",
-    });
-    assert.equal(rebuild.status, 200);
-    await rebuild.body?.cancel();
 
     console.log("Browser smoke: launching the headless browser.");
     browser = new Deno.Command(executable, {
@@ -430,6 +450,56 @@ async function run(): Promise<void> {
     await client.send("Runtime.enable");
     await client.send("Page.enable");
     await client.send("Page.navigate", { url: origin });
+
+    console.log("Browser smoke: opening the temporary vault through the GUI.");
+    await waitFor(
+      () =>
+        client!.evaluate<string>(
+          "document.querySelector('h1')?.textContent ?? ''",
+        ),
+      (heading) => heading === "Open a vault",
+      "Vault chooser did not render in the browser",
+    );
+    assert.deepEqual(
+      await client.evaluate<Record<string, string>>(`(() => {
+        const root = getComputedStyle(document.documentElement);
+        const main = getComputedStyle(document.querySelector('main'));
+        const primary = getComputedStyle(document.querySelector('#choose'));
+        return {
+          background: getComputedStyle(document.body).backgroundColor,
+          panel: main.backgroundColor,
+          primary: primary.backgroundColor,
+          text: main.color,
+          accent: root.getPropertyValue('--accent').trim(),
+        };
+      })()`),
+      {
+        background: "rgb(18, 21, 27)",
+        panel: "rgb(25, 29, 37)",
+        primary: "rgb(23, 111, 193)",
+        text: "rgb(255, 255, 255)",
+        accent: "#4a9eff",
+      },
+    );
+    await client.evaluate(`(() => {
+      document.querySelector('#path').value = ${JSON.stringify(vault)};
+      document.querySelector('#path-form').requestSubmit();
+    })()`);
+    await waitFor(
+      () =>
+        fetch(`${origin}/api/status`).then(async (response) =>
+          (await response.json()).status
+        ),
+      (status) => status === "ok",
+      "Selected vault did not become ready",
+    );
+    const rebuild = await fetch(`${origin}/api/rebuild`, {
+      body: JSON.stringify({ confirm: "REBUILD" }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    });
+    assert.equal(rebuild.status, 200);
+    await rebuild.body?.cancel();
 
     console.log("Browser smoke: waiting for the seeded wiki.");
     await waitFor(
@@ -700,14 +770,14 @@ async function run(): Promise<void> {
     );
 
     console.log(
-      "Browser interaction smoke passed: relevance, graph controls, and operation feedback.",
+      "Browser interaction smoke passed: vault selection, relevance, graph controls, and operation feedback.",
     );
   } finally {
     client?.close();
     if (browser) await stopProcess(browser, "Browser");
     await stopProcess(app, "Synthesis");
-    await Deno.remove(browserProfile, { recursive: true });
-    await Deno.remove(vault, { recursive: true });
+    await removeTemporaryDirectory(browserProfile);
+    await removeTemporaryDirectory(vault);
   }
 }
 

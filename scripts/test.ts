@@ -21,6 +21,8 @@ const allowedEnv = [
   "DISABLE_SYSTEM_FONTS_LOAD",
   "FORCE_COLOR",
   "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
   "TERM",
   "USERPROFILE",
   "TEMP",

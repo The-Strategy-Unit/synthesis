@@ -1,12 +1,18 @@
 import { join, resolve } from "node:path";
 
-import { announceAndOpen, environmentBoolean } from "./browser_launcher.ts";
+import {
+  announceAndOpen,
+  environmentBoolean,
+  hostPort,
+  waitForServer,
+} from "./browser_launcher.ts";
 import {
   cleanTrialRun,
   type PreparedTrialRun,
   prepareTrialRun,
   printTrialGuide,
 } from "./trial_vault.ts";
+import { chooseVaultAtStartup, isLoopbackHostname } from "./vault_chooser.ts";
 
 export interface CompiledOptions {
   help: boolean;
@@ -23,6 +29,7 @@ export function compiledHelpText(): string {
     "Synthesis - local-first knowledge compiler",
     "",
     COMPILED_USAGE,
+    "Start without --trial or --vault to choose a vault in the browser.",
     "",
     "Options:",
     "  --trial    Start with a disposable, provider-free demonstration vault.",
@@ -96,6 +103,7 @@ async function main(): Promise<void> {
     Path2D: runtimeGlobals.Path2D ?? pdfCanvas.Path2D,
   });
   let trial: PreparedTrialRun | undefined;
+  let usedVaultChooser = false;
   const controller = new AbortController();
   const stop = () => controller.abort();
   const signals: Deno.Signal[] = Deno.build.os === "windows"
@@ -117,16 +125,46 @@ async function main(): Promise<void> {
       }
       Deno.env.set("SYNTHESIS_VAULT", vaultPath);
     }
-    const [{ config }, { startApplication }] = await Promise.all([
-      import("./config.ts"),
-      import("./application.ts"),
-    ]);
-    const server = await startApplication(controller.signal);
+    const { config } = await import("./config.ts");
     const openBrowser = options.openBrowser &&
       environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
-    const url = await announceAndOpen(config.host, config.port, openBrowser);
+    if (
+      !options.trial && options.vaultPath === null &&
+      !Deno.env.get("SYNTHESIS_VAULT")?.trim() &&
+      isLoopbackHostname(config.host) &&
+      config.security.publicOrigin === undefined &&
+      !config.security.trustProxyAuth
+    ) {
+      config.vaultDir = await chooseVaultAtStartup({
+        announceAndOpen,
+        defaultDirectory: config.vaultDir,
+        hostname: config.host,
+        openBrowser,
+        port: config.port,
+        signal: controller.signal,
+      });
+      Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
+      usedVaultChooser = true;
+    }
+    const { startApplication } = await import("./application.ts");
+    const server = await startApplication(controller.signal);
+    const url = usedVaultChooser
+      ? `http://${hostPort(config.host, config.port)}`
+      : await announceAndOpen(config.host, config.port, openBrowser);
+    if (usedVaultChooser) {
+      if (await waitForServer(url)) console.log(`\nOpened vault: ${url}\n`);
+      else {
+        console.log(
+          `\nVault did not become ready. Reload browser: ${url}\n`,
+        );
+      }
+    }
     if (trial) printTrialGuide(url);
     await server.finished;
+  } catch (error) {
+    if (!(controller.signal.aborted && error instanceof DOMException)) {
+      throw error;
+    }
   } finally {
     for (const signal of signals) Deno.removeSignalListener(signal, stop);
     await cleanTrialRun(trial);

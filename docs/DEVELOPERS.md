@@ -12,7 +12,7 @@ Requirements:
 
 ```bash
 deno task setup        # check Ollama, yt-dlp, models, and vault directory
-deno task app          # open ~/Synthesis at http://localhost:8000
+deno task app          # choose a local vault at http://localhost:8000
 deno task dev          # watch mode
 deno task trial        # disposable provider-free demo
 ```
@@ -66,16 +66,16 @@ Low-level product tuning and safety bounds are code constants.
 
 ### Runtime and access
 
-| Variable                            | Default              | Purpose                          |
-| ----------------------------------- | -------------------- | -------------------------------- |
-| `SYNTHESIS_VAULT`                   | `~/Synthesis`        | Authoritative vault              |
-| `SYNTHESIS_APP_DATA`                | Platform config dir  | Provider profile and usage data  |
-| `SYNTHESIS_HOST` / `SYNTHESIS_PORT` | `127.0.0.1` / `8000` | Listener                         |
-| `SYNTHESIS_OPEN_BROWSER`            | `true`               | Launch browser                   |
-| `SYNTHESIS_PUBLIC_ORIGIN`           | unset                | Required protected origin        |
-| `SYNTHESIS_TRUST_PROXY_AUTH`        | `false`              | Trust Cloudflare identity header |
-| `SYNTHESIS_ALLOWED_EMAILS`          | empty                | Viewers                          |
-| `SYNTHESIS_INGESTER_EMAILS`         | empty                | Mutation identities              |
+| Variable                            | Default              | Purpose                                        |
+| ----------------------------------- | -------------------- | ---------------------------------------------- |
+| `SYNTHESIS_VAULT`                   | Startup chooser      | Authoritative vault; set to bypass the chooser |
+| `SYNTHESIS_APP_DATA`                | Platform config dir  | Provider profile and usage data                |
+| `SYNTHESIS_HOST` / `SYNTHESIS_PORT` | `127.0.0.1` / `8000` | Listener                                       |
+| `SYNTHESIS_OPEN_BROWSER`            | `true`               | Launch browser                                 |
+| `SYNTHESIS_PUBLIC_ORIGIN`           | unset                | Required protected origin                      |
+| `SYNTHESIS_TRUST_PROXY_AUTH`        | `false`              | Trust Cloudflare identity header               |
+| `SYNTHESIS_ALLOWED_EMAILS`          | empty                | Viewers                                        |
+| `SYNTHESIS_INGESTER_EMAILS`         | empty                | Mutation identities                            |
 
 Never enable proxy auth unless clients can reach the app only through that
 trusted proxy.
@@ -151,6 +151,13 @@ modules are authoritative.
 Mutation bodies require JSON except `/api/ingest/file`, which requires multipart
 form data. Ingest and approval use SSE. Errors expose only a safe `error`,
 `code`, and `requestId`; diagnostics stay server-side.
+
+Before application composition, local startup without `SYNTHESIS_VAULT` serves a
+temporary same-origin chooser. Its `/api/vault/browse`, `/open`, and `/default`
+routes exist only on loopback while no vault is open; they are not part of the
+running application API. Existing selections require a valid `vault.json`. The
+default option uses the native profile path: `~/Synthesis` on Linux and macOS,
+and `%USERPROFILE%\Synthesis` on Windows.
 
 Important exact confirmations:
 

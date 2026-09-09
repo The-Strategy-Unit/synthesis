@@ -2,7 +2,13 @@
 // through the environment. Product behaviour and safety bounds stay fixed so
 // ordinary installations do not expose low-level tuning controls.
 
-import { posix, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
+
+import {
+  defaultAppDataDirectory,
+  defaultVaultDirectory,
+  type PlatformEnvironment,
+} from "./platform_paths.ts";
 
 function envValue(key: string): string | undefined {
   try {
@@ -62,7 +68,15 @@ function envOrigin(key: string): string | undefined {
   return url.origin;
 }
 
-const home = envValue("HOME") ?? envValue("USERPROFILE") ?? ".";
+const configuredVault = envValue("SYNTHESIS_VAULT");
+const platformEnvironment: PlatformEnvironment = {
+  APPDATA: envValue("APPDATA"),
+  HOME: envValue("HOME"),
+  HOMEDRIVE: envValue("HOMEDRIVE"),
+  HOMEPATH: envValue("HOMEPATH"),
+  USERPROFILE: envValue("USERPROFILE"),
+  XDG_CONFIG_HOME: envValue("XDG_CONFIG_HOME"),
+};
 
 const SAFETY_LIMITS = {
   maxBodyBytes: 1024 * 1024,
@@ -111,14 +125,7 @@ const PRESENTATION_SETTINGS = {
 function defaultAppDataDir(): string {
   const explicit = envValue("SYNTHESIS_APP_DATA");
   if (explicit) return explicit;
-  switch (Deno.build.os) {
-    case "windows":
-      return `${envValue("APPDATA") ?? home}/Synthesis`;
-    case "darwin":
-      return `${home}/Library/Application Support/Synthesis`;
-    default:
-      return `${envValue("XDG_CONFIG_HOME") ?? `${home}/.config`}/synthesis`;
-  }
+  return defaultAppDataDirectory(Deno.build.os, platformEnvironment);
 }
 
 export function defaultYtDlpExecutable(
@@ -139,7 +146,9 @@ export function defaultYtDlpExecutable(
 }
 
 export const config = {
-  vaultDir: env("SYNTHESIS_VAULT", `${home}/Synthesis`),
+  vaultDir: configuredVault?.trim()
+    ? configuredVault
+    : defaultVaultDirectory(Deno.build.os, platformEnvironment),
   appDataDir: defaultAppDataDir(),
   host: env("SYNTHESIS_HOST", "127.0.0.1"),
   port: Math.max(1, Math.min(65535, envInt("SYNTHESIS_PORT", 8000))),
@@ -216,21 +225,21 @@ export function configuredModelNames(): string[] {
 }
 
 export function dbPath(): string {
-  return `${config.vaultDir}/synthesis.db`;
+  return join(config.vaultDir, "synthesis.db");
 }
 
 export function notesDir(): string {
-  return `${config.vaultDir}/notes`;
+  return join(config.vaultDir, "notes");
 }
 
 export function sourcesDir(): string {
-  return `${config.vaultDir}/sources`;
+  return join(config.vaultDir, "sources");
 }
 
 export function providerSettingsPath(): string {
-  return `${config.appDataDir}/provider-profile.json`;
+  return join(config.appDataDir, "provider-profile.json");
 }
 
 export function providerUsagePath(): string {
-  return `${config.appDataDir}/provider-usage.json`;
+  return join(config.appDataDir, "provider-usage.json");
 }
