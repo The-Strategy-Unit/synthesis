@@ -17,6 +17,7 @@ export interface ApiRouteContext {
   providerSettings?: ProviderSettingsDependencies;
   providerUsage: OutputTokenUsageReader;
   req: Request;
+  requestSignal: AbortSignal;
   requestId: string;
   resolveProviders: ProviderResolver;
   url: URL;

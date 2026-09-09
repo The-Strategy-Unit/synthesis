@@ -37,6 +37,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     method,
     path,
     req,
+    requestSignal,
     requestId,
     resolveProviders,
     url,
@@ -104,11 +105,11 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
           );
         }
       }
-      const release = await ingestGate.acquire(identity, req.signal);
+      const release = await ingestGate.acquire(identity, requestSignal);
       return ingestStream(
         requestId,
         release,
-        req.signal,
+        requestSignal,
         async (send, signal) => {
           const providers = await resolveProviders();
           const result = await approveProposalAndRefresh(
@@ -125,11 +126,11 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     }
     if (action === "reprocess" && method === "POST") {
       requireIngester(identity);
-      const release = await ingestGate.acquire(identity, req.signal);
+      const release = await ingestGate.acquire(identity, requestSignal);
       return ingestStream(
         requestId,
         release,
-        req.signal,
+        requestSignal,
         async (send, signal) => {
           const proposal = await restageIngestProposal(
             db,
@@ -195,7 +196,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     const pageIds = body.pageIds === undefined
       ? db.notes.getAllNotes().map((note) => note.id)
       : positiveIdArray(body.pageIds, "pageIds", 12);
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     try {
       const providers = await resolveProviders();
       return json(
@@ -219,7 +220,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
   if (path === "/api/discoveries/batch" && method === "POST") {
     requireIngester(identity);
     const batch = validateDiscoveryBatchRequest(await readJson(req));
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     try {
       return json(await reviewDiscoveryBatch(db, batch));
     } finally {
@@ -240,7 +241,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     }
     if (action && method === "POST") {
       requireIngester(identity);
-      const release = await ingestGate.acquire(identity, req.signal);
+      const release = await ingestGate.acquire(identity, requestSignal);
       try {
         const discovery = action === "confirm"
           ? await confirmDiscovery(db, discoveryId)

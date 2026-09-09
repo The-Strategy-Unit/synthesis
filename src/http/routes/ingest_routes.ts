@@ -41,6 +41,7 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
     method,
     path,
     req,
+    requestSignal,
     requestId,
     resolveProviders,
   } = context;
@@ -65,11 +66,11 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
       "title",
       config.security.maxTitleChars,
     ) ?? "Pasted text";
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     return ingestStream(
       requestId,
       release,
-      req.signal,
+      requestSignal,
       async (send, signal) => {
         const ingested = textInput
           ? ingestText(title, source.value)
@@ -124,12 +125,12 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
       }
       throw error;
     }
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     return trustedBatchStream(
       db,
       requestId,
       release,
-      req.signal,
+      requestSignal,
       batch.urls,
       resolveProviders,
       ingestDependencies.ingestYouTube,
@@ -150,12 +151,12 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
       }
       throw error;
     }
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     return manualQueueStream(
       db,
       requestId,
       release,
-      req.signal,
+      requestSignal,
       queue.urls,
       resolveProviders,
       ingestDependencies.ingestYouTube,
@@ -165,11 +166,11 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
   if (path === "/api/ingest/file" && method === "POST") {
     requireIngester(identity);
     validateDeclaredSize(req, config.security.maxUploadBytes);
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     return ingestStream(
       requestId,
       release,
-      req.signal,
+      requestSignal,
       async (send, signal) => {
         const ingested = await readLocalFile(req);
         send("ingested", {
@@ -200,12 +201,12 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
     const playlistUrl = normalisePlaylistInput(
       requiredString(body.url, "url", 2048),
     );
-    const release = await ingestGate.acquire(identity, req.signal);
+    const release = await ingestGate.acquire(identity, requestSignal);
     return playlistStream(
       db,
       requestId,
       release,
-      req.signal,
+      requestSignal,
       playlistUrl,
       resolveProviders,
     );

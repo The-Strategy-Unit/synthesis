@@ -24,6 +24,7 @@ import {
   validateMutation,
 } from "./support.ts";
 import { ingestYouTube } from "../ingest/ingest.ts";
+import { deliveryFailureSignal } from "./request_completion.ts";
 
 const API_ROUTES: readonly ApiRoute[] = [
   handleSystemRoutes,
@@ -44,10 +45,16 @@ export function createHandler(
   providerSettings?: ProviderSettingsDependencies,
   ingestDependencies: IngestDependencies = { ingestYouTube },
   providerUsage: OutputTokenUsageReader = emptyProviderUsage,
-): (req: Request) => Promise<Response> {
+): (
+  req: Request,
+  info?: Pick<Deno.ServeHandlerInfo, "completed">,
+) => Promise<Response> {
   const ingestGate = new IngestGate();
 
-  return async function handle(req: Request): Promise<Response> {
+  return async function handle(
+    req: Request,
+    info?: Pick<Deno.ServeHandlerInfo, "completed">,
+  ): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
       const url = new URL(req.url);
@@ -59,6 +66,9 @@ export function createHandler(
       if (method !== "GET" && method !== "HEAD") {
         validateMutation(req, url, path);
       }
+      const requestSignal = info
+        ? deliveryFailureSignal(info.completed)
+        : req.signal;
 
       const context = {
         db,
@@ -70,6 +80,7 @@ export function createHandler(
         providerSettings,
         providerUsage,
         req,
+        requestSignal,
         requestId,
         resolveProviders,
         url,
