@@ -31,19 +31,21 @@ jobs:
       - name: Package release archive
         shell: pwsh
         run: |
-          $package = "dist/release/synthesis-windows-x86_64"
+          $version = (Get-Content "deno.json" -Raw | ConvertFrom-Json).version
+          $name = "synthesis-v$version-windows-x86_64"
+          $package = Join-Path "dist/release" $name
           New-Item -ItemType Directory -Force $package | Out-Null
-          Copy-Item "dist/synthesis-windows-x86_64.exe" $package
+          Copy-Item "dist/synthesis-windows-x86_64.exe" (Join-Path $package "$name.exe")
           Copy-Item "LICENSE" $package
           Copy-Item "demos/haca-2025-vault" "$package/haca-2025-vault" -Recurse
           Compress-Archive `
             -Path "$package/*" `
-            -DestinationPath "dist/synthesis-windows-x86_64.zip" `
+            -DestinationPath (Join-Path "dist" "$name.zip") `
             -CompressionLevel Optimal
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-windows-x86_64
-          path: dist/synthesis-windows-x86_64.zip
+          path: dist/synthesis-v*-windows-x86_64.zip
           if-no-files-found: error
 
   linux-compiled:
@@ -57,17 +59,20 @@ jobs:
       - run: deno task test:compiled dist/synthesis-linux-x86_64
       - name: Package release archive
         run: |
-          package="dist/release/synthesis-linux-x86_64"
+          version="$(deno eval --allow-read=deno.json 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          name="synthesis-v${version}-linux-x86_64"
+          package="dist/release/$name"
           mkdir -p "$package"
-          cp dist/synthesis-linux-x86_64 LICENSE "$package/"
+          cp dist/synthesis-linux-x86_64 "$package/$name"
+          cp LICENSE "$package/"
           cp -R demos/haca-2025-vault "$package/"
-          chmod +x "$package/synthesis-linux-x86_64"
-          tar -czf dist/synthesis-linux-x86_64.tar.gz \
-            -C "$package" synthesis-linux-x86_64 LICENSE haca-2025-vault
+          chmod +x "$package/$name"
+          tar -czf "dist/${name}.tar.gz" \
+            -C "$package" "$name" LICENSE haca-2025-vault
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-linux-x86_64
-          path: dist/synthesis-linux-x86_64.tar.gz
+          path: dist/synthesis-v*-linux-x86_64.tar.gz
           if-no-files-found: error
 
   macos-compiled:
@@ -81,17 +86,20 @@ jobs:
       - run: deno task test:compiled dist/synthesis-macos-aarch64
       - name: Package release archive
         run: |
-          package="dist/release/synthesis-macos-aarch64"
+          version="$(deno eval --allow-read=deno.json 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          name="synthesis-v${version}-macos-aarch64"
+          package="dist/release/$name"
           mkdir -p "$package"
-          cp dist/synthesis-macos-aarch64 LICENSE "$package/"
+          cp dist/synthesis-macos-aarch64 "$package/$name"
+          cp LICENSE "$package/"
           cp -R demos/haca-2025-vault "$package/"
-          chmod +x "$package/synthesis-macos-aarch64"
-          tar -czf dist/synthesis-macos-aarch64.tar.gz \
-            -C "$package" synthesis-macos-aarch64 LICENSE haca-2025-vault
+          chmod +x "$package/$name"
+          tar -czf "dist/${name}.tar.gz" \
+            -C "$package" "$name" LICENSE haca-2025-vault
       - uses: actions/upload-artifact@v4
         with:
           name: synthesis-macos-aarch64
-          path: dist/synthesis-macos-aarch64.tar.gz
+          path: dist/synthesis-v*-macos-aarch64.tar.gz
           if-no-files-found: error
 
   release:
@@ -127,10 +135,11 @@ jobs:
         shell: bash
         run: |
           cd release-assets
+          prefix="synthesis-${GITHUB_REF_NAME}"
           sha256sum \
-            synthesis-linux-x86_64.tar.gz \
-            synthesis-macos-aarch64.tar.gz \
-            synthesis-windows-x86_64.zip \
+            "${prefix}-linux-x86_64.tar.gz" \
+            "${prefix}-macos-aarch64.tar.gz" \
+            "${prefix}-windows-x86_64.zip" \
             > SHA256SUMS
 
       - name: Publish GitHub release
@@ -138,11 +147,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          prefix="synthesis-${GITHUB_REF_NAME}"
           expected_assets="$(printf '%s\n' \
             SHA256SUMS \
-            synthesis-linux-x86_64.tar.gz \
-            synthesis-macos-aarch64.tar.gz \
-            synthesis-windows-x86_64.zip | sort)"
+            "${prefix}-linux-x86_64.tar.gz" \
+            "${prefix}-macos-aarch64.tar.gz" \
+            "${prefix}-windows-x86_64.zip" | sort)"
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             actual_assets="$(gh release view "$GITHUB_REF_NAME" \
@@ -161,9 +171,9 @@ jobs:
           fi
 
           gh release create "$GITHUB_REF_NAME" \
-            release-assets/synthesis-linux-x86_64.tar.gz \
-            release-assets/synthesis-macos-aarch64.tar.gz \
-            release-assets/synthesis-windows-x86_64.zip \
+            "release-assets/${prefix}-linux-x86_64.tar.gz" \
+            "release-assets/${prefix}-macos-aarch64.tar.gz" \
+            "release-assets/${prefix}-windows-x86_64.zip" \
             release-assets/SHA256SUMS \
             --verify-tag \
             --generate-notes \

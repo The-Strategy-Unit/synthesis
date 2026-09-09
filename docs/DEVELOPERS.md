@@ -195,6 +195,10 @@ SQLite/keyring packages. Browser assets are bundled; the HACA vault is placed
 beside the executable in release archives. The 80 MiB executable ceiling guards
 against accidental dependency or private-data inclusion.
 
+The release workflow includes the exact `v<deno.json version>` value in new
+archive and contained-executable names; local compile output remains
+unversioned.
+
 The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
 releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
 Windows, and publish immutable platform archives plus `SHA256SUMS`.
