@@ -4,8 +4,8 @@ Synthesis is a local-first, single-process knowledge compiler. It stores durable
 knowledge as ordinary files and treats models, SQLite, embeddings, and graph
 layout as replaceable machinery.
 
-This document describes the 0.2.6 MVP. It is a design reference,
-not a production-deployment specification.
+This document describes the 0.2.7 MVP. It is a design reference, not a
+production-deployment specification.
 
 ## System map
 

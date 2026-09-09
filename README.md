@@ -16,7 +16,7 @@ tool and is not intended for production or regulated workloads.
 ## Five-minute start
 
 Download and extract the archive for your platform from the
-[v0.2.6 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.6).
+[v0.2.7 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.7).
 The executables are unsigned; macOS builds are not notarised.
 
 Start the executable without a vault flag. Synthesis opens a local startup
