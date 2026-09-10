@@ -11,7 +11,7 @@ keyword search, export, rebuild, and undo work without an AI provider.
 Synthesis is a single-user research MVP. It is not a clinical decision-support
 tool and is not intended for production or regulated workloads.
 
-![A compiled HACA wiki page beside its claim evidence and original sources](docs/assets/synthesis-reader.png)
+![Animated Synthesis walkthrough: open a local vault, verify Ollama, run a semantic search, inspect source evidence and a reviewed cross-reference, and explore the knowledge graph](docs/assets/synthesis-workflow.gif)
 
 ## Five-minute start
 
@@ -77,15 +77,15 @@ path to bypass the chooser for automation. Use only one running Synthesis
 process per writable vault.
 
 The default Ollama models are `qwen3.6:27b` for writing and
-`nomic-embed-text-v2-moe:latest` for embeddings. The **Provider** screen can
+`nomic-embed-text-v2-moe:latest` for embeddings. The **AI provider** screen can
 select another local or OpenAI-compatible provider. Remote providers receive the
 source and wiki text needed for each request under their own terms; Synthesis
 never silently switches from local to remote.
 
 ## Everyday workflow
 
-1. **Add source**: upload a born-digital PDF, Markdown, or text file; paste text;
-   or provide a YouTube URL. To add separate YouTube videos, open **More
+1. **Add source**: upload a born-digital PDF, Markdown, or text file; paste
+   text; or provide a YouTube URL. To add separate YouTube videos, open **More
    options** → **YouTube queue · manual review**, paste up to 20 unique URLs or
    video IDs (one per line), then select **Queue for review**.
 2. **Review**: inspect proposed `new`, `merge`, or `contradict` changes and
