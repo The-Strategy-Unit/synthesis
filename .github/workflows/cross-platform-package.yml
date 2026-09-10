@@ -59,7 +59,7 @@ jobs:
       - run: deno task test:compiled dist/synthesis-linux-x86_64
       - name: Package release archive
         run: |
-          version="$(deno eval --allow-read=deno.json 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          version="$(deno eval 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
           name="synthesis-v${version}-linux-x86_64"
           package="dist/release/$name"
           mkdir -p "$package"
@@ -86,7 +86,7 @@ jobs:
       - run: deno task test:compiled dist/synthesis-macos-aarch64
       - name: Package release archive
         run: |
-          version="$(deno eval --allow-read=deno.json 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          version="$(deno eval 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
           name="synthesis-v${version}-macos-aarch64"
           package="dist/release/$name"
           mkdir -p "$package"

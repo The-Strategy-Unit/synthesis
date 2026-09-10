@@ -85,33 +85,17 @@ async function verifyPdfExtraction(origin: string): Promise<void> {
       type: "application/pdf",
     }),
   );
-  const controller = new AbortController();
   const response = await fetch(`${origin}/api/ingest/file`, {
     method: "POST",
     headers: { Origin: origin },
     body: form,
-    signal: controller.signal,
   });
   assert.equal(response.status, 200);
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let events = "";
-  try {
-    while (
-      !events.includes('"sourceType":"pdf"') &&
-      !events.includes('"stage":"error"')
-    ) {
-      const result = await reader.read();
-      if (result.done) break;
-      events += decoder.decode(result.value, { stream: true });
-    }
-    assert.match(events, /"stage":"ingested"/);
-    assert.match(events, /"sourceType":"pdf"/);
-    assert.doesNotMatch(events, /PDF_PARSE_FAILED/);
-  } finally {
-    await reader.cancel().catch(() => {});
-    controller.abort();
-  }
+  const events = await response.text();
+  assert.match(events, /"stage":"ingested"/);
+  assert.match(events, /"sourceType":"pdf"/);
+  assert.match(events, /"stage":"error"/);
+  assert.doesNotMatch(events, /PDF_PARSE_FAILED/);
 }
 
 interface SmokeExpectation {
@@ -174,6 +158,7 @@ async function smokeExecutable(
     env: {
       DISABLE_SYSTEM_FONTS_LOAD: "1",
       SYNTHESIS_APP_DATA: join(directory, "app-data"),
+      SYNTHESIS_API_BASE: `${origin}/v1`,
       SYNTHESIS_HOST: "127.0.0.1",
       SYNTHESIS_OPEN_BROWSER: "false",
       SYNTHESIS_PORT: String(port),
@@ -215,15 +200,21 @@ async function smokeExecutable(
     child,
     outputPromise,
   );
+  const stderr = new TextDecoder().decode(output.stderr);
   if (forceStopped && !failure) {
     failure = new Error("Compiled Synthesis did not stop after SIGTERM");
+  }
+  if (
+    /Deno\.serve: request\.signal aborts on successful responses/.test(stderr)
+  ) {
+    failure ??= new Error("Compiled Synthesis used legacy request aborts");
   }
   if (failure) {
     const decoder = new TextDecoder();
     throw new Error(
       `${failure instanceof Error ? failure.message : String(failure)}\n` +
         `stdout:\n${decoder.decode(output.stdout)}\n` +
-        `stderr:\n${decoder.decode(output.stderr)}`,
+        `stderr:\n${stderr}`,
     );
   }
 }

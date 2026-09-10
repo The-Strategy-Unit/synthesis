@@ -40,6 +40,7 @@
       "src/provider/provider_runtime_test.ts",
       "src/provider/secret_store_test.ts",
       "src/http/static_files_test.ts",
+      "src/http/request_completion_test.ts",
       "src/ingest/trusted_batch_test.ts",
       "scripts/browser_interaction_smoke_test.ts",
       "scripts/compile_test.ts",
