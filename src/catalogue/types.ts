@@ -14,6 +14,8 @@ export interface IngestProposalRecord {
   source_id: number;
   status: "pending" | "approved" | "rejected";
   proposal_json: string;
+  draft_json: string | null;
+  draft_updated_at: string | null;
   created_at: string;
   reviewed_at: string | null;
 }

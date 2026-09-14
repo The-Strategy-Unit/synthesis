@@ -19,8 +19,13 @@ export interface ApiRouteContext {
   req: Request;
   requestSignal: AbortSignal;
   requestId: string;
+  requestVaultSwitch?: () => void;
   resolveProviders: ProviderResolver;
   url: URL;
+}
+
+export interface ApplicationControl {
+  onVaultSwitch?: () => void | Promise<void>;
 }
 
 export type ApiRoute = (

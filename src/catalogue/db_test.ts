@@ -508,8 +508,17 @@ dbTest("ingest proposals have a guarded review lifecycle", async () => {
     assert.equal(db.proposals.getIngestProposal(0), undefined);
     assert.equal(db.proposals.getIngestProposalForSource(0), undefined);
 
+    const draft = JSON.stringify({ changes: [{ index: 0 }] });
+    assert.equal(
+      db.proposals.savePendingIngestProposalDraft(firstId, draft),
+      true,
+    );
+    assert.equal(db.proposals.getIngestProposal(firstId)?.draft_json, draft);
+    assert.ok(db.proposals.getIngestProposal(firstId)?.draft_updated_at);
+
     assert.equal(db.proposals.reviewIngestProposal(firstId, "approved"), true);
     assert.equal(db.proposals.getIngestProposal(firstId)?.status, "approved");
+    assert.equal(db.proposals.getIngestProposal(firstId)?.draft_json, null);
     assert.ok(db.proposals.getIngestProposal(firstId)?.reviewed_at);
     assert.equal(db.proposals.reviewIngestProposal(firstId, "rejected"), false);
 

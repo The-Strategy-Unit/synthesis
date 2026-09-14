@@ -9,6 +9,7 @@ import type {
 export interface ArchivedVaultSource extends IngestResult {
   contentHash: string;
   archivedAt?: string;
+  extractedTextVerified: boolean;
 }
 
 export async function ensureRecompileVaultLayout(
@@ -241,8 +242,26 @@ async function readArchivedSource(
       `Archived PDF source ${directoryHash} is missing original bytes or page count`,
     );
   }
+  let extractedTextVerified = originalFile === undefined;
+  if (metadata.extractedTextHash !== undefined) {
+    const extractedTextHash = requiredText(
+      metadata.extractedTextHash,
+      "Archived source extractedTextHash",
+      64,
+    );
+    if (!SHA256_PATTERN.test(extractedTextHash)) {
+      throw new Error("Archived source extractedTextHash is invalid");
+    }
+    if (await sha256(transcriptBytes) !== extractedTextHash) {
+      throw new Error(
+        `Archived source ${directoryHash} extracted text failed its hash check`,
+      );
+    }
+    extractedTextVerified = true;
+  }
   return {
     contentHash,
+    extractedTextVerified,
     transcript,
     title: requiredText(metadata.title, "Archived source title", 500),
     sourceUrl: sourceUrl(metadata.sourceUrl, "Archived source sourceUrl"),

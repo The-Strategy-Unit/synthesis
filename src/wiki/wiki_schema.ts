@@ -119,6 +119,10 @@ ${MANDATORY_EDITORIAL_POLICY}`;
 export async function loadWikiSchema(): Promise<string> {
   let content: string;
   try {
+    const info = await Deno.lstat(wikiSchemaPath());
+    if (info.isSymlink || !info.isFile) {
+      throw new Error("Wiki schema must be an ordinary file");
+    }
     content = await Deno.readTextFile(wikiSchemaPath());
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;

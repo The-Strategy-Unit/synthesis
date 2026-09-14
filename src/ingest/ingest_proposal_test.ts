@@ -5,6 +5,7 @@ import {
   serialiseIngestProposal,
   validateIngestProposal,
   validateIngestProposalApproval,
+  validateIngestProposalDraft,
 } from "./ingest_proposal.ts";
 import { renderWikiPage } from "../wiki/wiki.ts";
 
@@ -137,4 +138,25 @@ Deno.test("proposal approvals validate selected body edits", () => {
   ) {
     assert.throws(() => validateIngestProposalApproval({ changes }));
   }
+});
+
+Deno.test("proposal review drafts preserve bounded decisions and edits", () => {
+  assert.deepEqual(
+    validateIngestProposalDraft({
+      changes: [{ index: 1, decision: "include", body: "Edited\r\nbody" }],
+    }),
+    {
+      changes: [{ index: 1, decision: "include", body: "Edited\nbody" }],
+    },
+  );
+  assert.throws(() =>
+    validateIngestProposalDraft({
+      changes: [{ index: 0, decision: "maybe", body: "Body" }],
+    })
+  );
+  assert.throws(() =>
+    validateIngestProposalDraft({
+      changes: [{ index: 0, decision: "pending", body: "x".repeat(20_001) }],
+    })
+  );
 });

@@ -87,6 +87,7 @@ Rules:
 - Preserve uncertainty and disagreement. Never turn confidence into evidential certainty.
 - Copy the exact candidate_index for each suggestion. Never combine pages from different candidate pairs.
 - Return at most one suggestion per candidate. Omit weak or merely topical similarities.
+- explanation and significance must each be 1-1000 characters; keep them concise and evidence-specific.
 
 Respond with ONLY JSON:
 {"discoveries":[{"candidate_index":0,"relationship_type":"mechanistic","explanation":"...","significance":"...","confidence":0.72}]}`;
@@ -1331,7 +1332,11 @@ export async function reviewDiscoveryBatch(
   const originals = new Map<string, string>();
   const finalContents = new Map<string, string>();
   for (const view of views) {
-    const pair = selectDiscoveryPair(db, view, explicitPairs);
+    // A reviewed batch may contain distinct relationship proposals for a pair
+    // that is already linked or reserved by an earlier item. Preserve each
+    // typed relationship without duplicating the ordinary wiki link.
+    const pair = selectDiscoveryPair(db, view, explicitPairs) ??
+      selectDiscoveryPair(db, view, new Set());
     if (!pair) {
       throw new DiscoveryStateError(
         `Discovery ${view.id} no longer has an unlinked page pair`,

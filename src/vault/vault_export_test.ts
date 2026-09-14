@@ -108,6 +108,10 @@ Deno.test({
       await Deno.writeTextFile(`${dir}/synthesis.db`, "must not be exported");
 
       const exported = await exportVault();
+      await Deno.writeTextFile(
+        `${dir}/notes/alpha.md`,
+        "Changed after the export snapshot was created.\n",
+      );
       const archive = new Uint8Array(
         await new Response(exported.stream).arrayBuffer(),
       );

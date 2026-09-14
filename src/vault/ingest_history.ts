@@ -1,4 +1,4 @@
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 import { config } from "../app/config.ts";
 
@@ -35,6 +35,10 @@ export interface IngestHistoryManifest {
 export interface WrittenIngestHistory {
   directory: string;
   manifest: IngestHistoryManifest;
+}
+
+export interface PreparedIngestHistory extends WrittenIngestHistory {
+  files: Array<{ filePath: string; content: string }>;
 }
 
 export interface IngestHistoryInputChange {
@@ -213,13 +217,13 @@ export function validateIngestHistoryManifest(
   };
 }
 
-export async function writeIngestHistory(input: {
+export async function prepareIngestHistory(input: {
   proposalId: number;
   sourceHash: string;
   sourceTitle: string;
   review?: IngestReviewAudit;
   changes: IngestHistoryInputChange[];
-}): Promise<WrittenIngestHistory> {
+}): Promise<PreparedIngestHistory> {
   const historyId = crypto.randomUUID();
   const appliedAt = new Date().toISOString();
   const safeTimestamp = appliedAt.replaceAll(":", "-").replaceAll(".", "-");
@@ -229,55 +233,72 @@ export async function writeIngestHistory(input: {
     historyId,
   ].join("-");
   const directory = `${historyDir()}/${directoryName}`;
-  await Deno.mkdir(historyDir(), { recursive: true });
-  await Deno.mkdir(directory);
-  try {
-    const changes: IngestHistoryChange[] = [];
-    for (let index = 0; index < input.changes.length; index++) {
-      const change = input.changes[index];
-      let beforeRevision: string | undefined;
-      let beforeHash: string | undefined;
-      if (change.action !== "new") {
-        if (change.beforeContent === undefined) {
-          throw new Error("Updated history pages require prior content");
-        }
-        await Deno.mkdir(`${directory}/before`, { recursive: true });
-        beforeRevision = `before/${String(index).padStart(3, "0")}.md`;
-        await Deno.writeTextFile(
-          `${directory}/${beforeRevision}`,
-          change.beforeContent,
-          { createNew: true },
-        );
-        beforeHash = await sha256(change.beforeContent);
+  const files: PreparedIngestHistory["files"] = [];
+  const changes: IngestHistoryChange[] = [];
+  for (let index = 0; index < input.changes.length; index++) {
+    const change = input.changes[index];
+    let beforeRevision: string | undefined;
+    let beforeHash: string | undefined;
+    if (change.action !== "new") {
+      if (change.beforeContent === undefined) {
+        throw new Error("Updated history pages require prior content");
       }
-      changes.push({
-        action: change.action,
-        pageTitle: change.pageTitle,
-        notePath: notePath(change.filePath),
-        ...(beforeRevision ? { beforeRevision, beforeHash } : {}),
-        afterHash: await sha256(change.afterContent),
+      beforeRevision = `before/${String(index).padStart(3, "0")}.md`;
+      files.push({
+        filePath: `${directory}/${beforeRevision}`,
+        content: change.beforeContent,
+      });
+      beforeHash = await sha256(change.beforeContent);
+    }
+    changes.push({
+      action: change.action,
+      pageTitle: change.pageTitle,
+      notePath: notePath(change.filePath),
+      ...(beforeRevision ? { beforeRevision, beforeHash } : {}),
+      afterHash: await sha256(change.afterContent),
+    });
+  }
+  const manifest = validateIngestHistoryManifest({
+    formatVersion: 1,
+    historyId,
+    operation: "ingest",
+    proposalId: input.proposalId,
+    sourceHash: input.sourceHash,
+    sourceTitle: input.sourceTitle,
+    appliedAt,
+    reviewMode: input.review?.reviewMode ?? "manual",
+    ...(input.review?.batchId ? { batchId: input.review.batchId } : {}),
+    changes,
+  });
+  files.push({
+    filePath: `${directory}/manifest.json`,
+    content: JSON.stringify(manifest, null, 2) + "\n",
+  });
+  return { directory, manifest, files };
+}
+
+export async function writeIngestHistory(input: {
+  proposalId: number;
+  sourceHash: string;
+  sourceTitle: string;
+  review?: IngestReviewAudit;
+  changes: IngestHistoryInputChange[];
+}): Promise<WrittenIngestHistory> {
+  const prepared = await prepareIngestHistory(input);
+  await Deno.mkdir(historyDir(), { recursive: true });
+  await Deno.mkdir(prepared.directory);
+  try {
+    for (const file of prepared.files) {
+      await Deno.mkdir(dirname(file.filePath), { recursive: true });
+      await Deno.writeTextFile(file.filePath, file.content, {
+        createNew: true,
       });
     }
-    const manifest = validateIngestHistoryManifest({
-      formatVersion: 1,
-      historyId,
-      operation: "ingest",
-      proposalId: input.proposalId,
-      sourceHash: input.sourceHash,
-      sourceTitle: input.sourceTitle,
-      appliedAt,
-      reviewMode: input.review?.reviewMode ?? "manual",
-      ...(input.review?.batchId ? { batchId: input.review.batchId } : {}),
-      changes,
-    });
-    await Deno.writeTextFile(
-      `${directory}/manifest.json`,
-      JSON.stringify(manifest, null, 2) + "\n",
-      { createNew: true },
-    );
-    return { directory, manifest };
+    return { directory: prepared.directory, manifest: prepared.manifest };
   } catch (error) {
-    await Deno.remove(directory, { recursive: true }).catch(() => undefined);
+    await Deno.remove(prepared.directory, { recursive: true }).catch(() =>
+      undefined
+    );
     throw error;
   }
 }

@@ -9,6 +9,7 @@ import {
   REVIEW_DECISIONS,
   reviewDecisionsForEveryChange,
   reviewDecisionSummary,
+  reviewTextDiff,
 } from "./review_workflow.js";
 
 Deno.test("discovery batches require an exact action and count", () => {
@@ -93,6 +94,14 @@ Deno.test("source page evidence is compact and readable", () => {
   );
   assert.equal(formatPageRanges([4, 4, 0, -1, 3]), "3–4");
   assert.equal(formatPageRanges(undefined), "");
+});
+
+Deno.test("review diffs distinguish retained, removed, and added lines", () => {
+  assert.deepEqual(reviewTextDiff("Retained\nOld", "Retained\nNew"), [
+    { kind: "same", text: "Retained" },
+    { kind: "add", text: "New" },
+    { kind: "remove", text: "Old" },
+  ]);
 });
 
 Deno.test("excluding every change cannot apply an empty approval", () => {

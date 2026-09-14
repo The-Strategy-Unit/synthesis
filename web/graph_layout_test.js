@@ -8,6 +8,8 @@ import {
   graphLinkDistance,
   graphLinkStrength,
   graphNeighbourRows,
+  graphNodeConnectivity,
+  graphNodePresentation,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighbourLinks,
@@ -120,6 +122,58 @@ Deno.test("neighbour list deduplicates edges and preserves both link kinds", () 
   ]);
   assert.deepEqual(graphNeighbourRows(nodes, links, 99), []);
   assert.deepEqual(graphNeighbourRows(nodes, links, 4), []);
+});
+
+Deno.test("node size reflects unique reviewed neighbours and semantic-only links use a halo", () => {
+  const nodes = [1, 2, 3, 4].map((id) => ({ id }));
+  const connectivity = graphNodeConnectivity(nodes, [
+    { source: 1, target: 2, kind: "explicit" },
+    { source: { id: 2 }, target: { id: 1 }, kind: "explicit" },
+    { source: 1, target: 2, kind: "semantic" },
+    { source: 1, target: 3, kind: "semantic" },
+    { source: 1, target: 3, kind: "semantic" },
+    { source: 1, target: 1, kind: "explicit" },
+    { source: 1, target: 99, kind: "explicit" },
+  ]);
+
+  assert.deepEqual(connectivity.get(1), {
+    reviewedConnections: 1,
+    suggestedConnections: 1,
+    radius: 8,
+    haloRadius: 11,
+    haloOpacity: 0.11,
+  });
+  assert.deepEqual(connectivity.get(2), {
+    reviewedConnections: 1,
+    suggestedConnections: 0,
+    radius: 8,
+    haloRadius: 8,
+    haloOpacity: 0,
+  });
+  assert.equal(connectivity.get(3).radius, 6);
+  assert.equal(connectivity.get(3).suggestedConnections, 1);
+  assert.deepEqual(connectivity.get(4), {
+    reviewedConnections: 0,
+    suggestedConnections: 0,
+    radius: 6,
+    haloRadius: 6,
+    haloOpacity: 0,
+  });
+});
+
+Deno.test("reviewed-connectivity node sizing is capped", () => {
+  const nodes = Array.from({ length: 27 }, (_, id) => ({ id }));
+  const links = nodes.slice(1).map((node) => ({
+    source: 0,
+    target: node.id,
+    kind: "explicit",
+  }));
+  assert.equal(graphNodeConnectivity(nodes, links).get(0).radius, 15);
+  assert.deepEqual(graphNodePresentation(0, 0), {
+    radius: 6,
+    haloRadius: 6,
+    haloOpacity: 0,
+  });
 });
 
 Deno.test("graph fit transform centres every positioned node with padding", () => {

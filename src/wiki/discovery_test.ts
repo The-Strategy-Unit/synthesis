@@ -113,6 +113,10 @@ Deno.test({
           reasoning_effort?: string;
         };
         assert.match(body.messages[0].content, /hypothesis for human review/i);
+        assert.match(
+          body.messages[0].content,
+          /explanation and significance must each be 1-1000 characters/i,
+        );
         assert.equal(body.reasoning_effort, "none");
         const payload = JSON.parse(body.messages.at(-1)!.content) as {
           candidates: Array<{
@@ -129,24 +133,33 @@ Deno.test({
             false,
           );
         }
-        if (calls > 1) return Promise.resolve(modelResponse([]));
-        return Promise.resolve(modelResponse(
-          payload.candidates.slice(0, 2).map(
-            (candidate, index) => ({
-              candidate_index: candidate.candidate_index,
-              relationship_type: index === 0
-                ? "consolidation_candidate"
-                : "shared_constraint",
-              explanation: index === 0
-                ? "The pages may describe the same durable concept."
-                : "The pages may share a limiting factor.",
-              significance: index === 0
-                ? "Review whether one canonical page could retain both sources."
-                : "The shared factor may explain differing results.",
-              confidence: index === 0 ? 0.74 : 0.61,
-            }),
-          ),
-        ));
+        const validDiscoveries = payload.candidates.slice(0, 2).map(
+          (candidate, index) => ({
+            candidate_index: candidate.candidate_index,
+            relationship_type: index === 0
+              ? "consolidation_candidate"
+              : "shared_constraint",
+            explanation: index === 0
+              ? "The pages may describe the same durable concept."
+              : "The pages may share a limiting factor.",
+            significance: index === 0
+              ? "Review whether one canonical page could retain both sources."
+              : "The shared factor may explain differing results.",
+            confidence: index === 0 ? 0.74 : 0.61,
+          }),
+        );
+        if (calls === 1) {
+          return Promise.resolve(modelResponse([{
+            ...validDiscoveries[0],
+            explanation: "x".repeat(1_001),
+          }]));
+        }
+        assert.equal(calls, 2);
+        assert.match(
+          body.messages[0].content,
+          /Discovery response\.discoveries\[0\]\.explanation exceeds 1000 characters/,
+        );
+        return Promise.resolve(modelResponse(validDiscoveries));
       };
 
       const generated = await generateDiscoveries(
@@ -216,7 +229,7 @@ Deno.test({
       );
       assert.deepEqual(repeated.discoveries, []);
       assert.equal(repeated.coverage.complete, true);
-      assert.equal(calls, 1, "reviewed candidate pairs are not proposed again");
+      assert.equal(calls, 2, "reviewed candidate pairs are not proposed again");
     } finally {
       globalThis.fetch = originalFetch;
       config.llm.reasoningEffort = originalReasoningEffort;
@@ -899,10 +912,15 @@ Deno.test({
         });
       }
 
-      const addDiscovery = (left: number, right: number, suffix: string) => {
+      const addDiscovery = (
+        left: number,
+        right: number,
+        suffix: string,
+        relationshipType = "supports",
+      ) => {
         const id = db.discoveries.addDiscovery({
           fingerprint: `batch-${suffix}`,
-          relationship_type: "supports",
+          relationship_type: relationshipType,
           explanation: "The supplied pages describe compatible evidence.",
           significance: "The reviewed relationship can connect the pages.",
           page_ids_json: JSON.stringify([left, right]),
@@ -920,10 +938,16 @@ Deno.test({
       };
       const firstId = addDiscovery(pages[0].id, pages[1].id, "first");
       const secondId = addDiscovery(pages[2].id, pages[3].id, "second");
+      const overlappingId = addDiscovery(
+        pages[0].id,
+        pages[1].id,
+        "overlapping",
+        "analogous",
+      );
       const request = validateDiscoveryBatchRequest({
         action: "confirm",
-        ids: [firstId, secondId],
-        confirm: "CONFIRM 2 LINKS",
+        ids: [firstId, secondId, overlappingId],
+        confirm: "CONFIRM 3 LINKS",
       });
 
       await Deno.writeTextFile(pages[2].path, "not a wiki page");
@@ -934,15 +958,16 @@ Deno.test({
 
       await Deno.writeTextFile(pages[2].path, pages[2].markdown);
       const confirmed = await reviewDiscoveryBatch(db, request);
-      assert.equal(confirmed.linksAdded, 2);
+      assert.equal(confirmed.linksAdded, 3);
       assert.deepEqual(
         confirmed.reviewed.map((discovery) => discovery.status),
-        ["confirmed", "confirmed"],
+        ["confirmed", "confirmed", "confirmed"],
       );
-      assert.ok(
-        parseWikiPage(await Deno.readTextFile(pages[0].path)).links.includes(
-          "Batch concept 2",
-        ),
+      const firstPage = parseWikiPage(await Deno.readTextFile(pages[0].path));
+      assert.deepEqual(firstPage.links, ["Batch concept 2"]);
+      assert.deepEqual(
+        firstPage.relationships?.map((relationship) => relationship.type),
+        ["supports", "analogous"],
       );
       assert.ok(
         parseWikiPage(await Deno.readTextFile(pages[2].path)).links.includes(

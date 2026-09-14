@@ -5,6 +5,7 @@ import {
   providerSettingsPath,
   providerUsagePath,
   sourcesDir,
+  validateRuntimeConfiguration,
 } from "./config.ts";
 import { DB } from "../catalogue/db.ts";
 import {
@@ -25,35 +26,104 @@ import { KeyringSecretStore } from "../provider/secret_store.ts";
 import { ensureWikiSchema } from "../wiki/wiki_schema.ts";
 import { ensureVaultManifest } from "../vault/vault_manifest.ts";
 import { errMsg } from "../shared/utils.ts";
+import { acquireVaultProcessLock } from "../vault/vault_lock.ts";
+import {
+  completeVaultOperation,
+  type PreparedVaultOperation,
+  recoverPendingVaultOperations,
+} from "../vault/vault_operation.ts";
+import { rebuildVaultCatalogue } from "../vault/vault_rebuild.ts";
 
 export function closeCatalogueOnServerFinish(
   server: Pick<Deno.HttpServer, "finished">,
   db: Pick<DB, "close">,
   cleanup: () => void = () => undefined,
-): void {
+): Promise<void> {
   const close = () => {
-    cleanup();
     try {
       db.close();
     } catch (error) {
       console.error(`Catalogue shutdown failed: ${errMsg(error)}`);
     }
+    try {
+      cleanup();
+    } catch (error) {
+      console.error(`Application shutdown cleanup failed: ${errMsg(error)}`);
+    }
   };
-  void server.finished.then(close, close);
+  return server.finished.then(close, close);
+}
+
+export interface ApplicationSession {
+  close(): Promise<void>;
+  finished: Promise<void>;
+  server: Deno.HttpServer;
+}
+
+export interface ApplicationOptions {
+  onVaultSwitch?: () => void | Promise<void>;
+}
+
+async function ensureOrdinaryDirectory(
+  path: string,
+  label: string,
+): Promise<void> {
+  await Deno.mkdir(path, { recursive: true });
+  const info = await Deno.lstat(path);
+  if (info.isSymlink || !info.isDirectory) {
+    throw new Error(`${label} must be an ordinary directory`);
+  }
 }
 
 export async function startApplication(
   signal?: AbortSignal,
-): Promise<Deno.HttpServer> {
+  options: ApplicationOptions = {},
+): Promise<ApplicationSession> {
+  validateRuntimeConfiguration();
   const vaultDirectory = config.vaultDir;
 
-  await Deno.mkdir(vaultDirectory, { recursive: true });
-  await Deno.mkdir(notesDir(), { recursive: true });
-  await Deno.mkdir(sourcesDir(), { recursive: true });
-  await ensureVaultManifest();
-  await ensureWikiSchema();
-
-  const db = new DB(dbPath());
+  await ensureOrdinaryDirectory(vaultDirectory, "Vault storage");
+  const vaultLock = acquireVaultProcessLock(vaultDirectory);
+  let recoveredOperations: PreparedVaultOperation[];
+  try {
+    await ensureOrdinaryDirectory(notesDir(), "Vault notes");
+    await ensureOrdinaryDirectory(sourcesDir(), "Vault sources");
+    await ensureOrdinaryDirectory(`${vaultDirectory}/history`, "Vault history");
+    await ensureVaultManifest();
+    await ensureWikiSchema();
+    recoveredOperations = await recoverPendingVaultOperations(vaultDirectory);
+  } catch (error) {
+    try {
+      vaultLock.release();
+    } catch (cleanupError) {
+      console.error(`Vault lock cleanup failed: ${errMsg(cleanupError)}`);
+    }
+    throw error;
+  }
+  let db: DB;
+  let openedDb: DB | undefined;
+  try {
+    openedDb = new DB(dbPath());
+    db = openedDb;
+    if (recoveredOperations.length > 0) {
+      await rebuildVaultCatalogue(db);
+      for (const operation of recoveredOperations) {
+        await completeVaultOperation(operation);
+      }
+    }
+  } catch (error) {
+    try {
+      openedDb?.close();
+    } catch (cleanupError) {
+      console.error(`Catalogue cleanup failed: ${errMsg(cleanupError)}`);
+    }
+    try {
+      vaultLock.release();
+    } catch (cleanupError) {
+      console.error(`Vault lock cleanup failed: ${errMsg(cleanupError)}`);
+    }
+    throw error;
+  }
   const profileStore = new ProviderProfileStore(
     providerSettingsPath(),
     new DenoProfileFileStore(),
@@ -77,9 +147,17 @@ export async function startApplication(
     // state is retained and will be revalidated when a provider is configured.
   }
 
+  const serverController = new AbortController();
+  const abortServer = () => serverController.abort();
+  signal?.addEventListener("abort", abortServer, { once: true });
+  if (signal?.aborted) abortServer();
   try {
     const server = Deno.serve(
-      { hostname: config.host, port: config.port, signal },
+      {
+        hostname: config.host,
+        port: config.port,
+        signal: serverController.signal,
+      },
       createHandler(
         db,
         resolveProviders,
@@ -89,13 +167,48 @@ export async function startApplication(
         },
         undefined,
         usageStore,
+        { onVaultSwitch: options.onVaultSwitch },
       ),
     );
-    closeCatalogueOnServerFinish(server, db, stopUsageAccounting);
-    return server;
+    const finished = closeCatalogueOnServerFinish(server, db, () => {
+      signal?.removeEventListener("abort", abortServer);
+      try {
+        stopUsageAccounting();
+      } finally {
+        vaultLock.release();
+      }
+    });
+    let closePromise: Promise<void> | undefined;
+    return {
+      server,
+      finished,
+      close() {
+        closePromise ??= (async () => {
+          signal?.removeEventListener("abort", abortServer);
+          if (serverController.signal.aborted) await server.finished;
+          else await server.shutdown();
+          await finished;
+        })();
+        return closePromise;
+      },
+    };
   } catch (error) {
-    stopUsageAccounting();
-    db.close();
+    signal?.removeEventListener("abort", abortServer);
+    try {
+      stopUsageAccounting();
+    } catch (cleanupError) {
+      console.error(`Usage cleanup failed: ${errMsg(cleanupError)}`);
+    }
+    try {
+      db.close();
+    } catch (cleanupError) {
+      console.error(`Catalogue cleanup failed: ${errMsg(cleanupError)}`);
+    }
+    try {
+      vaultLock.release();
+    } catch (cleanupError) {
+      console.error(`Vault lock cleanup failed: ${errMsg(cleanupError)}`);
+    }
     throw error;
   }
 }

@@ -16,6 +16,8 @@ import {
   graphLinkDistance,
   graphLinkStrength,
   graphNeighbourRows,
+  graphNodeConnectivity,
+  graphNodePresentation,
   searchContextGraph,
   seededGraphRandom,
   semanticNeighbourLinks,
@@ -30,6 +32,7 @@ import {
 import {
   compactEvidenceText,
   evidenceActionLabel,
+  evidenceSourceLabel,
   evidenceSourceLocation,
   evidenceSummary,
   initialReaderState,
@@ -45,12 +48,14 @@ import {
   REVIEW_DECISIONS,
   reviewDecisionsForEveryChange,
   reviewDecisionSummary,
+  reviewTextDiff,
 } from "./review_workflow.js";
 import {
   ollamaPreset,
   providerCapabilities,
   providerEmptyState,
   providerPresentation,
+  searchAvailabilityPresentation,
 } from "./provider_readiness.js";
 import { providerUsagePresentation } from "./provider_usage.js";
 import {
@@ -67,6 +72,7 @@ let uiConfig = {
   labelZoomThreshold: 1.5,
   semanticNeighbors: 3,
   maxSemanticNeighbors: 8,
+  vaultSwitchEnabled: false,
 };
 
 // --- Application shell ---
@@ -75,26 +81,89 @@ const addSourceButton = document.getElementById("add-source-btn");
 const sourcePanel = document.getElementById("source-panel");
 const sourcePanelClose = document.getElementById("source-panel-close");
 const navigationToggle = document.getElementById("nav-toggle");
+const workspaceCollapse = document.getElementById("workspace-collapse");
 const primaryNavigation = document.getElementById("primary-nav");
 const vaultTools = document.getElementById("vault-tools");
 const vaultMenuButton = document.getElementById("vault-menu-btn");
 const vaultMenu = document.getElementById("vault-menu");
+const vaultSwitchButton = document.getElementById("vault-switch-btn");
+const vaultSwitchModal = document.getElementById("vault-switch-modal");
+const vaultSwitchClose = document.getElementById("vault-switch-close");
+const vaultSwitchCancel = document.getElementById("vault-switch-cancel");
+const vaultSwitchConfirm = document.getElementById("vault-switch-confirm");
+const vaultSwitchStatus = document.getElementById("vault-switch-status");
+const appTopbar = document.getElementById("topbar");
+const appWorkspace = document.getElementById("workspace");
+const appMain = document.getElementById("main");
+const knowledgeLayout = document.getElementById("knowledge-layout");
+const knowledgeToolbar = document.querySelector(".knowledge-toolbar");
+const wikiPageSidebar = document.getElementById("sidebar");
+const pageListToggle = document.getElementById("page-list-toggle");
+const mobileNavigation = globalThis.matchMedia("(max-width: 780px)");
 let shellState = initialShellState();
+let graphMaximized = false;
 
 function renderShell() {
+  const isMobile = mobileNavigation.matches;
   sourcePanel.classList.toggle("hidden", !shellState.sourceOpen);
   addSourceButton.setAttribute("aria-expanded", String(shellState.sourceOpen));
   vaultMenu.classList.toggle("hidden", !shellState.toolsOpen);
   vaultMenuButton.setAttribute("aria-expanded", String(shellState.toolsOpen));
-  primaryNavigation.classList.toggle("is-open", shellState.navigationOpen);
+  primaryNavigation.classList.toggle(
+    "is-open",
+    isMobile && shellState.navigationOpen,
+  );
+  appWorkspace.classList.toggle(
+    "navigation-collapsed",
+    !isMobile && shellState.navigationCollapsed,
+  );
+  knowledgeLayout.classList.toggle(
+    "sidebar-hidden",
+    shellState.pageListCollapsed,
+  );
   navigationToggle.setAttribute(
     "aria-expanded",
     String(shellState.navigationOpen),
   );
+  const navigationLabel = shellState.navigationOpen
+    ? "Close workspace navigation"
+    : "Open workspace navigation";
   navigationToggle.setAttribute(
     "aria-label",
-    shellState.navigationOpen ? "Close navigation" : "Open navigation",
+    navigationLabel,
   );
+  navigationToggle.title = navigationLabel;
+  navigationToggle.textContent = shellState.navigationOpen ? "×" : "☰";
+  const collapseLabel = shellState.navigationCollapsed
+    ? "Expand workspace navigation"
+    : "Collapse workspace navigation";
+  workspaceCollapse.setAttribute(
+    "aria-expanded",
+    String(!shellState.navigationCollapsed),
+  );
+  workspaceCollapse.setAttribute("aria-label", collapseLabel);
+  workspaceCollapse.title = collapseLabel;
+  workspaceCollapse.textContent = shellState.navigationCollapsed ? "›" : "‹";
+  pageListToggle.setAttribute(
+    "aria-expanded",
+    String(!shellState.pageListCollapsed),
+  );
+  pageListToggle.textContent = shellState.pageListCollapsed
+    ? "Show page list"
+    : "Hide page list";
+  wikiPageSidebar.setAttribute(
+    "aria-hidden",
+    String(shellState.pageListCollapsed),
+  );
+  primaryNavigation.inert = graphMaximized ||
+    (isMobile ? !shellState.navigationOpen : shellState.navigationCollapsed);
+  workspaceCollapse.inert = graphMaximized;
+  wikiPageSidebar.inert = graphMaximized || shellState.pageListCollapsed;
+  sourcePanel.inert = graphMaximized || !shellState.sourceOpen;
+  appTopbar.inert = graphMaximized || shellState.sourceOpen;
+  knowledgeToolbar.inert = graphMaximized;
+  appWorkspace.inert = shellState.sourceOpen;
+  appMain.inert = isMobile && shellState.navigationOpen;
 }
 
 function updateShell(action) {
@@ -126,6 +195,10 @@ navigationToggle.addEventListener("click", () => {
   updateShell({ type: "toggle-navigation" });
 });
 
+workspaceCollapse.addEventListener("click", () => {
+  updateShell({ type: "toggle-navigation-collapse" });
+});
+
 primaryNavigation.addEventListener("click", (event) => {
   if (event.target.closest(".nav-item")) {
     updateShell({ type: "dismiss" });
@@ -134,9 +207,6 @@ primaryNavigation.addEventListener("click", (event) => {
 
 vaultMenuButton.addEventListener("click", () => {
   updateShell({ type: "toggle-tools" });
-  if (shellState.toolsOpen) {
-    queueMicrotask(() => vaultMenu.querySelector("button, a")?.focus());
-  }
 });
 
 vaultMenu.addEventListener("click", () => {
@@ -147,6 +217,14 @@ document.addEventListener("click", (event) => {
   if (shellState.toolsOpen && !vaultTools.contains(event.target)) {
     updateShell({ type: "close-tools" });
   }
+});
+
+vaultTools.addEventListener("focusout", () => {
+  queueMicrotask(() => {
+    if (shellState.toolsOpen && !vaultTools.contains(document.activeElement)) {
+      updateShell({ type: "close-tools" });
+    }
+  });
 });
 
 document.addEventListener("keydown", (event) => {
@@ -164,6 +242,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 renderShell();
+mobileNavigation.addEventListener("change", renderShell);
 
 async function fetchConfig() {
   try {
@@ -187,6 +266,14 @@ function applyConfig() {
   );
   document.getElementById("semantic-neighbours-value").textContent =
     slider.value;
+  vaultSwitchButton.classList.toggle(
+    "hidden",
+    !uiConfig.vaultSwitchEnabled,
+  );
+  document.getElementById("vault-session-actions").classList.toggle(
+    "hidden",
+    !uiConfig.vaultSwitchEnabled,
+  );
 }
 
 // --- API helpers ---
@@ -265,8 +352,17 @@ async function api(path, opts = {}) {
   }
 }
 
-function showModalDialog(dialog, initialFocus) {
+function showModalDialog(dialog, initialFocus, explicitReturnTarget) {
   if (dialog.open) return;
+  const activeElement = document.activeElement;
+  const returnTarget = explicitReturnTarget instanceof HTMLElement
+    ? explicitReturnTarget
+    : vaultMenu.contains(activeElement)
+    ? vaultMenuButton
+    : activeElement;
+  if (returnTarget instanceof HTMLElement) {
+    modalReturnTargets.set(dialog, returnTarget);
+  }
   dialog.showModal();
   initialFocus?.focus({ preventScroll: true });
 }
@@ -284,6 +380,146 @@ function bindModalDismissal(dialog, dismiss) {
     dismiss();
   });
 }
+
+const modalReturnTargets = new WeakMap();
+
+document.querySelectorAll("dialog").forEach((dialog) => {
+  dialog.addEventListener("close", () => {
+    const returnTarget = modalReturnTargets.get(dialog);
+    modalReturnTargets.delete(dialog);
+    if (
+      returnTarget?.isConnected && !returnTarget.disabled &&
+      !returnTarget.closest("[inert]")
+    ) {
+      returnTarget.focus({ preventScroll: true });
+    }
+  });
+});
+
+const confirmationModal = document.getElementById("confirmation-modal");
+const confirmationTitle = document.getElementById("confirmation-title");
+const confirmationDescription = document.getElementById(
+  "confirmation-description",
+);
+const confirmationCancel = document.getElementById("confirmation-cancel");
+const confirmationAccept = document.getElementById("confirmation-accept");
+let resolveConfirmation = null;
+
+function finishConfirmation(confirmed) {
+  const resolve = resolveConfirmation;
+  resolveConfirmation = null;
+  closeModalDialog(confirmationModal);
+  resolve?.(confirmed);
+}
+
+function confirmOperation(
+  { title, description, actionLabel, tone = "primary" },
+) {
+  if (resolveConfirmation) finishConfirmation(false);
+  confirmationTitle.textContent = title;
+  confirmationDescription.textContent = description;
+  confirmationAccept.textContent = actionLabel;
+  confirmationAccept.dataset.tone = tone;
+  return new Promise((resolve) => {
+    resolveConfirmation = resolve;
+    showModalDialog(confirmationModal, confirmationCancel);
+  });
+}
+
+confirmationCancel.addEventListener("click", () => finishConfirmation(false));
+confirmationAccept.addEventListener("click", () => finishConfirmation(true));
+bindModalDismissal(confirmationModal, () => finishConfirmation(false));
+
+const appNotification = document.getElementById("app-notification");
+const appNotificationMessage = document.getElementById(
+  "app-notification-message",
+);
+
+function showNotification(message, tone = "info") {
+  appNotificationMessage.textContent = message;
+  appNotification.dataset.tone = tone;
+  appNotification.setAttribute("role", tone === "error" ? "alert" : "status");
+  appNotification.classList.remove("hidden");
+}
+
+document.getElementById("app-notification-close").addEventListener(
+  "click",
+  () => appNotification.classList.add("hidden"),
+);
+
+function setActionLabel(button, label) {
+  const element = button.querySelector(".action-label");
+  if (element) element.textContent = label;
+  else button.textContent = label;
+}
+
+let vaultSwitchInProgress = false;
+
+function closeVaultSwitchModal() {
+  if (vaultSwitchInProgress) return;
+  closeModalDialog(vaultSwitchModal);
+  vaultSwitchStatus.textContent = "";
+}
+
+function setVaultSwitchBusy(busy) {
+  vaultSwitchInProgress = busy;
+  vaultSwitchClose.disabled = busy;
+  vaultSwitchCancel.disabled = busy;
+  vaultSwitchConfirm.disabled = busy;
+  vaultSwitchConfirm.textContent = busy
+    ? "Closing vault…"
+    : "Close and choose another";
+}
+
+async function waitForVaultChooser() {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    try {
+      const response = await fetch("/api/status", { cache: "no-store" });
+      const data = await response.json();
+      if (data.status === "choosing-vault") {
+        location.replace("/");
+        return;
+      }
+    } catch {
+      // The application and chooser briefly exchange the loopback port.
+    }
+  }
+  throw new Error("Synthesis could not return to the vault chooser");
+}
+
+vaultSwitchButton.addEventListener("click", () => {
+  vaultSwitchStatus.textContent = "";
+  showModalDialog(vaultSwitchModal, vaultSwitchCancel);
+});
+vaultSwitchClose.addEventListener("click", closeVaultSwitchModal);
+vaultSwitchCancel.addEventListener("click", closeVaultSwitchModal);
+bindModalDismissal(vaultSwitchModal, closeVaultSwitchModal);
+vaultSwitchConfirm.addEventListener("click", async () => {
+  if (semanticRebuildActive || activeIngestController !== null) {
+    vaultSwitchStatus.textContent =
+      "Stop the active ingest or semantic-index build before switching vaults.";
+    return;
+  }
+  setVaultSwitchBusy(true);
+  vaultSwitchStatus.textContent =
+    "Closing this vault safely and opening the vault chooser…";
+  const finishOperation = beginOperation("Closing the current vault…");
+  let switchAccepted = false;
+  try {
+    await api("vault/switch", { body: "{}", method: "POST" });
+    switchAccepted = true;
+    await waitForVaultChooser();
+  } catch (error) {
+    vaultSwitchStatus.textContent = error.code === "BUSY"
+      ? "Synthesis is busy. Finish or stop the active operation, then try again."
+      : switchAccepted
+      ? "The vault closed, but the chooser did not become available. Restart Synthesis to reopen it."
+      : `${error.message}. This vault remains open.`;
+    setVaultSwitchBusy(false);
+    finishOperation();
+  }
+});
 
 async function refreshShellCounts() {
   const [reviews, discoveries] = await Promise.allSettled([
@@ -343,16 +579,54 @@ async function consumeSse(response, onEvent) {
 const rebuildCatalogueButton = document.getElementById(
   "rebuild-catalogue-btn",
 );
+const verifyVaultButton = document.getElementById("verify-vault-btn");
 const rebuildSemanticButton = document.getElementById("rebuild-semantic-btn");
+const searchReadiness = document.getElementById("search-readiness");
+const searchReadinessTitle = document.getElementById(
+  "search-readiness-title",
+);
+const searchReadinessDetail = document.getElementById(
+  "search-readiness-detail",
+);
+const searchSemanticAction = document.getElementById(
+  "search-semantic-action",
+);
 let semanticRebuildActive = false;
 let semanticRebuildStopRequested = false;
+
+async function verifyVault() {
+  verifyVaultButton.disabled = true;
+  setActionLabel(verifyVaultButton, "Verifying…");
+  const finishOperation = beginOperation(
+    "Verifying authoritative vault files…",
+  );
+  try {
+    const data = await api("verify");
+    showNotification(
+      `Vault verified: ${data.verification.noteCount} wiki pages, ` +
+        `${data.verification.sourceCount} sources, and ` +
+        `${data.verification.provenanceCount} provenance links are healthy.`,
+    );
+  } catch (error) {
+    showNotification(`Vault verification failed: ${error.message}`, "error");
+  } finally {
+    finishOperation();
+    verifyVaultButton.disabled = false;
+    setActionLabel(verifyVaultButton, "Verify vault");
+  }
+}
+
+verifyVaultButton.addEventListener("click", verifyVault);
 
 function renderSemanticRebuildButton() {
   if (semanticRebuildActive) {
     rebuildSemanticButton.disabled = semanticRebuildStopRequested;
-    rebuildSemanticButton.textContent = semanticRebuildStopRequested
-      ? "Stopping after current batch..."
-      : "Stop after current batch";
+    setActionLabel(
+      rebuildSemanticButton,
+      semanticRebuildStopRequested
+        ? "Stopping after current batch..."
+        : "Stop after current batch",
+    );
     rebuildSemanticButton.title = semanticRebuildStopRequested
       ? "Semantic indexing will stop when the current bounded batch finishes"
       : "Stop semantic indexing after the current bounded batch";
@@ -364,26 +638,30 @@ function renderSemanticRebuildButton() {
     providerState.phase,
     semanticIndex,
   ).modelActions;
-  rebuildSemanticButton.textContent = semanticIndex?.complete
-    ? "Semantic index ready"
-    : semanticIndex?.embedded > 0
-    ? "Resume semantic index"
-    : "Build semantic index";
+  setActionLabel(
+    rebuildSemanticButton,
+    semanticIndex?.complete
+      ? "Semantic index ready"
+      : semanticIndex?.embedded > 0
+      ? "Resume semantic index"
+      : "Build semantic index",
+  );
   rebuildSemanticButton.title = semanticIndex?.complete
     ? "Semantic search and connection state cover the whole wiki"
     : "Build or resume semantic search and connection state for the whole wiki";
 }
 
 async function rebuildCatalogue() {
-  const confirmed = globalThis.confirm(
-    "Rebuild the local catalogue from authoritative vault files? " +
-      "Accepted Markdown and sources stay intact. Embeddings, semantic " +
-      "connections, pending proposals, and discovery review state are reset.",
-  );
+  const confirmed = await confirmOperation({
+    title: "Rebuild catalogue?",
+    description:
+      "Accepted Markdown and sources stay intact. Embeddings, semantic connections, pending proposals, and discovery review state are reset.",
+    actionLabel: "Rebuild catalogue",
+  });
   if (!confirmed) return;
 
   rebuildCatalogueButton.disabled = true;
-  rebuildCatalogueButton.textContent = "Rebuilding...";
+  setActionLabel(rebuildCatalogueButton, "Rebuilding…");
   const finishOperation = beginOperation(
     "Rebuilding the vault catalogue…",
   );
@@ -393,17 +671,17 @@ async function rebuildCatalogue() {
       body: JSON.stringify({ confirm: "REBUILD" }),
     });
     await Promise.all([loadNoteList(), loadGraph()]);
-    globalThis.alert(
+    showNotification(
       `Rebuilt ${data.rebuild.noteCount} wiki pages from ` +
         `${data.rebuild.sourceCount} sources. Keyword search and explicit ` +
         "wiki links are ready. Use Build semantic index to restore semantic search and proximity suggestions.",
     );
   } catch (error) {
-    globalThis.alert(error.message);
+    showNotification(error.message, "error");
   } finally {
     finishOperation();
     rebuildCatalogueButton.disabled = false;
-    rebuildCatalogueButton.textContent = "Rebuild";
+    setActionLabel(rebuildCatalogueButton, "Rebuild catalogue");
   }
 }
 
@@ -413,17 +691,22 @@ async function rebuildSemanticIndex() {
   if (semanticRebuildActive) {
     semanticRebuildStopRequested = true;
     renderSemanticRebuildButton();
+    renderSearchAvailability();
     return;
   }
 
-  const confirmed = globalThis.confirm(
-    "Build or resume the semantic index for the whole wiki using the explicitly configured embedding provider? Relevant wiki text will be sent to that provider. Synthesis works in safe batches of up to 20 pages; use Stop after current batch to pause.",
-  );
+  const confirmed = await confirmOperation({
+    title: "Build semantic index?",
+    description:
+      "Relevant wiki text will be sent to the explicitly selected embedding provider. Synthesis works in safe batches of up to 20 pages; use Stop after current batch to pause.",
+    actionLabel: "Build semantic index",
+  });
   if (!confirmed) return;
 
   semanticRebuildActive = true;
   semanticRebuildStopRequested = false;
   renderSemanticRebuildButton();
+  renderSearchAvailability();
   const finishOperation = beginOperation(
     "Building the semantic index…",
   );
@@ -446,39 +729,44 @@ async function rebuildSemanticIndex() {
       shouldStop: () => semanticRebuildStopRequested,
       onProgress: (status) => {
         providerState = { ...providerState, semanticIndex: status };
+        renderSearchAvailability();
       },
     });
     const status = result.status;
     await Promise.all([refreshProviderMode(), loadGraph()]);
-    globalThis.alert(
+    showNotification(
       status.complete
         ? `Semantic index ready for ${status.total} wiki pages; ${status.links} mutual proximity links were rebuilt.`
         : `Stopped safely after indexing ${status.embedded} of ${status.total} wiki pages. Choose Resume semantic index to continue with the remaining ${status.remaining}.`,
     );
   } catch (error) {
-    globalThis.alert(error.message);
+    showNotification(error.message, "error");
   } finally {
     finishOperation();
     semanticRebuildActive = false;
     semanticRebuildStopRequested = false;
     renderSemanticRebuildButton();
+    renderSearchAvailability();
   }
 }
 
 rebuildSemanticButton.addEventListener("click", rebuildSemanticIndex);
+searchSemanticAction.addEventListener("click", rebuildSemanticIndex);
 
 const undoIngestButton = document.getElementById("undo-ingest-btn");
 
 async function undoIngest() {
-  const confirmed = globalThis.confirm(
-    "Undo the latest accepted ingest? Pages it created will leave the live " +
-      "wiki and pages it changed will return to their prior revisions. " +
-      "Immutable sources and revision history are retained.",
-  );
+  const confirmed = await confirmOperation({
+    title: "Undo latest ingest?",
+    description:
+      "Pages it created will leave the live wiki and pages it changed will return to their prior revisions. Immutable sources and revision history are retained.",
+    actionLabel: "Undo latest ingest",
+    tone: "danger",
+  });
   if (!confirmed) return;
 
   undoIngestButton.disabled = true;
-  undoIngestButton.textContent = "Undoing...";
+  setActionLabel(undoIngestButton, "Undoing…");
   const finishOperation = beginOperation("Undoing the latest ingest…");
   try {
     const data = await api("ingest/undo", {
@@ -489,17 +777,17 @@ async function undoIngest() {
     const indexWarning = data.undo.indexUpdated
       ? ""
       : " The wiki index could not be refreshed; use Rebuild.";
-    globalThis.alert(
+    showNotification(
       `Undid “${data.undo.sourceTitle}”: restored ` +
         `${data.undo.restoredCount} and removed ${data.undo.removedCount} ` +
         `live wiki pages.${indexWarning}`,
     );
   } catch (error) {
-    globalThis.alert(error.message);
+    showNotification(error.message, "error");
   } finally {
     finishOperation();
     undoIngestButton.disabled = false;
-    undoIngestButton.textContent = "Undo ingest";
+    setActionLabel(undoIngestButton, "Undo latest ingest");
   }
 }
 
@@ -512,7 +800,6 @@ let graphData = { nodes: [], links: [] };
 let rawGraphData = { nodes: [], links: [] };
 let graphSearch = null;
 let graphFocusId = null;
-let graphMaximized = false;
 let graphAutoFitPending = false;
 let fitGraphToViewport = () => {};
 let refreshGraphFocusHighlight = () => {};
@@ -592,7 +879,6 @@ const graphPanel = document.getElementById("graph-panel");
 const graphElement = document.getElementById("graph");
 const graphMaximizeButton = document.getElementById("graph-maximize");
 const graphFitButton = document.getElementById("graph-fit");
-const knowledgeLayout = document.getElementById("knowledge-layout");
 const workspaceTitle = document.getElementById("workspace-title");
 const wikiWorkspace = document.getElementById("wiki-workspace");
 const reviewWorkspace = document.getElementById("review-workspace");
@@ -600,14 +886,6 @@ const wikiNavigationButton = document.getElementById("wiki-nav-btn");
 const reviewNavigationButton = document.getElementById("review-open-btn");
 let readerState = initialReaderState();
 let primaryWorkspace = "wiki";
-
-const graphMaximizeInertTargets = [
-  document.getElementById("topbar"),
-  primaryNavigation,
-  document.querySelector(".knowledge-toolbar"),
-  document.getElementById("sidebar"),
-  sourcePanel,
-].filter(Boolean);
 
 function resizeGraphViewport() {
   if (
@@ -634,11 +912,9 @@ function setGraphMaximized(maximized, resize = true) {
   graphPanel.classList.toggle("is-maximized", graphMaximized);
   graphMaximizeButton.setAttribute("aria-pressed", String(graphMaximized));
   graphMaximizeButton.textContent = graphMaximized
-    ? "Restore graph"
-    : "Maximise graph";
-  for (const target of graphMaximizeInertTargets) {
-    target.inert = graphMaximized;
-  }
+    ? "Exit full screen"
+    : "Full screen graph";
+  renderShell();
   if (graphMaximized) {
     graphPanel.setAttribute("role", "dialog");
     graphPanel.setAttribute("aria-modal", "true");
@@ -736,16 +1012,18 @@ pageViewButton.addEventListener("click", () => {
 });
 connectionsViewButton.addEventListener("click", () => {
   graphAutoFitPending = true;
-  // The graph is rendered after the maximised class takes effect, so a resize
-  // restart here would prematurely cool its initial settling animation.
-  setGraphMaximized(true, false);
   updateReader({ type: "show-connections" });
   requestAnimationFrame(() =>
-    graphMaximizeButton.focus({ preventScroll: true })
+    document.getElementById("connections-title").focus({ preventScroll: true })
   );
 });
+pageListToggle.addEventListener("click", () => {
+  updateShell({ type: "toggle-page-list" });
+});
 graphMaximizeButton.addEventListener("click", () => {
-  setGraphMaximized(!graphMaximized);
+  const maximize = !graphMaximized;
+  if (maximize) graphAutoFitPending = true;
+  setGraphMaximized(maximize);
 });
 graphFitButton.addEventListener("click", () => {
   graphAutoFitPending = false;
@@ -765,7 +1043,10 @@ readerAddSourceButton.addEventListener("click", () => {
     openProviderModal();
   }
 });
-wikiNavigationButton.addEventListener("click", () => showWikiWorkspace());
+wikiNavigationButton.addEventListener("click", () => {
+  showWikiWorkspace();
+  workspaceTitle.focus({ preventScroll: true });
+});
 
 renderReaderWorkspace();
 renderPrimaryWorkspace();
@@ -922,6 +1203,8 @@ const proposalSourceInspect = document.getElementById(
 let selectedProposalId = null;
 let selectedProposalSourceId = null;
 let proposalBusy = false;
+let proposalDraftTimer = null;
+let proposalDraftSave = Promise.resolve();
 
 function proposalDecisions() {
   return [...proposalChanges.querySelectorAll(".proposal-change-decision")]
@@ -939,17 +1222,74 @@ function selectedProposalChanges() {
   );
 }
 
+function currentProposalDraft() {
+  return {
+    changes: [...proposalChanges.querySelectorAll(".proposal-change")].map(
+      (item) => ({
+        index: Number(item.dataset.changeIndex),
+        decision: item.querySelector(".proposal-change-decision")?.value ??
+          REVIEW_DECISIONS.pending,
+        body: item.querySelector(".proposal-body-edit")?.value ?? "",
+      }),
+    ),
+  };
+}
+
+function saveProposalDraft(proposalId, draft) {
+  proposalDraftSave = proposalDraftSave.then(async () => {
+    try {
+      await api(`proposals/${proposalId}/draft`, {
+        method: "PUT",
+        body: JSON.stringify(draft),
+      });
+      if (selectedProposalId === proposalId) {
+        reviewStatus.textContent = "Review draft saved locally.";
+      }
+    } catch (error) {
+      if (selectedProposalId === proposalId) {
+        reviewStatus.textContent = `Draft was not saved: ${error.message}`;
+      }
+    }
+  });
+  return proposalDraftSave;
+}
+
+function scheduleProposalDraftSave() {
+  if (!selectedProposalId || proposalBusy) return;
+  clearTimeout(proposalDraftTimer);
+  const proposalId = selectedProposalId;
+  proposalDraftTimer = setTimeout(() => {
+    proposalDraftTimer = null;
+    void saveProposalDraft(proposalId, currentProposalDraft());
+  }, 400);
+}
+
+async function flushProposalDraft() {
+  if (proposalDraftTimer && selectedProposalId) {
+    clearTimeout(proposalDraftTimer);
+    proposalDraftTimer = null;
+    await saveProposalDraft(selectedProposalId, currentProposalDraft());
+  } else await proposalDraftSave;
+}
+
 function updateProposalApprovalControls() {
   const decisions = proposalDecisions();
   const summary = reviewDecisionSummary(decisions);
+  const includedBodiesAreValid = [...proposalChanges.querySelectorAll(
+    ".proposal-change",
+  )].every((item) =>
+    item.querySelector(".proposal-change-decision")?.value !==
+      REVIEW_DECISIONS.include ||
+    item.querySelector(".proposal-body-edit")?.value.trim()
+  );
   const modelActions = providerCapabilities(providerState.phase).modelActions;
   proposalDecisionSummary.textContent = summary.pending > 0
     ? `${summary.pending} decision${
       summary.pending === 1 ? "" : "s"
     } remaining · ${summary.include} include · ${summary.exclude} exclude`
     : `${summary.include} to apply · ${summary.exclude} excluded`;
-  proposalApprove.textContent = !modelActions
-    ? "AI provider required to apply"
+  proposalApprove.textContent = !includedBodiesAreValid
+    ? "Included changes need content"
     : summary.pending > 0
     ? `Review ${summary.pending} remaining`
     : summary.include > 0
@@ -958,10 +1298,9 @@ function updateProposalApprovalControls() {
     }`
     : "Include at least one change";
   proposalApprove.disabled = proposalBusy || !summary.canApprove ||
-    !modelActions;
-  proposalApprove.title = modelActions
-    ? ""
-    : "Applying proposed changes requires an available AI provider.";
+    !includedBodiesAreValid;
+  proposalApprove.title =
+    "Applying reviewed changes works without an AI provider.";
   proposalReprocess.disabled = proposalBusy || !modelActions;
   proposalReprocess.title = modelActions
     ? "Regenerate this pending proposal from its archived source against the current wiki."
@@ -979,19 +1318,23 @@ function setProposalBusy(busy) {
   proposalBusy = busy;
   proposalReprocess.disabled = busy;
   proposalReject.disabled = busy;
+  proposalList.querySelectorAll("button").forEach((control) => {
+    control.disabled = busy;
+  });
   proposalChanges.querySelectorAll("select, textarea").forEach((control) => {
     control.disabled = busy;
   });
   updateProposalApprovalControls();
 }
 
-function setProposalItemDecision(item, value) {
+function setProposalItemDecision(item, value, save = true) {
   const decision = item.querySelector(".proposal-change-decision");
   const body = item.querySelector(".proposal-body-edit");
   if (!decision || !body) return;
   decision.value = value;
   item.dataset.decision = value;
   body.readOnly = value !== REVIEW_DECISIONS.include;
+  if (save) scheduleProposalDraftSave();
 }
 
 function includeAllProposalChanges() {
@@ -1001,8 +1344,9 @@ function includeAllProposalChanges() {
     REVIEW_DECISIONS.include,
   );
   items.forEach((item, index) => {
-    setProposalItemDecision(item, decisions[index]);
+    setProposalItemDecision(item, decisions[index], false);
   });
+  scheduleProposalDraftSave();
   updateProposalApprovalControls();
   reviewStatus.textContent = `Included all ${items.length} proposed change${
     items.length === 1 ? "" : "s"
@@ -1034,7 +1378,15 @@ function proposalEvidence(change, source) {
   pages.textContent = ranges
     ? `Referenced PDF pages ${ranges}`
     : `Source type: ${source.sourceType}`;
-  evidence.append(heading, title, summary, pages);
+  const inspect = document.createElement("button");
+  inspect.type = "button";
+  inspect.textContent = ranges
+    ? `Read archived page ${change.sourcePages[0]}`
+    : "Read archived evidence";
+  inspect.addEventListener("click", () => {
+    void openSourcesModal(source.id, change.sourcePages?.[0]);
+  });
+  evidence.append(heading, title, summary, pages, inspect);
   return evidence;
 }
 
@@ -1084,12 +1436,31 @@ function proposalChangeItem(change, index, source) {
     currentPanel.className = "proposal-version proposal-version-current";
     const currentHeading = document.createElement("h4");
     currentHeading.textContent = "Current durable page";
-    const currentMarkdown = document.createElement("pre");
+    const currentMarkdown = document.createElement("div");
+    currentMarkdown.className = "proposal-rendered-body";
     currentMarkdown.textContent = "Loading current page...";
-    currentPanel.append(currentHeading, currentMarkdown);
+    const diffHeading = document.createElement("h4");
+    diffHeading.textContent = "Line-by-line change map";
+    const diff = document.createElement("div");
+    diff.className = "proposal-text-diff";
+    const renderDiff = (before) => {
+      diff.replaceChildren(
+        ...reviewTextDiff(before, proposedBody.value).map((entry) => {
+          const line = document.createElement("div");
+          line.className = `proposal-diff-${entry.kind}`;
+          line.textContent = `${
+            entry.kind === "add" ? "+" : entry.kind === "remove" ? "−" : " "
+          } ${entry.text}`;
+          return line;
+        }),
+      );
+    };
+    currentPanel.append(currentHeading, currentMarkdown, diffHeading, diff);
     comparison.appendChild(currentPanel);
     api(`notes/${change.pageId}`).then((data) => {
-      currentMarkdown.textContent = data.content;
+      currentMarkdown.innerHTML = data.bodyHtml;
+      renderDiff(data.body);
+      proposedBody.addEventListener("input", () => renderDiff(data.body));
     }).catch((error) => {
       currentMarkdown.textContent =
         `Current page could not be loaded: ${error.message}`;
@@ -1116,6 +1487,10 @@ function proposalChangeItem(change, index, source) {
   proposedBody.readOnly = true;
   decision.addEventListener("change", () => {
     setProposalItemDecision(item, decision.value);
+    updateProposalApprovalControls();
+  });
+  proposedBody.addEventListener("input", () => {
+    scheduleProposalDraftSave();
     updateProposalApprovalControls();
   });
   proposedPanel.append(proposedHeading, proposedBody);
@@ -1165,11 +1540,21 @@ function showProposal(proposal) {
       proposalChangeItem(change, index, proposal.source)
     ),
   );
+  for (const draft of proposal.draft?.changes ?? []) {
+    const item = proposalChanges.querySelector(
+      `[data-change-index="${CSS.escape(String(draft.index))}"]`,
+    );
+    const body = item?.querySelector(".proposal-body-edit");
+    if (!item || !body) continue;
+    body.value = draft.body;
+    setProposalItemDecision(item, draft.decision, false);
+  }
   proposalDetail.classList.remove("hidden");
   setProposalBusy(false);
 }
 
 async function loadProposalDetail(proposalId, button) {
+  await flushProposalDraft();
   selectedProposalId = proposalId;
   setProposalLocation(proposalId);
   for (const item of proposalList.querySelectorAll("button")) {
@@ -1185,7 +1570,9 @@ async function loadProposalDetail(proposalId, button) {
     const data = await api(`proposals/${proposalId}`);
     if (selectedProposalId !== proposalId) return;
     showProposal(data.proposal);
-    reviewStatus.textContent = "Review every change before deciding.";
+    reviewStatus.textContent = data.proposal.draft
+      ? "Your saved review draft was restored."
+      : "Review every change before deciding.";
   } catch (error) {
     if (selectedProposalId !== proposalId) return;
     reviewStatus.textContent = error.message;
@@ -1261,6 +1648,7 @@ async function openReviewWorkspace(preferredId, updateHistory = true) {
 
 async function approveSelectedProposal() {
   if (!selectedProposalId) return;
+  const proposalId = selectedProposalId;
   const summary = reviewDecisionSummary(proposalDecisions());
   if (summary.pending > 0) {
     reviewStatus.textContent =
@@ -1272,17 +1660,23 @@ async function approveSelectedProposal() {
     reviewStatus.textContent = "Include at least one change before applying.";
     return;
   }
+  if (changes.some((change) => !change.body.trim())) {
+    reviewStatus.textContent = "Included changes must contain page content.";
+    return;
+  }
   setProposalBusy(true);
-  reviewStatus.textContent = `Applying ${changes.length} reviewed change${
-    changes.length === 1 ? "" : "s"
-  }...`;
   const finishOperation = beginOperation(
     "Applying reviewed changes…",
     reviewStatus,
   );
   try {
+    reviewStatus.textContent = "Saving the final review draft...";
+    await flushProposalDraft();
+    reviewStatus.textContent = `Applying ${changes.length} reviewed change${
+      changes.length === 1 ? "" : "s"
+    }...`;
     const response = await fetch(
-      `/api/proposals/${selectedProposalId}/approve`,
+      `/api/proposals/${proposalId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1322,14 +1716,18 @@ async function approveSelectedProposal() {
 
 async function rejectSelectedProposal() {
   if (!selectedProposalId) return;
+  const proposalId = selectedProposalId;
   setProposalBusy(true);
+  clearTimeout(proposalDraftTimer);
+  proposalDraftTimer = null;
+  await proposalDraftSave;
   reviewStatus.textContent = "Rejecting proposal...";
   const finishOperation = beginOperation(
     "Rejecting the proposal…",
     reviewStatus,
   );
   try {
-    await api(`proposals/${selectedProposalId}/reject`, {
+    await api(`proposals/${proposalId}/reject`, {
       method: "POST",
       body: "{}",
     });
@@ -1346,6 +1744,7 @@ async function reprocessSelectedProposal() {
   if (!selectedProposalId) return;
   const proposalId = selectedProposalId;
   setProposalBusy(true);
+  await flushProposalDraft();
   reviewStatus.textContent =
     "Reprocessing archived source against the current wiki...";
   const finishOperation = beginOperation(
@@ -1386,7 +1785,8 @@ async function reprocessSelectedProposal() {
 }
 
 reviewNavigationButton.addEventListener("click", () => {
-  if (primaryWorkspace !== "review") openReviewWorkspace();
+  if (primaryWorkspace !== "review") void openReviewWorkspace();
+  document.getElementById("review-title").focus({ preventScroll: true });
 });
 proposalApprove.addEventListener("click", approveSelectedProposal);
 proposalIncludeAll.addEventListener("click", includeAllProposalChanges);
@@ -1958,6 +2358,9 @@ const embeddingKeyInput = document.getElementById("provider-embed-key");
 const askOpenButton = document.getElementById("ask-open-btn");
 const ingestButton = document.getElementById("ingest-btn");
 const ingestCancelButton = document.getElementById("ingest-cancel-btn");
+const sourceProviderHelp = document.getElementById("source-provider-help");
+const sourceProviderHelpText = sourceProviderHelp.querySelector("p");
+const sourceProviderOpen = document.getElementById("source-provider-open");
 let activeIngestController = null;
 let providerState = { phase: "checking", mode: "unknown" };
 let vaultEmbeddingDimensions = 768;
@@ -1988,6 +2391,31 @@ function setProviderBusy(busy) {
   providerDiagnose.disabled = busy;
 }
 
+function renderSearchAvailability() {
+  const state = searchAvailabilityPresentation(providerState);
+  searchReadiness.dataset.mode = semanticRebuildActive
+    ? "checking"
+    : state.mode;
+  searchReadinessTitle.textContent = state.title;
+  searchReadinessDetail.textContent = semanticRebuildActive
+    ? `Building the semantic index (${
+      providerState.semanticIndex?.embedded ?? 0
+    } of ${
+      providerState.semanticIndex?.total ?? 0
+    } wiki pages). Keyword search remains active until indexing finishes.`
+    : state.detail;
+  const showAction = semanticRebuildActive || state.actionLabel !== null;
+  searchSemanticAction.classList.toggle("hidden", !showAction);
+  searchSemanticAction.textContent = semanticRebuildActive
+    ? semanticRebuildStopRequested
+      ? "Stopping after current batch…"
+      : "Stop after current batch"
+    : state.actionLabel ?? "Build semantic index";
+  searchSemanticAction.disabled = semanticRebuildActive
+    ? semanticRebuildStopRequested
+    : providerState.phase !== "ready";
+}
+
 function renderProviderState(nextState) {
   providerState = { ...providerState, ...nextState };
   const presentation = providerPresentation(providerState);
@@ -2003,21 +2431,26 @@ function renderProviderState(nextState) {
     `${presentation.text}. ${presentation.description} Open AI provider settings.`,
   );
 
-  addSourceButton.disabled = !capabilities.modelActions;
+  addSourceButton.disabled = false;
   askOpenButton.disabled = !capabilities.modelActions;
   discoveriesScan.disabled = !capabilities.modelActions;
   lintAnalyse.disabled = !capabilities.modelActions;
   ingestButton.disabled = !capabilities.modelActions ||
     activeIngestController !== null;
+  sourceProviderHelp.classList.toggle("hidden", capabilities.modelActions);
+  sourceProviderHelpText.textContent = providerState.phase === "checking"
+    ? "Checking the selected AI provider. Source preparation will become available when it is ready."
+    : "AI is unavailable. Configure a provider before preparing this source; no source content is sent until you explicitly choose one.";
   renderSemanticRebuildButton();
+  renderSearchAvailability();
   const emptyState = providerEmptyState(providerState.phase);
   readerAddSourceButton.textContent = emptyState.label;
   readerAddSourceButton.title = capabilities.modelActions
     ? ""
     : "Configure an AI provider before preparing the first source.";
-  searchInput.placeholder = capabilities.modelActions
-    ? "Search your knowledge base..."
-    : "Search wiki pages (keyword)...";
+  searchInput.placeholder = capabilities.semanticSearch
+    ? "Search wiki pages by meaning..."
+    : "Search wiki pages by keyword...";
   const unavailableHelp =
     "AI is unavailable. Reading, evidence, review queues, and keyword search still work.";
   for (
@@ -2033,6 +2466,11 @@ function renderProviderState(nextState) {
   }
   updateProposalApprovalControls();
 }
+
+sourceProviderOpen.addEventListener("click", () => {
+  updateShell({ type: "close-source" });
+  openProviderModal(addSourceButton);
+});
 
 async function refreshProviderMode() {
   renderProviderState({ phase: "checking" });
@@ -2092,8 +2530,12 @@ function populateProviderForm(data) {
   }
 }
 
-async function openProviderModal() {
-  showModalDialog(providerModal);
+async function openProviderModal(returnTarget) {
+  showModalDialog(
+    providerModal,
+    undefined,
+    returnTarget instanceof HTMLElement ? returnTarget : undefined,
+  );
   providerStatus.textContent = "Loading provider settings...";
   setProviderBusy(true);
   const finishOperation = beginOperation(
@@ -2344,7 +2786,25 @@ const sourcesModal = document.getElementById("sources-modal");
 const sourcesStatus = document.getElementById("sources-status");
 const sourcesList = document.getElementById("sources-list");
 const sourceDetail = document.getElementById("source-detail");
+const sourceEvidence = document.getElementById("source-evidence");
+const sourceEvidenceText = document.getElementById("source-evidence-text");
+const sourceEvidenceIntegrity = document.getElementById(
+  "source-evidence-integrity",
+);
+const sourceEvidenceNavigation = document.getElementById(
+  "source-evidence-navigation",
+);
+const sourceEvidencePage = document.getElementById("source-evidence-page");
+const sourceEvidencePrevious = document.getElementById(
+  "source-evidence-previous",
+);
+const sourceEvidenceNext = document.getElementById("source-evidence-next");
 let selectedSourceId = null;
+let selectedSourceEvidencePage = null;
+let selectedSourceEvidencePageCount = null;
+let requestedSourceEvidencePage = null;
+let requestedSourceEvidenceSourceId = null;
+let sourceEvidenceRequest = 0;
 
 function safeSourceUrl(value) {
   if (!value) return null;
@@ -2359,6 +2819,49 @@ function safeSourceUrl(value) {
 function closeSourcesModal() {
   closeModalDialog(sourcesModal);
   selectedSourceId = null;
+  requestedSourceEvidencePage = null;
+  requestedSourceEvidenceSourceId = null;
+  sourceEvidenceRequest++;
+}
+
+async function loadSourceEvidence(sourceId, page) {
+  const request = ++sourceEvidenceRequest;
+  selectedSourceEvidencePage = null;
+  selectedSourceEvidencePageCount = null;
+  sourceEvidenceNavigation.classList.add("hidden");
+  sourceEvidence.classList.remove("hidden");
+  sourceEvidenceText.textContent = "Verifying archived evidence...";
+  sourceEvidenceIntegrity.textContent = "Checking archive integrity...";
+  try {
+    const query = Number.isSafeInteger(page) ? `?page=${page}` : "";
+    const data = await api(`sources/${sourceId}/content${query}`);
+    if (selectedSourceId !== sourceId || sourceEvidenceRequest !== request) {
+      return;
+    }
+    sourceEvidenceText.textContent = data.text || "No extractable text.";
+    sourceEvidenceIntegrity.textContent = data.extractedTextVerified
+      ? "Integrity verified against the archived extraction hash."
+      : "Original file integrity is verified; this older extraction predates text hashes.";
+    if (data.truncated) {
+      sourceEvidenceIntegrity.textContent +=
+        " This long section is truncated in the reader.";
+    }
+    selectedSourceEvidencePage = data.page ?? null;
+    selectedSourceEvidencePageCount = data.pageCount ?? null;
+    sourceEvidenceNavigation.classList.toggle("hidden", !data.pageCount);
+    if (data.pageCount) {
+      sourceEvidencePage.textContent = `Page ${data.page} of ${data.pageCount}`;
+      sourceEvidencePrevious.disabled = data.page <= 1;
+      sourceEvidenceNext.disabled = data.page >= data.pageCount;
+    }
+  } catch (error) {
+    if (selectedSourceId !== sourceId || sourceEvidenceRequest !== request) {
+      return;
+    }
+    sourceEvidenceText.textContent = "";
+    sourceEvidenceIntegrity.textContent = error.message;
+    sourceEvidenceNavigation.classList.add("hidden");
+  }
 }
 
 function showSourceDetail(data) {
@@ -2417,6 +2920,12 @@ async function loadSourceDetail(sourceId, button) {
     const data = await api(`sources/${sourceId}`);
     if (selectedSourceId !== sourceId) return;
     showSourceDetail(data);
+    const requestedPage = requestedSourceEvidenceSourceId === sourceId
+      ? requestedSourceEvidencePage
+      : null;
+    requestedSourceEvidencePage = null;
+    requestedSourceEvidenceSourceId = null;
+    await loadSourceEvidence(sourceId, requestedPage);
     sourcesStatus.textContent = "";
   } catch (error) {
     if (selectedSourceId !== sourceId) return;
@@ -2427,7 +2936,9 @@ async function loadSourceDetail(sourceId, button) {
   }
 }
 
-async function openSourcesModal(preferredSourceId) {
+async function openSourcesModal(preferredSourceId, preferredPage = null) {
+  requestedSourceEvidencePage = preferredPage;
+  requestedSourceEvidenceSourceId = preferredSourceId ?? null;
   showModalDialog(sourcesModal);
   sourcesList.replaceChildren();
   sourceDetail.classList.add("hidden");
@@ -2488,6 +2999,19 @@ document.getElementById("sources-close").addEventListener(
   closeSourcesModal,
 );
 bindModalDismissal(sourcesModal, closeSourcesModal);
+sourceEvidencePrevious.addEventListener("click", () => {
+  if (selectedSourceId && selectedSourceEvidencePage > 1) {
+    void loadSourceEvidence(selectedSourceId, selectedSourceEvidencePage - 1);
+  }
+});
+sourceEvidenceNext.addEventListener("click", () => {
+  if (
+    selectedSourceId &&
+    selectedSourceEvidencePage < selectedSourceEvidencePageCount
+  ) {
+    void loadSourceEvidence(selectedSourceId, selectedSourceEvidencePage + 1);
+  }
+});
 
 // --- Deterministic wiki health checks ---
 
@@ -2640,6 +3164,9 @@ function renderEvidence(page) {
   const sourceById = new Map(
     (page.sources ?? []).map((source) => [source.id, source]),
   );
+  const sourcePositions = new Map(
+    (page.sources ?? []).map((source, index) => [source.id, index]),
+  );
   const claims = (page.claims ?? []).map((claim) => {
     const text = compactEvidenceText(claim.text);
     const citedSources = (claim.sourceIds ?? []).map((sourceId) =>
@@ -2648,8 +3175,15 @@ function renderEvidence(page) {
     const citations = citedSources.length > 0
       ? citedSources.map((source) => {
         const location = evidenceSourceLocation(source);
+        const label = evidenceSourceLabel(
+          source,
+          sourcePositions.get(source.id),
+        );
         return `<button type="button" class="note-source-link" ` +
-          `data-source-id="${source.id}">${escapeHtml(source.title)}` +
+          `data-source-id="${source.id}" title="${escapeHtml(source.title)}" ` +
+          `aria-label="${escapeHtml(source.title)}${
+            location ? `, ${escapeHtml(location)}` : ""
+          }">${escapeHtml(label)}` +
           `${location ? ` · ${escapeHtml(location)}` : ""}</button>`;
       }).join("")
       : "<span>No catalogued source</span>";
@@ -2927,8 +3461,7 @@ async function doSearch(q, requestedMode) {
   const list = document.getElementById("note-list");
   const pageCount = document.getElementById("page-count");
 
-  list.innerHTML =
-    '<li style="color:#7a7f94;font-style:italic">Searching...</li>';
+  list.innerHTML = '<li class="search-progress">Searching…</li>';
   searchInput.disabled = true;
   clearGraphSearch();
   let attemptedMode = requestedMode ?? "keyword";
@@ -2991,8 +3524,7 @@ async function doSearch(q, requestedMode) {
       list.appendChild(li);
     }
     if (list.children.length === 0) {
-      list.innerHTML =
-        '<li style="color:#7a7f94;font-style:italic">No results</li>';
+      list.innerHTML = '<li class="search-empty">No results</li>';
     }
   } catch (err) {
     clearGraphSearch();
@@ -3551,33 +4083,56 @@ function renderGraph() {
       return `rgb(${r}, ${gg}, ${b})`;
     })
     .attr("stroke-width", (d) => {
-      if (d.kind === "explicit") return 2.6;
+      if (d.kind === "explicit") return 1.15;
       const sim = d.similarity ?? 0.6;
-      return 1.0 + 2.0 * ((sim - minSim) / ((maxSim - minSim) || 1));
+      return 0.75 + 0.65 * ((sim - minSim) / ((maxSim - minSim) || 1));
     })
     .attr("stroke-opacity", (d) => {
-      if (d.kind === "explicit") return 0.9;
+      if (d.kind === "explicit") return 0.24;
       const sim = d.similarity ?? 0.6;
-      return 0.28 + 0.50 * ((sim - minSim) / ((maxSim - minSim) || 1));
+      return 0.12 + 0.20 * ((sim - minSim) / ((maxSim - minSim) || 1));
     });
 
-  const degree = new Map();
-  for (const n of graphData.nodes) degree.set(n.id, 0);
-  for (const l of graphData.links) {
-    degree.set(
-      l.source.id ?? l.source,
-      (degree.get(l.source.id ?? l.source) ?? 0) + 1,
-    );
-    degree.set(
-      l.target.id ?? l.target,
-      (degree.get(l.target.id ?? l.target) ?? 0) + 1,
-    );
-  }
+  const fullNodeConnectivity = graphNodeConnectivity(
+    rawGraphData.nodes,
+    rawGraphData.links,
+  );
+  const visibleNodeConnectivity = graphNodeConnectivity(
+    graphData.nodes,
+    graphData.links,
+  );
+  const nodeConnectivity = new Map(graphData.nodes.map((datum) => {
+    const reviewedConnections = fullNodeConnectivity.get(datum.id)
+      ?.reviewedConnections ?? 0;
+    const suggestedConnections = visibleNodeConnectivity.get(datum.id)
+      ?.suggestedConnections ?? 0;
+    return [datum.id, {
+      reviewedConnections,
+      suggestedConnections,
+      ...graphNodePresentation(reviewedConnections, suggestedConnections),
+    }];
+  }));
 
   function nodeRadius(d) {
-    const ddeg = degree.get(d.id) ?? 0;
-    return Math.min(14, Math.max(6, 6 + Math.sqrt(ddeg) * 1.5));
+    return nodeConnectivity.get(d.id)?.radius ?? 6;
   }
+
+  const halo = g.append("g")
+    .attr("class", "node-halos")
+    .attr("aria-hidden", "true")
+    .selectAll("circle")
+    .data(
+      graphData.nodes.filter((datum) =>
+        (nodeConnectivity.get(datum.id)?.suggestedConnections ?? 0) > 0
+      ),
+    )
+    .join("circle")
+    .attr("class", "node-halo")
+    .attr("r", (datum) => nodeConnectivity.get(datum.id).haloRadius)
+    .attr(
+      "stroke-opacity",
+      (datum) => nodeConnectivity.get(datum.id).haloOpacity,
+    );
 
   const node = g.append("g")
     .selectAll("circle")
@@ -3593,10 +4148,22 @@ function renderGraph() {
     .attr("tabindex", 0)
     .attr(
       "aria-label",
-      (d) =>
-        `Focus ${d.title}${
-          graphSearch?.matchedIds.has(d.id) ? " (direct search result)" : ""
-        }`,
+      (d) => {
+        const connectivity = nodeConnectivity.get(d.id);
+        return `Focus ${d.title}, ${connectivity.reviewedConnections} reviewed ` +
+          `${
+            connectivity.reviewedConnections === 1
+              ? "connection"
+              : "connections"
+          }, ${connectivity.suggestedConnections} semantic ` +
+          `${
+            connectivity.suggestedConnections === 1
+              ? "suggestion"
+              : "suggestions"
+          }${
+            graphSearch?.matchedIds.has(d.id) ? " (direct search result)" : ""
+          }`;
+      },
     )
     .style("cursor", "pointer")
     .on("click", (event, d) => {
@@ -3678,7 +4245,9 @@ function renderGraph() {
         id: datum.id,
         x: transform.applyX(datum.x),
         y: transform.applyY(datum.y),
-        radius: nodeRadius(datum) * transform.k,
+        radius:
+          (nodeConnectivity.get(datum.id)?.haloRadius ?? nodeRadius(datum)) *
+          transform.k,
         ...labelMetrics.get(datum.id),
         priority: datum.id === activeId
           ? 0
@@ -3689,7 +4258,7 @@ function renderGraph() {
           : highlightedIds.has(datum.id)
           ? 3
           : 4,
-        degree: degree.get(datum.id) ?? 0,
+        degree: nodeConnectivity.get(datum.id)?.reviewedConnections ?? 0,
       })),
       viewport.width,
       viewport.height,
@@ -3783,6 +4352,10 @@ function renderGraph() {
         "is-muted",
         (datum) => !connectedIds.has(datum.id) && datum.id !== graphFocusId,
       );
+    halo.classed(
+      "is-muted",
+      (datum) => !connectedIds.has(datum.id) && datum.id !== graphFocusId,
+    );
     label
       .classed(
         "is-highlighted",
@@ -3798,6 +4371,7 @@ function renderGraph() {
     highlightedIds = new Set();
     link.classed("is-highlighted is-muted", false);
     node.classed("is-focused is-connected is-muted", false);
+    halo.classed("is-muted", false);
     label.classed("is-highlighted is-muted", false);
   }
 
@@ -3837,6 +4411,9 @@ function renderGraph() {
     node
       .attr("cx", (d) => d.x)
       .attr("cy", (d) => d.y);
+    halo
+      .attr("cx", (d) => d.x)
+      .attr("cy", (d) => d.y);
     updateGraphLabels();
   }
 
@@ -3855,7 +4432,7 @@ function renderGraph() {
   };
 
   function fitSettledGraph() {
-    if (!graphAutoFitPending || !graphMaximized) return;
+    if (!graphAutoFitPending) return;
     graphAutoFitPending = false;
     fitGraphToViewport();
   }
@@ -3872,7 +4449,9 @@ function renderGraph() {
     .force("charge", forceManyBody().strength(-170))
     .force(
       "collision",
-      forceCollide().radius((datum) => nodeRadius(datum) + 4).iterations(2),
+      forceCollide().radius((datum) =>
+        (nodeConnectivity.get(datum.id)?.haloRadius ?? nodeRadius(datum)) + 4
+      ).iterations(2),
     )
     .force("center", forceCenter(width / 2, height / 2))
     .on("tick", updateGraphPositions)

@@ -35,7 +35,9 @@ export const handleProviderRoutes: ApiRoute = async (context) => {
     providerUsage,
     req,
     requestId,
+    requestSignal,
     resolveProviders,
+    ingestGate,
   } = context;
 
   if (path === "/api/provider/usage" && method === "GET") {
@@ -133,6 +135,7 @@ export const handleProviderRoutes: ApiRoute = async (context) => {
       );
     }
     const body = await readJson(req);
+    const release = await ingestGate.acquire(identity, requestSignal);
     try {
       const status = await configureProviders(
         providerSettings.profiles,
@@ -185,6 +188,8 @@ export const handleProviderRoutes: ApiRoute = async (context) => {
         "Provider configuration failed",
         requestId,
       );
+    } finally {
+      release();
     }
   }
 };

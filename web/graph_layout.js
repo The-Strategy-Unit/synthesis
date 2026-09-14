@@ -13,6 +13,57 @@ function semanticSimilarity(link) {
   return Number.isFinite(similarity) ? similarity : -1;
 }
 
+export function graphNodePresentation(
+  reviewedConnections,
+  suggestedConnections,
+) {
+  const radius = Math.min(15, 6 + Math.sqrt(reviewedConnections) * 2);
+  return {
+    radius,
+    haloRadius: suggestedConnections > 0 ? radius + 3 : radius,
+    haloOpacity: suggestedConnections > 0
+      ? Math.min(0.22, 0.08 + Math.sqrt(suggestedConnections) * 0.03)
+      : 0,
+  };
+}
+
+export function graphNodeConnectivity(nodes, links) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const reviewedNeighbours = new Map(
+    nodes.map((node) => [node.id, new Set()]),
+  );
+  const semanticNeighbours = new Map(
+    nodes.map((node) => [node.id, new Set()]),
+  );
+  for (const link of links) {
+    const source = endpointId(link.source);
+    const target = endpointId(link.target);
+    if (
+      source === target || !nodeIds.has(source) || !nodeIds.has(target) ||
+      (link.kind !== "explicit" && link.kind !== "semantic")
+    ) continue;
+    const neighbours = link.kind === "explicit"
+      ? reviewedNeighbours
+      : semanticNeighbours;
+    neighbours.get(source).add(target);
+    neighbours.get(target).add(source);
+  }
+
+  return new Map(nodes.map((node) => {
+    const reviewed = reviewedNeighbours.get(node.id);
+    const semanticOnly = [...semanticNeighbours.get(node.id)].filter(
+      (id) => !reviewed.has(id),
+    );
+    const reviewedConnections = reviewed.size;
+    const suggestedConnections = semanticOnly.length;
+    return [node.id, {
+      reviewedConnections,
+      suggestedConnections,
+      ...graphNodePresentation(reviewedConnections, suggestedConnections),
+    }];
+  }));
+}
+
 export function semanticNeighbourLinks(nodes, links, neighboursPerPage) {
   if (!Number.isSafeInteger(neighboursPerPage) || neighboursPerPage < 0) {
     throw new RangeError("Semantic neighbour breadth must be non-negative");

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compactEvidenceText,
   evidenceActionLabel,
+  evidenceSourceLabel,
   evidenceSourceLocation,
   evidenceSummary,
   initialReaderState,
@@ -88,6 +89,14 @@ Deno.test("source evidence uses readable page ranges and actions", () => {
     "pages 1–2, 4",
   );
   assert.equal(evidenceSourceLocation({}), null);
+  assert.equal(
+    evidenceSourceLabel({ title: "A short source" }, 1),
+    "Source 2: A short source",
+  );
+  assert.match(
+    evidenceSourceLabel({ title: "A very long source title ".repeat(8) }, 0),
+    /^Source 1: .+…$/,
+  );
   assert.equal(evidenceActionLabel("new"), "Added");
   assert.equal(evidenceActionLabel("merge"), "Updated");
   assert.equal(evidenceActionLabel("contradict"), "Conflict recorded");
@@ -103,6 +112,10 @@ Deno.test("reader workspace replaces the note modal and demotes the graph", asyn
   assert.match(html, /id="evidence-panel" class="hidden"/);
   assert.match(html, /id="page-view-btn" class="active"/);
   assert.match(html, /id="graph-panel" class="hidden"/);
+  assert.match(
+    html,
+    /id="page-list-toggle"[^>]*aria-controls="sidebar" aria-expanded="true"/,
+  );
   assert.match(
     html,
     /id="graph-maximize" type="button"\s+aria-controls="graph-panel" aria-pressed="false"/,

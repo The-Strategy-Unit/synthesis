@@ -31,19 +31,10 @@ in your operating-system profile: `~/Synthesis` on Linux and macOS, or
 ```
 
 The operating-system folder picker is used when available. The startup screen
-also accepts a folder path, so it remains usable on minimal Linux desktops.
-
-Try the disposable, provider-free example:
-
-```bash
-# Linux or macOS
-chmod +x synthesis-*
-./synthesis-linux-x86_64 --trial       # Linux
-./synthesis-macos-aarch64 --trial      # macOS ARM64
-
-# Windows PowerShell
-.\synthesis-windows-x86_64.exe --trial
-```
+also accepts a folder path, so it remains usable on minimal Linux desktops. For
+interactive local launches, use **Vault tools → Switch vault…** to close the
+current vault safely and return the same browser tab to the chooser. Vaults
+pinned with `--vault` or `SYNTHESIS_VAULT` do not expose runtime switching.
 
 To explore the included HACA 2025 vault, choose its folder on the startup
 screen. The command-line option remains available for scripts:
@@ -88,15 +79,17 @@ never silently switches from local to remote.
    text; or provide a YouTube URL. To add separate YouTube videos, open **More
    options** → **YouTube queue · manual review**, paste up to 20 unique URLs or
    video IDs (one per line), then select **Queue for review**.
-2. **Review**: inspect proposed `new`, `merge`, or `contradict` changes and
-   their evidence. Edit, select, approve, or reject them.
+2. **Review**: inspect proposed `new`, `merge`, or `contradict` changes, a
+   rendered change map, and the cited archived evidence. Draft decisions and
+   edits save locally. Applying reviewed changes works without an AI provider.
 3. **Read**: navigate wiki pages, source evidence, keyword or semantic search,
    and the graph.
 4. **Synthesis review**: inspect proposed cross-source relationships. They
    remain suggestions until confirmed.
 5. **Ask wiki**: generate an answer from compiled pages and save it only after
    review.
-6. **Maintain**: run wiki health checks and export the vault regularly.
+6. **Maintain**: use **Verify vault**, run wiki health checks, and export the
+   vault regularly.
 
 ![A cross-source relationship proposal awaiting human review](docs/assets/synthesis-review.png)
 
@@ -117,6 +110,9 @@ model output reliable. Cross-source proposals always require human review.
 ## Evidence and connections
 
 - Source markers on claims link back to immutable archived evidence.
+- PDF citations open the corresponding extracted page. New uploaded-file
+  extractions carry their own integrity hash; older vaults disclose when only
+  the immutable original can be verified.
 - Blue graph edges are reviewed wiki links stored in Markdown.
 - Grey edges are mutual embedding-neighbour suggestions, not facts or confidence
   scores.
@@ -138,16 +134,18 @@ synthesis.db     rebuildable search, vector, and graph state
 
 Use **Vault tools → Export vault** for a portable tar archive. Exports exclude
 SQLite and provider credentials. To restore, extract into an empty directory,
-choose that folder on the startup screen, and select **Rebuild catalogue**.
-Rebuild is provider-free; semantic search requires a separate **Build semantic
-index** operation.
+choose that folder on the startup screen, run **Verify vault**, and select
+**Rebuild catalogue**. Rebuild is provider-free; semantic search requires a
+separate **Build semantic index** operation.
 
 **Undo ingest** restores only the newest accepted ingest and refuses to
 overwrite pages changed since approval. Immutable sources and history remain
 available.
 
-Stop Synthesis before moving or backing up a live vault. Keep the entire vault
-directory together.
+Synthesis prevents a second process from opening the same writable vault.
+Accepted ingests are journalled so startup can finish the exact approved change
+set after an unexpected shutdown. Stop Synthesis before moving a live vault and
+keep the entire directory together.
 
 ## Development and documentation
 
@@ -164,6 +162,9 @@ deno task compile
   and packaging.
 - [Developer guide](docs/DEVELOPERS.md): setup, configuration, API, tests, and
   release procedure.
+- [Private-beta operations](docs/DEPLOYMENT.md): release verification, backup,
+  update, support, and incident gates.
+- [Security policy](SECURITY.md): supported releases and private reporting.
 
 ## Limits
 

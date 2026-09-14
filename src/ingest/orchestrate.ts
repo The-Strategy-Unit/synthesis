@@ -4,7 +4,7 @@
 // writes a new note file or rewrites an existing one (merge/contradict),
 // indexing and embedding as it goes.
 
-import { dirname, relative } from "node:path";
+import { relative } from "node:path";
 
 import { config, notesDir, sourcesDir } from "../app/config.ts";
 import { errMsg, slugify } from "../shared/utils.ts";
@@ -19,16 +19,24 @@ import {
   type IngestProposalApproval,
   type IngestProposalApprovalChange,
   type IngestProposalChange,
+  type IngestProposalDraft,
   parseStoredIngestProposal,
   serialiseIngestProposal,
   validateIngestProposalApproval,
+  validateIngestProposalDraft,
 } from "./ingest_proposal.ts";
 import {
   type IngestReviewAudit,
-  removeWrittenIngestHistory,
-  writeIngestHistory,
-  type WrittenIngestHistory,
+  type PreparedIngestHistory,
+  prepareIngestHistory,
 } from "../vault/ingest_history.ts";
+import {
+  applyVaultOperation,
+  completeVaultOperation,
+  type PreparedVaultOperation,
+  prepareVaultOperation,
+  rollbackVaultOperation,
+} from "../vault/vault_operation.ts";
 import { loadArchivedVaultSource } from "../vault/vault_archive.ts";
 import {
   type ActiveProviders,
@@ -221,11 +229,11 @@ interface PreparedCreate {
 }
 
 interface EmbeddedUpdate extends PreparedUpdate {
-  embedding: number[];
+  embedding?: number[];
 }
 
 interface EmbeddedCreate extends PreparedCreate {
-  embedding: number[];
+  embedding?: number[];
 }
 
 interface AppliedCreate extends EmbeddedCreate {
@@ -247,6 +255,8 @@ export interface IngestProposalReview {
   status: IngestProposalRecord["status"];
   createdAt: string;
   reviewedAt: string | null;
+  draft?: IngestProposalDraft;
+  draftUpdatedAt?: string;
   source: {
     id: number;
     title: string;
@@ -370,6 +380,7 @@ async function persistSourceFiles(
         ? {
           originalFileName: ingested.originalFile.fileName,
           mediaType: ingested.originalFile.mediaType,
+          extractedTextHash: await sha256(ingested.transcript),
         }
         : {}),
       ...(ingested.pageCount === undefined
@@ -432,31 +443,9 @@ async function appliedSourceResult(
   };
 }
 
-async function replaceFile(filePath: string, content: string): Promise<void> {
-  const tempPath = await Deno.makeTempFile({
-    dir: dirname(filePath),
-    prefix: ".synthesis-",
-    suffix: ".tmp",
-  });
-  try {
-    await Deno.writeTextFile(tempPath, content);
-    await Deno.rename(tempPath, filePath);
-  } catch (error) {
-    try {
-      await Deno.remove(tempPath);
-    } catch (cleanupError) {
-      if (!(cleanupError instanceof Deno.errors.NotFound)) {
-        console.error(`Temporary file cleanup failed: ${errMsg(cleanupError)}`);
-      }
-    }
-    throw error;
-  }
-}
-
-async function createNoteFile(
+async function allocateNoteFilePath(
   db: DB,
   title: string,
-  content: string,
 ): Promise<string> {
   const base = slugify(title) || "untitled";
   for (let suffix = 0; suffix < 10_000; suffix++) {
@@ -464,10 +453,9 @@ async function createNoteFile(
     const filePath = `${notesDir()}/${name}.md`;
     if (db.notes.getNoteByFilePath(filePath)) continue;
     try {
-      await Deno.writeTextFile(filePath, content, { createNew: true });
-      return filePath;
+      await Deno.lstat(filePath);
     } catch (error) {
-      if (error instanceof Deno.errors.AlreadyExists) continue;
+      if (error instanceof Deno.errors.NotFound) return filePath;
       throw error;
     }
   }
@@ -484,7 +472,7 @@ async function applyPreparedWikiChanges(
   contentHash: string,
   changes: WikiChange[],
   send: (stage: string, data?: unknown) => void,
-  providers: ActiveProviders,
+  providers?: ActiveProviders,
   options?: {
     proposalId?: number;
     finalizeTransaction?: () => void;
@@ -496,52 +484,44 @@ async function applyPreparedWikiChanges(
   touchedIds: number[];
   historyId?: string;
 }> {
-  db.search.activateSemanticIndex(embeddingIdentity(providers.embedding));
-  send("embedding");
-  const embeddedUpdates: EmbeddedUpdate[] = [];
-  for (const update of preparedUpdates) {
-    const embedding = await DB.embedText(
-      `${update.existing.title}\n${update.page.body}`,
-      providers.embedding.apiBase,
-      providers.embedding.apiKey,
-      providers.embedding.model,
-      "document",
-      options?.signal,
-    );
-    embeddedUpdates.push({ ...update, embedding });
-  }
-  const embeddedCreates: EmbeddedCreate[] = [];
-  for (const create of preparedCreates) {
-    const embedding = await DB.embedText(
-      `${create.page.title}\n${create.page.body}`,
-      providers.embedding.apiBase,
-      providers.embedding.apiKey,
-      providers.embedding.model,
-      "document",
-      options?.signal,
-    );
-    embeddedCreates.push({ ...create, embedding });
-  }
-
-  const appliedUpdates: EmbeddedUpdate[] = [];
-  const createdFiles: AppliedCreate[] = [];
-  let writtenHistory: WrittenIngestHistory | undefined;
-  try {
+  const embeddedUpdates: EmbeddedUpdate[] = [...preparedUpdates];
+  const embeddedCreates: EmbeddedCreate[] = [...preparedCreates];
+  if (providers) {
+    db.search.activateSemanticIndex(embeddingIdentity(providers.embedding));
+    send("embedding");
     for (const update of embeddedUpdates) {
-      await replaceFile(update.existing.file_path, update.content);
-      appliedUpdates.push(update);
+      update.embedding = await DB.embedText(
+        `${update.existing.title}\n${update.page.body}`,
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+        providers.embedding.model,
+        "document",
+        options?.signal,
+      );
     }
     for (const create of embeddedCreates) {
-      const filePath = await createNoteFile(
-        db,
-        create.page.title,
-        create.content,
+      create.embedding = await DB.embedText(
+        `${create.page.title}\n${create.page.body}`,
+        providers.embedding.apiBase,
+        providers.embedding.apiKey,
+        providers.embedding.model,
+        "document",
+        options?.signal,
       );
+    }
+  }
+
+  const createdFiles: AppliedCreate[] = [];
+  let preparedHistory: PreparedIngestHistory | undefined;
+  let preparedOperation: PreparedVaultOperation | undefined;
+  try {
+    for (const create of embeddedCreates) {
+      const filePath = await allocateNoteFilePath(db, create.page.title);
       createdFiles.push({ ...create, filePath });
     }
 
     if (options?.proposalId !== undefined) {
-      writtenHistory = await writeIngestHistory({
+      preparedHistory = await prepareIngestHistory({
         proposalId: options.proposalId,
         sourceHash: contentHash,
         sourceTitle: ingested.title,
@@ -564,6 +544,25 @@ async function applyPreparedWikiChanges(
       });
     }
 
+    preparedOperation = await prepareVaultOperation(config.vaultDir, [
+      ...embeddedUpdates.map((update) => ({
+        filePath: update.existing.file_path,
+        beforeContent: update.originalContent,
+        afterContent: update.content,
+      })),
+      ...createdFiles.map((create) => ({
+        filePath: create.filePath,
+        beforeContent: null,
+        afterContent: create.content,
+      })),
+      ...(preparedHistory?.files.map((file) => ({
+        filePath: file.filePath,
+        beforeContent: null,
+        afterContent: file.content,
+      })) ?? []),
+    ]);
+    await applyVaultOperation(preparedOperation);
+
     const createdIds = db.withTransaction(() => {
       for (const update of embeddedUpdates) {
         db.notes.indexNote(
@@ -571,7 +570,9 @@ async function applyPreparedWikiChanges(
           update.existing.title,
           update.page.body,
         );
-        db.search.upsertEmbedding(update.existing.id, update.embedding);
+        if (update.embedding) {
+          db.search.upsertEmbedding(update.existing.id, update.embedding);
+        } else db.search.removeEmbedding(update.existing.id);
         db.sources.attachNoteSource(
           update.existing.id,
           sourceId,
@@ -586,11 +587,12 @@ async function applyPreparedWikiChanges(
           sourceType,
         );
         db.notes.indexNote(id, create.page.title, create.page.body);
-        db.search.upsertEmbedding(id, create.embedding);
+        if (create.embedding) db.search.upsertEmbedding(id, create.embedding);
         db.sources.attachNoteSource(id, sourceId, "new");
         return id;
       });
       options?.finalizeTransaction?.();
+      if (!providers) db.search.clearLinks();
       return createdIds;
     });
     createdFiles.forEach((create, index) => {
@@ -598,27 +600,16 @@ async function applyPreparedWikiChanges(
     });
   } catch (error) {
     const restorationErrors: string[] = [];
-    if (writtenHistory) {
+    if (preparedOperation) {
       try {
-        await removeWrittenIngestHistory(writtenHistory);
-      } catch (historyError) {
-        restorationErrors.push(errMsg(historyError));
-      }
-    }
-    for (const update of appliedUpdates.toReversed()) {
-      try {
-        await replaceFile(update.existing.file_path, update.originalContent);
+        await rollbackVaultOperation(preparedOperation);
       } catch (restoreError) {
         restorationErrors.push(errMsg(restoreError));
       }
-    }
-    for (const create of createdFiles.toReversed()) {
       try {
-        await Deno.remove(create.filePath);
+        await completeVaultOperation(preparedOperation);
       } catch (cleanupError) {
-        if (!(cleanupError instanceof Deno.errors.NotFound)) {
-          restorationErrors.push(errMsg(cleanupError));
-        }
+        restorationErrors.push(errMsg(cleanupError));
       }
     }
     if (restorationErrors.length > 0) {
@@ -645,17 +636,37 @@ async function applyPreparedWikiChanges(
   const notes = [...updatedNotes, ...createdNotes];
   const touchedIds = notes.map((note) => note.id);
 
-  await updateWikiCatalog(db, {
-    operation: "ingest",
-    subject: ingested.title,
-    contentHash,
-    changes,
-  });
+  try {
+    await updateWikiCatalog(db, {
+      operation: "ingest",
+      subject: ingested.title,
+      contentHash,
+      changes,
+    });
+  } catch {
+    send("warning", {
+      error: "Changes were saved, but the wiki index needs rebuilding",
+    });
+  }
+
+  // Retain the recovery record until portable derived files have caught up.
+  // A crash before this point is repaired and reindexed on the next startup.
+  if (preparedOperation) {
+    try {
+      await completeVaultOperation(preparedOperation);
+    } catch {
+      send("warning", {
+        error: "Changes were saved, but startup recovery is still pending",
+      });
+    }
+  }
 
   return {
     notes,
     touchedIds: [...new Set(touchedIds)],
-    ...(writtenHistory ? { historyId: writtenHistory.manifest.historyId } : {}),
+    ...(preparedHistory
+      ? { historyId: preparedHistory.manifest.historyId }
+      : {}),
   };
 }
 
@@ -949,11 +960,18 @@ function proposalReview(
   ) {
     throw new Error(`Ingest proposal ${record.id} source identity is invalid`);
   }
+  const draft = record.draft_json
+    ? validateIngestProposalDraft(JSON.parse(record.draft_json))
+    : undefined;
   return {
     id: record.id,
     status: record.status,
     createdAt: record.created_at,
     reviewedAt: record.reviewed_at,
+    ...(draft ? { draft } : {}),
+    ...(record.draft_updated_at
+      ? { draftUpdatedAt: record.draft_updated_at }
+      : {}),
     source: {
       id: source.id,
       title: source.title,
@@ -1126,7 +1144,7 @@ export async function approveIngestProposal(
   db: DB,
   id: number,
   send: (stage: string, data?: unknown) => void,
-  providers: ActiveProviders = environmentProviders(),
+  providers?: ActiveProviders,
   approvalValue: IngestProposalApproval = {},
   review: IngestReviewAudit = { reviewMode: "manual" },
   signal?: AbortSignal,

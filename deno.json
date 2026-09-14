@@ -3,7 +3,6 @@
   "version": "0.2.8",
   "tasks": {
     "app": "deno task start",
-    "trial": "deno run --allow-all scripts/start.ts --trial",
     "setup": "deno run --allow-all scripts/setup.ts",
     "migrate": "deno run --allow-all scripts/migrate.ts",
     "dev": "SYNTHESIS_WATCH=true deno task start",
@@ -27,6 +26,7 @@
     "include": [
       "src/provider/provider_settings_test.ts",
       "src/app/browser_launcher_test.ts",
+      "src/app/config_test.ts",
       "src/app/platform_paths_test.ts",
       "src/app/vault_chooser_test.ts",
       "src/wiki/query_test.ts",

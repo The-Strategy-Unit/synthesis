@@ -13,7 +13,11 @@ export function vaultManifestPath(): string {
   return `${config.vaultDir}/vault.json`;
 }
 
-async function readVaultManifest(): Promise<VaultManifest> {
+export async function loadVaultManifest(): Promise<VaultManifest> {
+  const info = await Deno.lstat(vaultManifestPath());
+  if (info.isSymlink || !info.isFile) {
+    throw new Error("Vault manifest must be an ordinary file");
+  }
   let value: unknown;
   try {
     value = JSON.parse(await Deno.readTextFile(vaultManifestPath()));
@@ -43,6 +47,6 @@ export async function ensureVaultManifest(): Promise<VaultManifest> {
     return manifest;
   } catch (error) {
     if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
-    return await readVaultManifest();
+    return await loadVaultManifest();
   }
 }

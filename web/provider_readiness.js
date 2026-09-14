@@ -53,6 +53,63 @@ export function providerCapabilities(phase, semanticIndex) {
   };
 }
 
+export function searchAvailabilityPresentation(state = {}) {
+  const phase = PHASES.has(state.phase) ? state.phase : "checking";
+  const mode = MODES.has(state.mode) ? state.mode : "unknown";
+  const semanticIndex = state.semanticIndex ?? {};
+  const embedded = Number.isSafeInteger(semanticIndex.embedded)
+    ? Math.max(0, semanticIndex.embedded)
+    : 0;
+  const total = Number.isSafeInteger(semanticIndex.total)
+    ? Math.max(0, semanticIndex.total)
+    : 0;
+
+  if (phase === "ready" && semanticIndex.complete === true) {
+    const coverage = total > 0 ? ` All ${total} wiki pages are indexed.` : "";
+    const provider = mode === "remote"
+      ? "Queries are sent to your configured remote embedding provider."
+      : "Queries use your configured local embedding provider.";
+    return {
+      mode: "semantic",
+      title: "Semantic search active",
+      detail: `${coverage} ${provider}`.trim(),
+      actionLabel: null,
+    };
+  }
+
+  if (phase === "ready") {
+    const progress = total > 0
+      ? ` ${embedded} of ${total} wiki pages are indexed.`
+      : " The semantic index has not been built for this embedding model.";
+    return {
+      mode: "keyword",
+      title: "Keyword search active",
+      detail:
+        `AI is ready, but the semantic index is incomplete.${progress} Searches stay on-device until indexing finishes.`,
+      actionLabel: embedded > 0
+        ? "Resume semantic index"
+        : "Build semantic index",
+    };
+  }
+
+  if (phase === "unavailable") {
+    return {
+      mode: "keyword",
+      title: "Keyword search active",
+      detail: "AI is unavailable, so searches use the on-device keyword index.",
+      actionLabel: null,
+    };
+  }
+
+  return {
+    mode: "keyword",
+    title: "Checking semantic search",
+    detail:
+      "Checking the AI provider and semantic index. Keyword search remains available on-device.",
+    actionLabel: null,
+  };
+}
+
 export function providerEmptyState(phase) {
   return phase === "ready"
     ? { action: "add-source", label: "Add your first source" }

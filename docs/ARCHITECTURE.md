@@ -11,7 +11,7 @@ production-deployment specification.
 
 ```text
 main.ts
-├── src/app/        configuration, composition, launch, trial vault
+├── src/app/        configuration, composition, launch, vault selection
 ├── src/http/       loopback HTTP/SSE, auth, validation, limits
 ├── src/ingest/     source extraction, model pipeline, review, apply
 ├── src/wiki/       Markdown, schema, links, lint, query, discovery
@@ -28,9 +28,12 @@ assets are served by the same loopback process.
 When local startup has no explicit vault configuration, a temporary loopback
 chooser runs before the application is composed. It validates an existing
 folder's `vault.json`, stops, and then the normal server opens exactly that one
-vault on the same address. The source launcher scopes the child process's file
-permissions only after selection. Trials, explicit `--vault` or
-`SYNTHESIS_VAULT` configuration, and hosted/proxy mode bypass the chooser.
+vault on the same address. Interactive local launches can return to that chooser
+after the application session has stopped accepting work, closed SQLite, and
+released its process lock. The source launcher then replaces its child with one
+whose filesystem permissions are scoped to the new selection; the compiled
+executable replaces its internal application session. Explicit `--vault` or
+`SYNTHESIS_VAULT` configuration and hosted/proxy mode bypass the chooser.
 Default vault and application-data locations are resolved with the target
 operating system's environment variables and path semantics.
 
@@ -47,8 +50,8 @@ PDF / Markdown / text / YouTube
   → stage exact validated Markdown
   → human selects and approves changes
   → revalidate target hashes
-  → recoverable files + database apply
-  → update search, provenance, embeddings, and suggestions
+  → journalled files + database apply
+  → update keyword search and provenance; invalidate stale semantic state
 ```
 
 PDF.js extracts text in-process and preserves page numbers. Encrypted,
@@ -67,13 +70,16 @@ Resubmission reuses existing proposals. A stale pending proposal can be
 explicitly regenerated from its hash-validated immutable source before review;
 the old draft remains intact if regeneration fails.
 
-Approved file changes have before-images and hashes in `history/`. The complete
-change set is checked before visible mutation. Database failure restores the
-files. Immutable sources remain even when later processing fails.
+Approved file changes have before-images and hashes in `history/`. Approval is
+provider-free. The complete change set is checked immediately before visible
+mutation; database failure restores it. Changed embeddings and semantic links
+are invalidated until an explicit semantic rebuild. Immutable sources remain
+even when later processing fails.
 
 An exact trusted-video batch may automatically select staged changes only after
 `AUTO APPLY N TRUSTED SOURCES`. It still uses the same validation, stale-hash,
-history, embedding, and apply path. Source trust is not model-output validation.
+history and apply path. Its already-active provider may also refresh embeddings;
+source trust is not model-output validation.
 
 ## Cross-source synthesis
 
@@ -153,13 +159,19 @@ waiting queue. Synthesis imposes no daily ingest or semantic-search quota. Long
 operations use SSE and cooperative cancellation; cancellation never interrupts
 an atomic apply.
 
-Only one process may own a writable vault. Synthesis documents this requirement
-but does not enforce a cross-process vault lock.
+Only one process may own a writable vault. A separate SQLite exclusive lock is
+held for the process lifetime, so a second process fails before opening the
+catalogue. Accepted ingests durably journal exact before/after wiki and history
+files. Startup rolls a pending journal forward only when every current file is
+an expected before/after image, then rebuilds the derived catalogue; conflicting
+external edits fail closed.
 
-The pre-application vault chooser is loopback-only, same-origin, bounded, and
-short-lived. Its native folder picker never runs in hosted/proxy mode. Selecting
-a different vault requires stopping and starting Synthesis, so database and
-filesystem operations cannot cross vault boundaries.
+The vault chooser is loopback-only, same-origin, bounded, and short-lived. Its
+native folder picker never runs in hosted/proxy mode. Runtime switching is a
+supervised session replacement, not a live path mutation: new work is rejected,
+the HTTP session stops, SQLite closes, and the current process lock is released
+before the chooser can select another vault. This ordering prevents database and
+filesystem operations from crossing vault boundaries.
 
 Provider URLs must be HTTPS OpenAI-compatible `/v1` endpoints, except loopback
 HTTP for local providers. Remote providers are never selected implicitly.
@@ -180,10 +192,12 @@ SQLite/keyring packages, patches the pinned PDF.js build only for server-side
 text extraction, and enforces an 80 MiB executable ceiling.
 
 Release archives place the executable, licence, and tracked HACA vault together.
-The cross-platform workflow compiles and smoke-tests each target; the smoke test
-covers embedded assets, native SQLite/sqlite-vec, PDF extraction, and
-provider-free trial/HACA operation. Tag releases are immutable and include
-SHA-256 checksums.
+The cross-platform workflow runs the complete automated suite, compiles, and
+smoke-tests each target. The smoke test covers embedded assets, native
+SQLite/sqlite-vec, PDF extraction, and provider-free HACA operation. Tag
+releases publish unsigned executables; macOS executables are not notarized.
+Archives are immutable and include SHA-256 checksums and build-provenance
+attestations.
 
 ## Fixed MVP boundaries
 

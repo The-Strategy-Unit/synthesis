@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import denoConfig from "../deno.json" with { type: "json" };
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
@@ -103,6 +104,7 @@ interface SmokeExpectation {
   pageCount: number;
   sourceCount: number;
   verifyPdf: boolean;
+  verifyVaultLock?: boolean;
 }
 
 async function copyDirectory(
@@ -141,6 +143,40 @@ async function collectChildOutput(
     // The executable may have exited between the timeout and forced stop.
   }
   return { output: await outputPromise, forceStopped: true };
+}
+
+async function verifySecondVaultOwnerIsRejected(
+  executable: string,
+  directory: string,
+  vault: string,
+): Promise<void> {
+  const port = availablePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const child = new Deno.Command(executable, {
+    args: ["--no-open"],
+    cwd: directory,
+    env: {
+      DISABLE_SYSTEM_FONTS_LOAD: "1",
+      SYNTHESIS_APP_DATA: join(directory, "second-app-data"),
+      SYNTHESIS_HOST: "127.0.0.1",
+      SYNTHESIS_OPEN_BROWSER: "false",
+      SYNTHESIS_PORT: String(port),
+      SYNTHESIS_PUBLIC_ORIGIN: origin,
+      SYNTHESIS_VAULT: vault,
+    },
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  const { output, forceStopped } = await collectChildOutput(
+    child,
+    child.output(),
+  );
+  assert.equal(forceStopped, false, "second vault owner did not fail promptly");
+  assert.equal(output.success, false);
+  assert.match(
+    new TextDecoder().decode(output.stderr),
+    /vault is already open in another Synthesis process/i,
+  );
 }
 
 async function smokeExecutable(
@@ -183,9 +219,16 @@ async function smokeExecutable(
       ),
     ]);
     assert.match(index, /id="primary-nav"/);
-    assert.deepEqual(status, { status: "ok" });
+    assert.deepEqual(status, { status: "ok", version: denoConfig.version });
     assert.equal(lint.pageCount, expectation.pageCount);
     assert.equal(sources.sources.length, expectation.sourceCount);
+    if (expectation.verifyVaultLock) {
+      await verifySecondVaultOwnerIsRejected(
+        executable,
+        directory,
+        join(directory, "vault"),
+      );
+    }
     if (expectation.verifyPdf) await verifyPdfExtraction(origin);
   } catch (error) {
     failure = error;
@@ -261,6 +304,30 @@ async function smokeVaultChooser(
     await waitForStatus(origin, "ok");
     const index = await fetch(`${origin}/`).then((response) => response.text());
     assert.match(index, /id="primary-nav"/);
+    const applicationConfig = await fetch(`${origin}/api/config`).then(
+      (response) => response.json(),
+    );
+    assert.equal(applicationConfig.vaultSwitchEnabled, true);
+    const switching = await fetch(`${origin}/api/vault/switch`, {
+      body: "{}",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    });
+    assert.equal(switching.status, 202);
+    assert.deepEqual(await switching.json(), { status: "switching" });
+    await waitForStatus(origin, "choosing-vault");
+    assert.match(
+      await fetch(`${origin}/`).then((response) => response.text()),
+      /Current vault closed safely/,
+    );
+    const reopened = await fetch(`${origin}/api/vault/open`, {
+      body: JSON.stringify({ path: vault }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    });
+    assert.equal(reopened.status, 200);
+    await reopened.body?.cancel();
+    await waitForStatus(origin, "ok");
   } catch (error) {
     failure = error;
   } finally {
@@ -274,15 +341,19 @@ async function smokeVaultChooser(
     child,
     outputPromise,
   );
+  const stderr = new TextDecoder().decode(output.stderr);
   if (forceStopped && !failure) {
     failure = new Error("Compiled Synthesis did not stop after SIGTERM");
+  }
+  if (/BadResource/.test(stderr)) {
+    failure ??= new Error("Compiled Synthesis did not shut down cleanly");
   }
   if (failure) {
     const decoder = new TextDecoder();
     throw new Error(
       `${failure instanceof Error ? failure.message : String(failure)}\n` +
         `stdout:\n${decoder.decode(output.stdout)}\n` +
-        `stderr:\n${decoder.decode(output.stderr)}`,
+        `stderr:\n${stderr}`,
     );
   }
 }
@@ -317,6 +388,7 @@ async function main(): Promise<void> {
       pageCount: 0,
       sourceCount: 0,
       verifyPdf: true,
+      verifyVaultLock: true,
     });
     await smokeVaultChooser(
       copiedExecutable,
@@ -334,14 +406,8 @@ async function main(): Promise<void> {
       sourceCount: 66,
       verifyPdf: false,
     });
-    await smokeExecutable(copiedExecutable, join(directory, "trial"), {
-      arguments: ["--trial", "--no-open"],
-      pageCount: 7,
-      sourceCount: 4,
-      verifyPdf: false,
-    });
     console.log(
-      "Compiled Synthesis served its vault chooser and UI, extracted PDF text, and opened its HACA and trial vaults.",
+      "Compiled Synthesis enforced single-vault ownership, switched and reopened its interactive vault, served its UI, extracted PDF text, and opened its HACA vault.",
     );
   } finally {
     await Deno.remove(directory, { recursive: true });

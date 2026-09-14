@@ -48,9 +48,20 @@ export class ProposalStore {
     if (!Number.isSafeInteger(id) || id < 1) return false;
     const info = this.db.prepare(
       `UPDATE ingest_proposals
-       SET proposal_json = ?, created_at = datetime('now'), reviewed_at = NULL
+       SET proposal_json = ?, created_at = datetime('now'), reviewed_at = NULL,
+           draft_json = NULL, draft_updated_at = NULL
        WHERE id = ? AND status = 'pending'`,
     ).run(proposalJson, id);
+    return Number(info.changes) === 1;
+  }
+
+  savePendingIngestProposalDraft(id: number, draftJson: string): boolean {
+    if (!Number.isSafeInteger(id) || id < 1) return false;
+    const info = this.db.prepare(
+      `UPDATE ingest_proposals
+       SET draft_json = ?, draft_updated_at = datetime('now')
+       WHERE id = ? AND status = 'pending'`,
+    ).run(draftJson, id);
     return Number(info.changes) === 1;
   }
 
@@ -61,7 +72,8 @@ export class ProposalStore {
     if (!Number.isSafeInteger(id) || id < 1) return false;
     const info = this.db.prepare(
       `UPDATE ingest_proposals
-       SET status = ?, reviewed_at = datetime('now')
+       SET status = ?, reviewed_at = datetime('now'),
+           draft_json = NULL, draft_updated_at = NULL
        WHERE id = ? AND status = 'pending'`,
     ).run(status, id);
     return Number(info.changes) === 1;
