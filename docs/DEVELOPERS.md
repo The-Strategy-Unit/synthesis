@@ -14,7 +14,6 @@ Requirements:
 deno task setup        # check Ollama, yt-dlp, models, and vault directory
 deno task app          # choose a local vault at http://localhost:8000
 deno task dev          # watch mode
-deno task trial        # disposable provider-free demo
 ```
 
 Use `.env.example` as the configuration reference. Never commit credentials or
@@ -139,14 +138,14 @@ boundaries.
 There is no generated OpenAPI document. `src/http/routes.ts` and its five route
 modules are authoritative.
 
-| Area        | Routes                                                                                                                                                                |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System      | `GET /api/config`, `/status`, `/schema`, `/export`, `/semantic-index`; `PUT /api/schema`; `POST /api/rebuild`, `/semantic-index/rebuild`                              |
-| Provider    | `GET /api/provider`, `/provider/readiness`, `/provider/usage`; `POST /api/provider`, `/provider/diagnose`                                                             |
-| Wiki        | `GET /api/notes`, `/notes/:id`, `/sources`, `/sources/:id`, `/search`, `/graph`, `/lint`; `POST /api/lint/analyze`, `/query`, `/query/save`                           |
-| Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/queue`, `/ingest/batch`, `/ingest/undo`                                                              |
-| Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`, `/api/proposals/:id/reprocess`                            |
-| Discoveries | `GET /api/discoveries`, `/api/discoveries/:id`; `POST /api/discoveries/generate`, `/api/discoveries/batch`, `/api/discoveries/:id/investigate`, `/confirm`, `/reject` |
+| Area        | Routes                                                                                                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System      | `GET /api/config`, `/status`, `/verify`, `/schema`, `/export`, `/semantic-index`; `PUT /api/schema`; `POST /api/rebuild`, `/semantic-index/rebuild`, `/vault/switch`       |
+| Provider    | `GET /api/provider`, `/provider/readiness`, `/provider/usage`; `POST /api/provider`, `/provider/diagnose`                                                                  |
+| Wiki        | `GET /api/notes`, `/notes/:id`, `/sources`, `/sources/:id`, `/sources/:id/content`, `/search`, `/graph`, `/lint`; `POST /api/lint/analyze`, `/query`, `/query/save`        |
+| Ingest      | `POST /api/ingest`, `/ingest/file`, `/ingest/playlist`, `/ingest/queue`, `/ingest/batch`, `/ingest/undo`                                                                   |
+| Proposals   | `GET /api/proposals`, `/api/proposals/:id`; `PUT /api/proposals/:id/draft`; `POST /api/proposals/:id/approve`, `/api/proposals/:id/reject`, `/api/proposals/:id/reprocess` |
+| Discoveries | `GET /api/discoveries`, `/api/discoveries/:id`; `POST /api/discoveries/generate`, `/api/discoveries/batch`, `/api/discoveries/:id/investigate`, `/confirm`, `/reject`      |
 
 Mutation bodies require JSON except `/api/ingest/file`, which requires multipart
 form data. Ingest and approval use SSE. Errors expose only a safe `error`,
@@ -155,9 +154,13 @@ form data. Ingest and approval use SSE. Errors expose only a safe `error`,
 Before application composition, local startup without `SYNTHESIS_VAULT` serves a
 temporary same-origin chooser. Its `/api/vault/browse`, `/open`, and `/default`
 routes exist only on loopback while no vault is open; they are not part of the
-running application API. Existing selections require a valid `vault.json`. The
-default option uses the native profile path: `~/Synthesis` on Linux and macOS,
-and `%USERPROFILE%\Synthesis` on Windows.
+running application API. `POST /api/vault/switch` accepts `{}` only when that
+interactive local launcher supervises the application; it returns `202`, closes
+the current session after delivering the response, and restores the chooser on
+the same address. Pinned and hosted/proxy configurations return
+`VAULT_SWITCH_UNAVAILABLE`. Existing selections require a valid `vault.json`.
+The default option uses the native profile path: `~/Synthesis` on Linux and
+macOS, and `%USERPROFILE%\Synthesis` on Windows.
 
 Important exact confirmations:
 
@@ -171,9 +174,12 @@ Important exact confirmations:
 | Reject discoveries     | `REJECT N PROPOSALS`           |
 
 Manual proposal approval requires a non-empty array of exact reviewed change
-indexes; `{}` is invalid. Trusted batches are the only flow that selects all
-staged wiki changes automatically. Discovery proposals always remain pending for
-human review.
+indexes; `{}` is invalid. Applying an already staged proposal is provider-free;
+changed pages lose stale embeddings until the semantic index is rebuilt. Draft
+decisions are bounded derived state and are cleared on reprocess, approval,
+rejection, or catalogue rebuild. Trusted batches are the only flow that selects
+all staged wiki changes automatically. Discovery proposals always remain pending
+for human review.
 
 Search accepts `mode=keyword|semantic|hybrid`; hybrid is the API default.
 Semantic mode returns `409 SEMANTIC_INDEX_INCOMPLETE` until the current index is
@@ -199,9 +205,13 @@ The release workflow includes the exact `v<deno.json version>` value in new
 archive and contained-executable names; local compile output remains
 unversioned.
 
-The GitHub workflow runs on pull requests, manual dispatch, and `v*` tags. Tag
-releases require `v<deno.json version>`, native smoke tests on Linux, macOS, and
-Windows, and publish immutable platform archives plus `SHA256SUMS`.
+The GitHub workflow runs the full test suite on Linux, macOS, and Windows for
+pull requests, manual dispatch, and `v*` tags. Tag releases require
+`v<deno.json version>`, native smoke tests, and publish immutable archives,
+`SHA256SUMS`, and build-provenance attestations. The executables are currently
+unsigned, and macOS builds are not notarized. Add signing or notarization only
+after maintainers confirm that the required accounts, certificates, and CI
+secrets are provisioned and the resulting builds have been tested.
 
 Prepare and merge a release commit that updates `deno.json` and versioned
 documentation. From an up-to-date `main`, create the matching annotated tag:
@@ -226,12 +236,14 @@ archive on its target operating system before announcing the release.
 - **YouTube fails:** install `yt-dlp` beside the executable or on `PATH`.
 - **Moved or restored vault:** rebuild the catalogue, then rebuild embeddings if
   semantic search is needed.
-- **Interrupted ingest:** reopen the pending proposal or resubmit the same
-  source; immutable source identity prevents duplicate application.
+- **Interrupted ingest:** restart Synthesis. The process lock is released by the
+  operating system; startup completes an exact pending journal and rebuilds the
+  provider-free catalogue. Conflicting external edits stop recovery.
 
 ## Frozen boundaries
 
 Do not treat the MVP as multi-tenant, serverless, clinical, or production-ready.
-It has no supported deployment, update, telemetry, incident-response, or
-security-maintenance service. Preserve the local-first trust boundary, exact
-review, portable files, and recoverable mutation design in any fork.
+The supported private-beta boundary, manual update path, and incident procedure
+are in `docs/DEPLOYMENT.md` and `SECURITY.md`. Preserve the local-first trust
+boundary, exact review, portable files, and recoverable mutation design in any
+fork.
