@@ -3,12 +3,14 @@
 // ordinary installations do not expose low-level tuning controls.
 
 import { join, posix, win32 } from "node:path";
+import denoConfig from "../../deno.json" with { type: "json" };
 
 import {
   defaultAppDataDirectory,
   defaultVaultDirectory,
   type PlatformEnvironment,
 } from "./platform_paths.ts";
+import { validateApiBase } from "../provider/provider_profile.ts";
 
 function envValue(key: string): string | undefined {
   try {
@@ -208,9 +210,43 @@ export const config = {
   },
 
   build: {
-    version: "0.2.1",
+    version: denoConfig.version,
   },
 };
+
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/** Fail closed before a runtime can expose a vault or contact a provider. */
+export function validateRuntimeConfiguration(
+  value: typeof config = config,
+): void {
+  const requiresProxyBoundary = !isLoopbackHostname(value.host) ||
+    value.security.trustProxyAuth;
+  if (requiresProxyBoundary) {
+    const publicOrigin = value.security.publicOrigin;
+    const publicProtocol = publicOrigin
+      ? new URL(publicOrigin).protocol
+      : undefined;
+    const ingestersAreViewers = value.security.ingesterEmails.every((email) =>
+      value.security.allowedEmails.includes(email)
+    );
+    if (
+      !value.security.trustProxyAuth || publicProtocol !== "https:" ||
+      value.security.allowedEmails.length === 0 ||
+      value.security.ingesterEmails.length === 0 || !ingestersAreViewers
+    ) {
+      throw new Error(
+        "Trusted proxy mode and non-loopback listeners require an HTTPS public origin, trusted proxy authentication, and explicit viewer and ingester allowlists",
+      );
+    }
+  }
+
+  validateApiBase(value.llm.apiBase, "SYNTHESIS_API_BASE");
+  validateApiBase(value.embed.apiBase, "SYNTHESIS_EMBED_API_BASE");
+}
 
 export function configuredModelNames(): string[] {
   return [

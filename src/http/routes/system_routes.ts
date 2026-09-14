@@ -8,8 +8,9 @@ import { exportVault } from "../../vault/vault_export.ts";
 import {
   rebuildVaultCatalogue,
   VaultRebuildError,
+  verifyVault,
 } from "../../vault/vault_rebuild.ts";
-import { ensureWikiSchema, saveWikiSchema } from "../../wiki/wiki_schema.ts";
+import { loadWikiSchema, saveWikiSchema } from "../../wiki/wiki_schema.ts";
 import type { ApiRoute } from "../route_context.ts";
 import {
   ApiError,
@@ -28,6 +29,7 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
     method,
     path,
     req,
+    requestVaultSwitch,
     requestSignal,
     resolveProviders,
   } = context;
@@ -40,24 +42,68 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
         config.link.k,
       ),
       maxSemanticNeighbors: config.link.k,
+      vaultSwitchEnabled: requestVaultSwitch !== undefined,
     });
   }
   if (path === "/api/status" && method === "GET") {
-    return json({ status: "ok" });
+    return json({ status: "ok", version: config.build.version });
+  }
+  if (path === "/api/vault/switch" && method === "POST") {
+    requireIngester(identity);
+    if (!requestVaultSwitch) {
+      throw new ApiError(
+        409,
+        "VAULT_SWITCH_UNAVAILABLE",
+        "This vault is fixed by the application configuration",
+      );
+    }
+    const body = await readJson(req);
+    if (Object.keys(body).length !== 0) {
+      throw new ApiError(
+        400,
+        "INVALID_INPUT",
+        "Vault switch request must be empty",
+      );
+    }
+    const release = await ingestGate.acquire(identity, requestSignal);
+    try {
+      requestVaultSwitch();
+      return json({ status: "switching" }, 202);
+    } finally {
+      release();
+    }
+  }
+  if (path === "/api/verify" && method === "GET") {
+    const release = await ingestGate.acquire(identity, requestSignal);
+    try {
+      return json({ verification: await verifyVault() });
+    } catch (error) {
+      if (error instanceof VaultRebuildError) {
+        throw new ApiError(422, "VAULT_PREFLIGHT_FAILED", error.message);
+      }
+      throw error;
+    } finally {
+      release();
+    }
   }
   if (path === "/api/schema" && method === "GET") {
-    return json({ schema: await ensureWikiSchema() });
+    return json({ schema: await loadWikiSchema() });
   }
   if (path === "/api/export" && method === "GET") {
-    const exported = await exportVault();
-    const headers = responseHeaders("application/x-tar");
-    const date = new Date().toISOString().slice(0, 10);
-    headers.set(
-      "Content-Disposition",
-      `attachment; filename="synthesis-vault-${date}.tar"`,
-    );
-    headers.set("X-Synthesis-File-Count", String(exported.fileCount));
-    return new Response(exported.stream, { headers });
+    const release = await ingestGate.acquire(identity, requestSignal);
+    try {
+      const exported = await exportVault();
+      const headers = responseHeaders("application/x-tar");
+      const date = new Date().toISOString().slice(0, 10);
+      headers.set(
+        "Content-Disposition",
+        `attachment; filename="synthesis-vault-${date}.tar"`,
+      );
+      headers.set("X-Synthesis-File-Count", String(exported.fileCount));
+      return new Response(exported.stream, { headers });
+    } finally {
+      release();
+    }
   }
   if (path === "/api/rebuild" && method === "POST") {
     requireIngester(identity);
@@ -124,6 +170,7 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
   if (path === "/api/schema" && method === "PUT") {
     requireIngester(identity);
     const body = await readJson(req);
+    const release = await ingestGate.acquire(identity, requestSignal);
     try {
       return json({ schema: await saveWikiSchema(body.schema) });
     } catch (error) {
@@ -138,6 +185,8 @@ export const handleSystemRoutes: ApiRoute = async (context) => {
         );
       }
       throw error;
+    } finally {
+      release();
     }
   }
 };

@@ -220,7 +220,7 @@ Deno.test("structured chat retries validation once but not provider failures", a
       calls++;
       bodies.push(JSON.parse(String(init?.body)));
       return Promise.resolve(completion(
-        calls === 1 ? "not JSON" : '```json\n{"ok":true}\n```',
+        calls === 1 ? '{"ok":false}' : '```json\n{"ok":true}\n```',
       ));
     };
     assert.deepEqual(
@@ -241,6 +241,10 @@ Deno.test("structured chat retries validation once but not provider failures", a
     assert.match(
       JSON.stringify(bodies[1].messages),
       /previous response failed validation/,
+    );
+    assert.match(
+      JSON.stringify(bodies[1].messages),
+      /Test response\.ok must be true/,
     );
 
     calls = 0;

@@ -11,26 +11,19 @@ import {
   waitForServer,
 } from "../src/app/browser_launcher.ts";
 import {
-  cleanTrialRun,
-  prepareTrialRun,
-  printTrialGuide,
-} from "../src/app/trial_vault.ts";
-import {
   chooseVaultAtStartup,
   isLoopbackHostname,
 } from "../src/app/vault_chooser.ts";
+import {
+  SUPERVISED_VAULT_SWITCH_ARGUMENT,
+  VAULT_SWITCH_EXIT_CODE,
+} from "../src/app/process_protocol.ts";
 
-if (
-  Deno.args.length > 1 || (Deno.args.length === 1 && Deno.args[0] !== "--trial")
-) {
-  throw new Error("Usage: scripts/start.ts [--trial]");
-}
-const trial = Deno.args[0] === "--trial" ? await prepareTrialRun() : undefined;
+if (Deno.args.length > 0) throw new Error("Usage: scripts/start.ts");
 const { config } = await import("../src/app/config.ts");
 const port = config.port;
 const isDev = Deno.env.get("SYNTHESIS_WATCH") === "true";
 const openBrowser = environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
-let usedVaultChooser = false;
 
 const frontendBundleCommand = (watch = false): Deno.Command => {
   return new Deno.Command(Deno.execPath(), {
@@ -108,12 +101,13 @@ const assertPortAvailable = (hostname: string, port: number): void => {
 const permissionPath = (path: string): string => path.replaceAll(",", ",,");
 
 assertPortAvailable(config.host, port);
-if (
-  !trial && !Deno.env.get("SYNTHESIS_VAULT")?.trim() &&
+const configuredVaultDirectory = Deno.env.get("SYNTHESIS_VAULT")?.trim();
+const vaultSwitchEnabled = !configuredVaultDirectory &&
   isLoopbackHostname(config.host) &&
   config.security.publicOrigin === undefined &&
-  !config.security.trustProxyAuth
-) {
+  !config.security.trustProxyAuth;
+let selectedWithChooser = false;
+if (vaultSwitchEnabled) {
   config.vaultDir = await chooseVaultAtStartup({
     announceAndOpen,
     defaultDirectory: config.vaultDir,
@@ -122,9 +116,9 @@ if (
     port,
   });
   Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
-  usedVaultChooser = true;
+  selectedWithChooser = true;
 }
-const vaultDir = config.vaultDir;
+let vaultDirectory = config.vaultDir;
 await bundleFrontend();
 const frontendWatcher = isDev ? frontendBundleCommand(true).spawn() : undefined;
 
@@ -167,39 +161,45 @@ const allowedEnv = [
   "XDG_CONFIG_HOME",
 ].join(",");
 
-const args = ["run", "--no-prompt", "--unstable-no-legacy-abort"];
-if (isDev) args.push("--watch");
-args.push(
-  "--frozen",
-  "--ignore-env=NAPI_RS_FORCE_WASI,NAPI_RS_NATIVE_LIBRARY_PATH",
-  "--allow-net",
-  "--allow-ffi",
-  `--allow-read=web,${permissionPath(vaultDir)},${
-    permissionPath(config.appDataDir)
-  },${permissionPath(tempDir)}${os === "linux" ? ",/usr/bin/ldd" : ""}`,
-  `--allow-write=${permissionPath(vaultDir)},${
-    permissionPath(config.appDataDir)
-  },${permissionPath(tempDir)}`,
-  `--allow-run=${ytDlpPath}`,
-  `--allow-env=${allowedEnv}`,
-  "main.ts",
-);
+function applicationCommand(directory: string): Deno.Command {
+  const args = ["run", "--no-prompt", "--unstable-no-legacy-abort"];
+  if (isDev) args.push("--watch");
+  args.push(
+    "--frozen",
+    "--ignore-env=NAPI_RS_FORCE_WASI,NAPI_RS_NATIVE_LIBRARY_PATH",
+    "--allow-net",
+    "--allow-ffi",
+    `--allow-read=web,${permissionPath(directory)},${
+      permissionPath(config.appDataDir)
+    },${permissionPath(tempDir)}${os === "linux" ? ",/usr/bin/ldd" : ""}`,
+    `--allow-write=${permissionPath(directory)},${
+      permissionPath(config.appDataDir)
+    },${permissionPath(tempDir)}`,
+    `--allow-run=${ytDlpPath}`,
+    `--allow-env=${allowedEnv}`,
+    "main.ts",
+    ...(vaultSwitchEnabled ? [SUPERVISED_VAULT_SWITCH_ARGUMENT] : []),
+  );
+  return new Deno.Command(Deno.execPath(), {
+    args,
+    env: {
+      DISABLE_SYSTEM_FONTS_LOAD: "1",
+      SYNTHESIS_YT_DLP_PATH: ytDlpPath,
+    },
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}
 
-const cmd = new Deno.Command(Deno.execPath(), {
-  args,
-  env: {
-    DISABLE_SYSTEM_FONTS_LOAD: "1",
-    SYNTHESIS_YT_DLP_PATH: ytDlpPath,
-  },
-  stdin: "inherit",
-  stdout: "inherit",
-  stderr: "inherit",
-});
-
-const process = cmd.spawn();
+let process: Deno.ChildProcess | undefined;
+let stopping = false;
+const chooserController = new AbortController();
 const stop = () => {
+  stopping = true;
+  chooserController.abort();
   try {
-    process.kill("SIGTERM");
+    process?.kill("SIGTERM");
   } catch {
     // The child may already have stopped.
   }
@@ -208,21 +208,98 @@ Deno.addSignalListener("SIGINT", stop);
 
 let exitCode = 1;
 try {
-  const url = usedVaultChooser
-    ? `http://${hostPort(config.host, port)}`
-    : await announceAndOpen(config.host, port, openBrowser);
-  if (usedVaultChooser) {
-    if (await waitForServer(url)) {
-      console.log(`\nOpened vault: ${url}\n`);
-    } else {
-      console.log(`\nVault did not become ready. Reload browser: ${url}\n`);
+  const url = `http://${hostPort(config.host, port)}`;
+  let firstApplication = true;
+  let previousVaultDirectory = vaultDirectory;
+  while (!stopping) {
+    process = applicationCommand(vaultDirectory).spawn();
+    const processStatus = process.status;
+    if (selectedWithChooser) {
+      if (await waitForServer(url)) {
+        console.log(`\nOpened vault: ${url}\n`);
+      } else {
+        try {
+          process.kill("SIGTERM");
+        } catch {
+          // The failed child may already have exited.
+        }
+        const status = await processStatus;
+        process = undefined;
+        if (
+          status.code === VAULT_SWITCH_EXIT_CODE && vaultSwitchEnabled &&
+          !stopping
+        ) {
+          previousVaultDirectory = vaultDirectory;
+          vaultDirectory = await chooseVaultAtStartup({
+            announceAndOpen,
+            defaultActionLabel: "Reopen previous vault",
+            defaultDirectory: previousVaultDirectory,
+            hostname: config.host,
+            message: "Current vault closed safely. Choose another vault.",
+            openBrowser: false,
+            port,
+            signal: chooserController.signal,
+          });
+          config.vaultDir = vaultDirectory;
+          Deno.env.set("SYNTHESIS_VAULT", vaultDirectory);
+          selectedWithChooser = true;
+          continue;
+        }
+        if (!vaultSwitchEnabled || stopping) {
+          exitCode = status.code;
+          break;
+        }
+        vaultDirectory = await chooseVaultAtStartup({
+          announceAndOpen,
+          defaultActionLabel: "Reopen previous vault",
+          defaultDirectory: previousVaultDirectory,
+          hostname: config.host,
+          message:
+            "That vault could not be opened. Choose another vault or reopen the previous one.",
+          openBrowser: false,
+          port,
+          signal: chooserController.signal,
+        });
+        config.vaultDir = vaultDirectory;
+        Deno.env.set("SYNTHESIS_VAULT", vaultDirectory);
+        selectedWithChooser = true;
+        continue;
+      }
+    } else if (firstApplication) {
+      await announceAndOpen(config.host, port, openBrowser);
     }
+    firstApplication = false;
+    selectedWithChooser = false;
+
+    const status = await processStatus;
+    process = undefined;
+    if (
+      status.code !== VAULT_SWITCH_EXIT_CODE || !vaultSwitchEnabled || stopping
+    ) {
+      exitCode = status.code;
+      break;
+    }
+
+    previousVaultDirectory = vaultDirectory;
+    vaultDirectory = await chooseVaultAtStartup({
+      announceAndOpen,
+      defaultActionLabel: "Reopen previous vault",
+      defaultDirectory: previousVaultDirectory,
+      hostname: config.host,
+      message: "Current vault closed safely. Choose another vault.",
+      openBrowser: false,
+      port,
+      signal: chooserController.signal,
+    });
+    config.vaultDir = vaultDirectory;
+    Deno.env.set("SYNTHESIS_VAULT", vaultDirectory);
+    selectedWithChooser = true;
   }
-  if (trial) printTrialGuide(url);
-  exitCode = (await process.status).code;
+} catch (error) {
+  if (!(stopping && error instanceof DOMException)) throw error;
+  exitCode = 0;
 } finally {
   Deno.removeSignalListener("SIGINT", stop);
   frontendWatcher?.kill();
-  await cleanTrialRun(trial);
 }
 Deno.exit(exitCode);

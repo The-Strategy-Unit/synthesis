@@ -23,10 +23,14 @@ Deno.test({
         finish = resolve;
       });
       let cleanups = 0;
-      closeCatalogueOnServerFinish({ finished }, db, () => cleanups++);
+      const cleaned = closeCatalogueOnServerFinish(
+        { finished },
+        db,
+        () => cleanups++,
+      );
 
       finish();
-      await finished;
+      await cleaned;
 
       assert.throws(() => db.notes.getAllNotes(), /database is not open/i);
       assert.equal(cleanups, 1);

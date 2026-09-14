@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS ingest_proposals (
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'approved', 'rejected')),
   proposal_json TEXT NOT NULL,
+  draft_json TEXT,
+  draft_updated_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   reviewed_at TEXT,
   FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
@@ -160,6 +162,14 @@ export function initDatabase(db: DatabaseSync): void {
     db.exec(
       "ALTER TABLE discoveries ADD COLUMN page_hashes_json TEXT NOT NULL DEFAULT '[]'",
     );
+  }
+  const proposalColumns = db.prepare("PRAGMA table_info(ingest_proposals)")
+    .all() as Array<{ name: string }>;
+  if (!proposalColumns.some((column) => column.name === "draft_json")) {
+    db.exec("ALTER TABLE ingest_proposals ADD COLUMN draft_json TEXT");
+  }
+  if (!proposalColumns.some((column) => column.name === "draft_updated_at")) {
+    db.exec("ALTER TABLE ingest_proposals ADD COLUMN draft_updated_at TEXT");
   }
 
   // Vectors created before model identity was recorded cannot be compared

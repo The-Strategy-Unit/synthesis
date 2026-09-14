@@ -98,6 +98,7 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
         "Set 'confirm' to 'UNDO' to undo the last accepted ingest",
       );
     }
+    const release = await ingestGate.acquire(identity, requestSignal);
     try {
       return json({ undo: await undoLastIngest(db) });
     } catch (error) {
@@ -108,6 +109,8 @@ export const handleIngestRoutes: ApiRoute = async (context) => {
         throw new ApiError(409, "UNDO_CONFLICT", error.message);
       }
       throw error;
+    } finally {
+      release();
     }
   }
 

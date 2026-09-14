@@ -46,6 +46,18 @@ export interface IngestProposalApproval {
   changes?: IngestProposalApprovalChange[];
 }
 
+export type IngestProposalDraftDecision = "pending" | "include" | "exclude";
+
+export interface IngestProposalDraftChange {
+  index: number;
+  decision: IngestProposalDraftDecision;
+  body: string;
+}
+
+export interface IngestProposalDraft {
+  changes: IngestProposalDraftChange[];
+}
+
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const MAX_CHANGES = 12;
 const MAX_MARKDOWN_LENGTH = 30_000;
@@ -232,6 +244,55 @@ export function validateIngestProposalApproval(
       );
     }
     return { index, body };
+  });
+  return { changes };
+}
+
+export function validateIngestProposalDraft(
+  value: unknown,
+): IngestProposalDraft {
+  const draft = asRecord(value, "Ingest proposal draft");
+  if (
+    !Array.isArray(draft.changes) || draft.changes.length < 1 ||
+    draft.changes.length > MAX_CHANGES
+  ) {
+    throw new Error(
+      `Ingest proposal draft.changes must contain 1-${MAX_CHANGES} changes`,
+    );
+  }
+  const indexes = new Set<number>();
+  const changes = draft.changes.map((value, itemIndex) => {
+    const context = `Ingest proposal draft.changes[${itemIndex}]`;
+    const change = asRecord(value, context);
+    if (!Number.isSafeInteger(change.index) || Number(change.index) < 0) {
+      throw new Error(`${context}.index must be a non-negative integer`);
+    }
+    const index = Number(change.index);
+    if (indexes.has(index)) {
+      throw new Error(
+        `Ingest proposal draft contains duplicate index ${index}`,
+      );
+    }
+    indexes.add(index);
+    if (
+      !new Set(["pending", "include", "exclude"]).has(String(change.decision))
+    ) {
+      throw new Error(`${context}.decision is invalid`);
+    }
+    if (typeof change.body !== "string") {
+      throw new Error(`${context}.body must be a string`);
+    }
+    const body = change.body.replace(/\r\n?/g, "\n");
+    if (body.length > MAX_BODY_LENGTH) {
+      throw new Error(
+        `${context}.body must not exceed ${MAX_BODY_LENGTH} characters`,
+      );
+    }
+    return {
+      index,
+      decision: change.decision as IngestProposalDraftDecision,
+      body,
+    };
   });
   return { changes };
 }

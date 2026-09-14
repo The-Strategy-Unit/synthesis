@@ -11,7 +11,7 @@ import { handleProviderRoutes } from "./routes/provider_routes.ts";
 import { handleReviewRoutes } from "./routes/review_routes.ts";
 import { handleSystemRoutes } from "./routes/system_routes.ts";
 import { handleWikiRoutes } from "./routes/wiki_routes.ts";
-import type { ApiRoute } from "./route_context.ts";
+import type { ApiRoute, ApplicationControl } from "./route_context.ts";
 import {
   ApiError,
   authenticate,
@@ -45,11 +45,13 @@ export function createHandler(
   providerSettings?: ProviderSettingsDependencies,
   ingestDependencies: IngestDependencies = { ingestYouTube },
   providerUsage: OutputTokenUsageReader = emptyProviderUsage,
+  applicationControl: ApplicationControl = {},
 ): (
   req: Request,
   info?: Pick<Deno.ServeHandlerInfo, "completed">,
 ) => Promise<Response> {
   const ingestGate = new IngestGate();
+  let vaultSwitchPending = false;
 
   return async function handle(
     req: Request,
@@ -61,6 +63,9 @@ export function createHandler(
       const path = url.pathname;
       const method = req.method;
       if (!path.startsWith("/api/")) return await serveStatic(path);
+      if (vaultSwitchPending) {
+        throw new ApiError(503, "VAULT_CLOSING", "Vault is closing");
+      }
 
       const identity = authenticate(req);
       if (method !== "GET" && method !== "HEAD") {
@@ -82,6 +87,19 @@ export function createHandler(
         req,
         requestSignal,
         requestId,
+        requestVaultSwitch: applicationControl.onVaultSwitch
+          ? () => {
+            if (vaultSwitchPending) return;
+            vaultSwitchPending = true;
+            const completed = info?.completed ?? Promise.resolve();
+            void completed.then(
+              applicationControl.onVaultSwitch,
+              applicationControl.onVaultSwitch,
+            ).catch(() => {
+              console.error("Vault switch request failed");
+            });
+          }
+          : undefined,
         resolveProviders,
         url,
       };

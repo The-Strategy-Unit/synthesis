@@ -25,10 +25,12 @@ interface PickerCommandResult {
 }
 
 export interface VaultChooserOptions {
+  defaultActionLabel?: string;
   defaultDirectory: string;
   hostname: string;
   port: number;
   openBrowser: boolean;
+  message?: string;
   signal?: AbortSignal;
   announceAndOpen(
     hostname: string,
@@ -192,7 +194,12 @@ function htmlEscape(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-function chooserHtml(defaultDirectory: string, nonce: string): string {
+function chooserHtml(
+  defaultDirectory: string,
+  nonce: string,
+  defaultActionLabel = "Open default vault",
+  message = "",
+): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -250,10 +257,10 @@ function chooserHtml(defaultDirectory: string, nonce: string): string {
   <main>
     <p class="eyebrow">Synthesis</p>
     <h1>Open a vault</h1>
-    <p class="intro">Choose an existing Synthesis vault, or continue with your default local vault. One vault stays open until Synthesis stops.</p>
+    <p class="intro">Choose an existing Synthesis vault, or continue with the suggested local vault. You can switch again later from Vault tools.</p>
     <button id="choose" type="button">Choose vault folder</button>
     <button id="default" class="secondary" type="button">
-      Open default vault
+      ${htmlEscape(defaultActionLabel)}
       <span class="default-path" title="${htmlEscape(defaultDirectory)}">${
     htmlEscape(defaultDirectory)
   }</span>
@@ -266,7 +273,9 @@ function chooserHtml(defaultDirectory: string, nonce: string): string {
         <button type="submit">Open this vault</button>
       </form>
     </details>
-    <p id="status" role="status" aria-live="polite" aria-atomic="true" aria-busy="false"></p>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true" aria-busy="false">${
+    htmlEscape(message)
+  }</p>
   </main>
   <script nonce="${nonce}">
     const status = document.getElementById("status");
@@ -303,6 +312,10 @@ function chooserHtml(defaultDirectory: string, nonce: string): string {
           const response = await fetch("/api/status", { cache: "no-store" });
           const result = await response.json();
           if (result.status === "ok") {
+            location.replace("/");
+            return;
+          }
+          if (result.status === "choosing-vault") {
             location.replace("/");
             return;
           }
@@ -394,6 +407,8 @@ export function createVaultChooserHandler(
     pickVaultDirectory,
   validate: (value: unknown) => Promise<string> =
     validateExistingVaultDirectory,
+  defaultActionLabel = "Open default vault",
+  message = "",
 ): (req: Request) => Promise<Response> {
   let hasSelection = false;
   const commit = (directory: string): Response => {
@@ -417,7 +432,10 @@ export function createVaultChooserHandler(
       const nonce = crypto.randomUUID().replaceAll("-", "");
       const headers = securityHeaders(nonce);
       headers.set("Content-Type", "text/html; charset=utf-8");
-      return new Response(chooserHtml(defaultDirectory, nonce), { headers });
+      return new Response(
+        chooserHtml(defaultDirectory, nonce, defaultActionLabel, message),
+        { headers },
+      );
     }
     if (req.method === "GET" && url.pathname === "/api/status") {
       return json({ status: "choosing-vault" });
@@ -494,12 +512,16 @@ export async function chooseVaultAtStartup(
     options.defaultDirectory,
     resolveSelection,
     options.pickDirectory,
+    undefined,
+    options.defaultActionLabel,
+    options.message,
   );
+  const serverController = new AbortController();
   const server = Deno.serve(
     {
       hostname: options.hostname,
       port: options.port,
-      signal: options.signal,
+      signal: serverController.signal,
     },
     handler,
   );
@@ -507,8 +529,10 @@ export async function chooseVaultAtStartup(
   const aborted = new Promise<never>((_resolve, reject) => {
     rejectAborted = reject;
   });
-  const abort = () =>
+  const abort = () => {
+    serverController.abort();
     rejectAborted?.(new DOMException("Aborted", "AbortError"));
+  };
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) abort();
   try {
@@ -520,7 +544,7 @@ export async function chooseVaultAtStartup(
     return await Promise.race([selection, aborted]);
   } finally {
     options.signal?.removeEventListener("abort", abort);
-    if (options.signal?.aborted) await server.finished;
+    if (serverController.signal.aborted) await server.finished;
     else await server.shutdown();
   }
 }

@@ -4,12 +4,14 @@ import { config } from "../app/config.ts";
 import { DB } from "../catalogue/db.ts";
 import { discoveryEvidenceHash } from "../wiki/discovery.ts";
 import { readIngestHistoryManifest } from "../vault/ingest_history.ts";
+import { ensureVaultManifest } from "../vault/vault_manifest.ts";
 import {
   embeddingIdentity,
   environmentProviders,
 } from "../provider/provider_runtime.ts";
 import { createHandler } from "./routes.ts";
 import { parseWikiPage, renderWikiPage } from "../wiki/wiki.ts";
+import { ensureWikiSchema } from "../wiki/wiki_schema.ts";
 
 function routeTest(name: string, fn: () => void | Promise<void>): void {
   Deno.test({
@@ -52,6 +54,17 @@ function modelJson(value: unknown): Response {
   });
 }
 
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 routeTest(
   "status is minimal and carries private no-store security headers",
   async () => {
@@ -61,7 +74,10 @@ routeTest(
       );
 
       assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { status: "ok" });
+      assert.deepEqual(await response.json(), {
+        status: "ok",
+        version: config.build.version,
+      });
       assert.equal(response.headers.get("Cache-Control"), "no-store");
       assert.match(
         response.headers.get("Content-Security-Policy") ?? "",
@@ -85,9 +101,113 @@ routeTest("UI config exposes bounded semantic graph breadth", async () => {
         config.link.k,
       ),
       maxSemanticNeighbors: config.link.k,
+      vaultSwitchEnabled: false,
     });
   });
 });
+
+routeTest(
+  "vault switching is capability-gated and starts only after response delivery",
+  async () => {
+    await withTempHandler(async (_handle, db) => {
+      let completeResponse!: () => void;
+      const completed = new Promise<void>((resolve) => {
+        completeResponse = resolve;
+      });
+      let switchRequests = 0;
+      const handle = createHandler(
+        db,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          onVaultSwitch: () => {
+            switchRequests++;
+          },
+        },
+      );
+
+      const configResponse = await handle(
+        new Request("http://localhost/api/config"),
+      );
+      assert.equal((await configResponse.json()).vaultSwitchEnabled, true);
+      const response = await handle(
+        new Request("http://localhost/api/vault/switch", {
+          body: "{}",
+          headers: mutationHeaders(),
+          method: "POST",
+        }),
+        { completed },
+      );
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "switching" });
+      assert.equal(switchRequests, 0);
+      assert.equal(
+        (await handle(new Request("http://localhost/api/status"))).status,
+        503,
+      );
+
+      completeResponse();
+      await completed;
+      await Promise.resolve();
+      assert.equal(switchRequests, 1);
+    });
+  },
+);
+
+routeTest("pinned vaults reject runtime switching", async () => {
+  await withTempHandler(async (handle) => {
+    const response = await handle(
+      new Request("http://localhost/api/vault/switch", {
+        body: "{}",
+        headers: mutationHeaders(),
+        method: "POST",
+      }),
+    );
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "VAULT_SWITCH_UNAVAILABLE");
+  });
+});
+
+routeTest(
+  "vault verification is read-only and provider-independent",
+  async () => {
+    await withTempHandler(async (_handle, db) => {
+      await ensureVaultManifest();
+      await ensureWikiSchema();
+      const handle = createHandler(db, () => {
+        throw new Error("vault verification must not resolve providers");
+      });
+      const response = await handle(new Request("http://localhost/api/verify"));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        verification: {
+          status: "healthy",
+          sourceCount: 0,
+          noteCount: 0,
+          provenanceCount: 0,
+        },
+      });
+    });
+  },
+);
+
+routeTest(
+  "vault verification does not initialise a missing vault",
+  async () => {
+    await withTempHandler(async (handle, _db, dir) => {
+      const response = await handle(new Request("http://localhost/api/verify"));
+
+      assert.equal(response.status, 422);
+      await assert.rejects(
+        Deno.stat(`${dir}/vault.json`),
+        Deno.errors.NotFound,
+      );
+      await assert.rejects(Deno.stat(`${dir}/schema.md`), Deno.errors.NotFound);
+    });
+  },
+);
 
 routeTest(
   "vault export is streamed without a configured provider",
@@ -216,6 +336,7 @@ routeTest(
 
 routeTest("wiki schema is created, updated, and validated", async () => {
   await withTempHandler(async (handle, _db, dir) => {
+    await ensureWikiSchema();
     const initialResponse = await handle(
       new Request("http://localhost/api/schema"),
     );
@@ -2276,13 +2397,27 @@ routeTest(
   "source review exposes provenance without internal paths",
   async () => {
     await withTempHandler(async (handle, db, dir) => {
-      const sourceHash = "f".repeat(64);
+      const sourceText = "Evidence from the archived controlled trial.";
+      const sourceHash = await sha256Text(sourceText);
+      const sourceDirectory = `${dir}/sources/${sourceHash}`;
+      await Deno.mkdir(sourceDirectory, { recursive: true });
+      await Deno.writeTextFile(`${sourceDirectory}/source.txt`, sourceText);
+      await Deno.writeTextFile(
+        `${sourceDirectory}/meta.json`,
+        JSON.stringify({
+          contentHash: sourceHash,
+          extractedTextHash: sourceHash,
+          title: "Randomized clinical trial",
+          sourceUrl: "https://example.test/trial",
+          sourceType: "text",
+        }),
+      );
       const sourceId = db.sources.addSource(
         sourceHash,
         "Randomized clinical trial",
         "https://example.test/trial",
         "text",
-        `${dir}/sources/private/source.txt`,
+        `${sourceDirectory}/source.txt`,
         "A controlled comparison of two interventions.",
       );
       const notePath = `${dir}/notes/treatment-comparison.md`;
@@ -2334,10 +2469,88 @@ routeTest(
         new RegExp(`${sourceHash}|source\\.txt|treatment-comparison\\.md`),
       );
 
+      const contentResponse = await handle(
+        new Request(`http://localhost/api/sources/${sourceId}/content`),
+      );
+      assert.equal(contentResponse.status, 200);
+      const evidence = await contentResponse.json();
+      assert.equal(evidence.text, sourceText);
+      assert.equal(evidence.extractedTextVerified, true);
+      assert.equal(evidence.truncated, false);
+
       const missing = await handle(
         new Request("http://localhost/api/sources/99999"),
       );
       assert.equal(missing.status, 404);
+    });
+  },
+);
+
+routeTest(
+  "PDF evidence opens an integrity-checked extracted page",
+  async () => {
+    await withTempHandler(async (handle, db, dir) => {
+      const original = new TextEncoder().encode("%PDF archived evidence");
+      const originalHash = await crypto.subtle.digest(
+        "SHA-256",
+        original.slice().buffer,
+      ).then((digest) =>
+        Array.from(
+          new Uint8Array(digest),
+          (byte) => byte.toString(16).padStart(2, "0"),
+        ).join("")
+      );
+      const transcript =
+        "## PDF page 1\n\nBackground.\n\n## PDF page 2\n\nExact supporting result.";
+      const directory = `${dir}/sources/${originalHash}`;
+      await Deno.mkdir(directory, { recursive: true });
+      await Deno.writeFile(`${directory}/original.pdf`, original);
+      await Deno.writeTextFile(`${directory}/source.txt`, transcript);
+      await Deno.writeTextFile(
+        `${directory}/meta.json`,
+        JSON.stringify({
+          contentHash: originalHash,
+          extractedTextHash: await sha256Text(transcript),
+          title: "PDF evidence",
+          sourceUrl: "",
+          sourceType: "pdf",
+          originalFileName: "evidence.pdf",
+          mediaType: "application/pdf",
+          pageCount: 2,
+        }),
+      );
+      const sourceId = db.sources.addSource(
+        originalHash,
+        "PDF evidence",
+        null,
+        "pdf",
+        `${directory}/source.txt`,
+        "Two-page evidence.",
+      );
+
+      const response = await handle(
+        new Request(`http://localhost/api/sources/${sourceId}/content?page=2`),
+      );
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        id: sourceId,
+        sourceType: "pdf",
+        extractedTextVerified: true,
+        text: "Exact supporting result.",
+        truncated: false,
+        page: 2,
+        pageCount: 2,
+      });
+
+      await Deno.writeTextFile(
+        `${directory}/source.txt`,
+        `${transcript} altered`,
+      );
+      const tampered = await handle(
+        new Request(`http://localhost/api/sources/${sourceId}/content?page=2`),
+      );
+      assert.equal(tampered.status, 422);
+      assert.equal((await tampered.json()).code, "SOURCE_ARCHIVE_INVALID");
     });
   },
 );
@@ -2349,10 +2562,6 @@ routeTest(
     try {
       await withTempHandler(async (handle, db, dir) => {
         await Deno.mkdir(`${dir}/notes`, { recursive: true });
-        const embedding = Array.from(
-          { length: config.embed.dimensions },
-          (_, index) => index === 0 ? 1 : 0,
-        );
         let fetchCalls = 0;
         globalThis.fetch = () => {
           switch (fetchCalls++) {
@@ -2391,10 +2600,6 @@ routeTest(
               }));
             case 2:
               return Promise.resolve(Response.json({
-                data: [{ embedding }],
-              }));
-            case 3:
-              return Promise.resolve(Response.json({
                 choices: [{
                   message: {
                     content: JSON.stringify({
@@ -2409,7 +2614,7 @@ routeTest(
                   },
                 }],
               }));
-            case 4:
+            case 3:
               return Promise.resolve(Response.json({
                 choices: [{
                   message: {
@@ -2426,7 +2631,7 @@ routeTest(
                   },
                 }],
               }));
-            case 5:
+            case 4:
               return Promise.resolve(Response.json({
                 choices: [{
                   message: {
@@ -2471,6 +2676,31 @@ routeTest(
         assert.equal(
           detail.proposal.changes[0].page.title,
           "Approved proposal page",
+        );
+
+        const draftResponse = await handle(
+          new Request(
+            `http://localhost/api/proposals/${approvedId}/draft`,
+            {
+              method: "PUT",
+              headers: mutationHeaders(),
+              body: JSON.stringify({
+                changes: [{
+                  index: 0,
+                  decision: "include",
+                  body: "Locally saved review wording.",
+                }],
+              }),
+            },
+          ),
+        );
+        assert.equal(draftResponse.status, 200);
+        const restoredDraft = await handle(
+          new Request(`http://localhost/api/proposals/${approvedId}`),
+        ).then((response) => response.json());
+        assert.equal(
+          restoredDraft.proposal.draft.changes[0].body,
+          "Locally saved review wording.",
         );
 
         for (const body of [undefined, JSON.stringify({})]) {
@@ -2592,7 +2822,7 @@ routeTest(
           (await missingResponse.json()).code,
           "PROPOSAL_NOT_FOUND",
         );
-        assert.equal(fetchCalls, 6);
+        assert.equal(fetchCalls, 5);
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -2644,7 +2874,10 @@ routeTest(
           }),
         );
         assert.equal(viewer.status, 200);
-        assert.deepEqual(await viewer.json(), { status: "ok" });
+        assert.deepEqual(await viewer.json(), {
+          status: "ok",
+          version: config.build.version,
+        });
 
         const viewerIngest = await handle(
           new Request("https://synthesis.example/api/ingest", {

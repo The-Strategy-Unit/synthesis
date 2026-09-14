@@ -179,7 +179,7 @@ async function approveProposalAndRefresh(
   requestId: string,
   proposalId: number,
   send: (stage: string, data?: unknown) => void,
-  providers: ActiveProviders,
+  providers: ActiveProviders | undefined,
   options: {
     approval?: IngestProposalApproval;
     review?: IngestReviewAudit;
@@ -215,7 +215,7 @@ async function approveProposalAndRefresh(
       });
     }
   }
-  if (options.generateSynthesis === false) return result;
+  if (options.generateSynthesis === false || !providers) return result;
   try {
     const synthesis = await generateDiscoveries(
       db,

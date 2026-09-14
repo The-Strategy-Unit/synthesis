@@ -129,6 +129,69 @@ async function* tarChunks(files: ExportFile[]): AsyncGenerator<Uint8Array> {
   yield new Uint8Array(TAR_BLOCK_SIZE * 2);
 }
 
+async function snapshotStream(
+  files: ExportFile[],
+): Promise<ReadableStream<Uint8Array>> {
+  const snapshotPath = await Deno.makeTempFile({
+    prefix: "synthesis-vault-export-",
+    suffix: ".tar",
+  });
+  let output: Deno.FsFile | undefined;
+  try {
+    output = await Deno.open(snapshotPath, { write: true, truncate: true });
+    for await (const chunk of tarChunks(files)) {
+      let offset = 0;
+      while (offset < chunk.length) {
+        const written = await output.write(chunk.subarray(offset));
+        if (written === 0) {
+          throw new Error("Vault export snapshot write made no progress");
+        }
+        offset += written;
+      }
+    }
+    await output.sync();
+    output.close();
+    output = undefined;
+  } catch (error) {
+    output?.close();
+    await Deno.remove(snapshotPath).catch(() => undefined);
+    throw error;
+  }
+
+  let input: Deno.FsFile;
+  try {
+    input = await Deno.open(snapshotPath, { read: true });
+  } catch (error) {
+    await Deno.remove(snapshotPath).catch(() => undefined);
+    throw error;
+  }
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    input.close();
+    await Deno.remove(snapshotPath).catch(() => undefined);
+  };
+  return new ReadableStream({
+    async pull(controller) {
+      const buffer = new Uint8Array(64 * 1024);
+      try {
+        const read = await input.read(buffer);
+        if (read === null) {
+          controller.close();
+          await close();
+        } else controller.enqueue(buffer.subarray(0, read));
+      } catch (error) {
+        controller.error(error);
+        await close();
+      }
+    },
+    async cancel() {
+      await close();
+    },
+  });
+}
+
 /** Stream a portable export of authoritative vault files. */
 export async function exportVault(): Promise<VaultExport> {
   await ensureVaultManifest();
@@ -142,22 +205,8 @@ export async function exportVault(): Promise<VaultExport> {
   files.sort((left, right) =>
     left.archivePath.localeCompare(right.archivePath, "en-GB")
   );
-  const iterator = tarChunks(files);
   return {
     fileCount: files.length,
-    stream: new ReadableStream({
-      async pull(controller) {
-        try {
-          const next = await iterator.next();
-          if (next.done) controller.close();
-          else controller.enqueue(next.value);
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-      async cancel() {
-        await iterator.return(undefined);
-      },
-    }),
+    stream: await snapshotStream(files),
   };
 }

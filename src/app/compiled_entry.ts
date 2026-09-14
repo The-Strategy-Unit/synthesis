@@ -6,33 +6,24 @@ import {
   hostPort,
   waitForServer,
 } from "./browser_launcher.ts";
-import {
-  cleanTrialRun,
-  type PreparedTrialRun,
-  prepareTrialRun,
-  printTrialGuide,
-} from "./trial_vault.ts";
 import { chooseVaultAtStartup, isLoopbackHostname } from "./vault_chooser.ts";
 
 export interface CompiledOptions {
   help: boolean;
-  trial: boolean;
   openBrowser: boolean;
   vaultPath: string | null;
 }
 
-const COMPILED_USAGE =
-  "Usage: synthesis [--trial | --vault <path>] [--no-open] [--help]";
+const COMPILED_USAGE = "Usage: synthesis [--vault <path>] [--no-open] [--help]";
 
 export function compiledHelpText(): string {
   return [
     "Synthesis - local-first knowledge compiler",
     "",
     COMPILED_USAGE,
-    "Start without --trial or --vault to choose a vault in the browser.",
+    "Start without --vault to choose a vault in the browser.",
     "",
     "Options:",
-    "  --trial    Start with a disposable, provider-free demonstration vault.",
     "  --vault    Start with the vault at the supplied path.",
     "  --no-open  Start without opening a browser.",
     "  --help     Show this help and exit.",
@@ -41,7 +32,6 @@ export function compiledHelpText(): string {
 
 export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
   let help = false;
-  let trial = false;
   let openBrowser = true;
   let vaultPath: string | null = null;
   for (let index = 0; index < args.length; index++) {
@@ -49,11 +39,6 @@ export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
     if (argument === "--help") {
       if (help) throw new Error(COMPILED_USAGE);
       help = true;
-      continue;
-    }
-    if (argument === "--trial") {
-      if (trial) throw new Error(COMPILED_USAGE);
-      trial = true;
       continue;
     }
     if (argument === "--no-open") {
@@ -74,8 +59,7 @@ export function parseCompiledOptions(args: readonly string[]): CompiledOptions {
     }
     throw new Error(COMPILED_USAGE);
   }
-  if (trial && vaultPath !== null) throw new Error(COMPILED_USAGE);
-  return { help, trial, openBrowser, vaultPath };
+  return { help, openBrowser, vaultPath };
 }
 
 async function main(): Promise<void> {
@@ -102,8 +86,7 @@ async function main(): Promise<void> {
     __synthesisPdfCanvas: pdfCanvas,
     Path2D: runtimeGlobals.Path2D ?? pdfCanvas.Path2D,
   });
-  let trial: PreparedTrialRun | undefined;
-  let usedVaultChooser = false;
+  const configuredVaultPath = Deno.env.get("SYNTHESIS_VAULT")?.trim();
   const controller = new AbortController();
   const stop = () => controller.abort();
   const signals: Deno.Signal[] = Deno.build.os === "windows"
@@ -111,9 +94,7 @@ async function main(): Promise<void> {
     : ["SIGINT", "SIGTERM"];
   for (const signal of signals) Deno.addSignalListener(signal, stop);
   try {
-    if (options.trial) {
-      trial = await prepareTrialRun();
-    } else if (options.vaultPath !== null) {
+    if (options.vaultPath !== null) {
       const vaultPath = resolve(options.vaultPath);
       const manifest = await Deno.stat(join(vaultPath, "vault.json")).catch(
         () => null,
@@ -128,13 +109,13 @@ async function main(): Promise<void> {
     const { config } = await import("./config.ts");
     const openBrowser = options.openBrowser &&
       environmentBoolean("SYNTHESIS_OPEN_BROWSER", true);
-    if (
-      !options.trial && options.vaultPath === null &&
-      !Deno.env.get("SYNTHESIS_VAULT")?.trim() &&
+    const vaultSwitchEnabled = options.vaultPath === null &&
+      !configuredVaultPath &&
       isLoopbackHostname(config.host) &&
       config.security.publicOrigin === undefined &&
-      !config.security.trustProxyAuth
-    ) {
+      !config.security.trustProxyAuth;
+    let selectedWithChooser = false;
+    if (vaultSwitchEnabled) {
       config.vaultDir = await chooseVaultAtStartup({
         announceAndOpen,
         defaultDirectory: config.vaultDir,
@@ -144,30 +125,82 @@ async function main(): Promise<void> {
         signal: controller.signal,
       });
       Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
-      usedVaultChooser = true;
+      selectedWithChooser = true;
     }
     const { startApplication } = await import("./application.ts");
-    const server = await startApplication(controller.signal);
-    const url = usedVaultChooser
-      ? `http://${hostPort(config.host, config.port)}`
-      : await announceAndOpen(config.host, config.port, openBrowser);
-    if (usedVaultChooser) {
-      if (await waitForServer(url)) console.log(`\nOpened vault: ${url}\n`);
-      else {
-        console.log(
-          `\nVault did not become ready. Reload browser: ${url}\n`,
-        );
+    const url = `http://${hostPort(config.host, config.port)}`;
+    let firstApplication = true;
+    let previousVaultDirectory = config.vaultDir;
+    while (!controller.signal.aborted) {
+      let requestSwitch!: () => void;
+      const switchRequested = new Promise<void>((resolve) => {
+        requestSwitch = resolve;
+      });
+      let session: Awaited<ReturnType<typeof startApplication>>;
+      try {
+        session = await startApplication(controller.signal, {
+          onVaultSwitch: vaultSwitchEnabled ? requestSwitch : undefined,
+        });
+      } catch (error) {
+        if (!vaultSwitchEnabled || !selectedWithChooser) throw error;
+        console.error("The selected vault could not be opened safely.");
+        config.vaultDir = await chooseVaultAtStartup({
+          announceAndOpen,
+          defaultActionLabel: "Reopen previous vault",
+          defaultDirectory: previousVaultDirectory,
+          hostname: config.host,
+          message:
+            "That vault could not be opened. Choose another vault or reopen the previous one.",
+          openBrowser: false,
+          port: config.port,
+          signal: controller.signal,
+        });
+        Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
+        selectedWithChooser = true;
+        continue;
       }
+
+      if (selectedWithChooser) {
+        if (await waitForServer(url)) console.log(`\nOpened vault: ${url}\n`);
+        else {
+          console.log(
+            `\nVault did not become ready. Reload browser: ${url}\n`,
+          );
+        }
+      } else if (firstApplication) {
+        await announceAndOpen(config.host, config.port, openBrowser);
+      }
+      firstApplication = false;
+      selectedWithChooser = false;
+
+      const outcome = await Promise.race([
+        session.finished.then(() => "finished" as const),
+        switchRequested.then(() => "switch" as const),
+      ]);
+      if (outcome === "finished") break;
+
+      await session.close();
+      if (controller.signal.aborted) break;
+      previousVaultDirectory = config.vaultDir;
+      config.vaultDir = await chooseVaultAtStartup({
+        announceAndOpen,
+        defaultActionLabel: "Reopen previous vault",
+        defaultDirectory: previousVaultDirectory,
+        hostname: config.host,
+        message: "Current vault closed safely. Choose another vault.",
+        openBrowser: false,
+        port: config.port,
+        signal: controller.signal,
+      });
+      Deno.env.set("SYNTHESIS_VAULT", config.vaultDir);
+      selectedWithChooser = true;
     }
-    if (trial) printTrialGuide(url);
-    await server.finished;
   } catch (error) {
     if (!(controller.signal.aborted && error instanceof DOMException)) {
       throw error;
     }
   } finally {
     for (const signal of signals) Deno.removeSignalListener(signal, stop);
-    await cleanTrialRun(trial);
   }
   Deno.exit(0);
 }

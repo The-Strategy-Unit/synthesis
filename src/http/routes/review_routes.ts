@@ -5,7 +5,10 @@ import {
   rejectIngestProposal,
   restageIngestProposal,
 } from "../../ingest/orchestrate.ts";
-import { validateIngestProposalApproval } from "../../ingest/ingest_proposal.ts";
+import {
+  validateIngestProposalApproval,
+  validateIngestProposalDraft,
+} from "../../ingest/ingest_proposal.ts";
 import { errMsg } from "../../shared/utils.ts";
 import {
   confirmDiscovery,
@@ -62,7 +65,7 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     });
   }
   const proposalMatch = path.match(
-    /^\/api\/proposals\/(\d+)(?:\/(approve|reject|reprocess))?$/,
+    /^\/api\/proposals\/(\d+)(?:\/(approve|draft|reject|reprocess))?$/,
   );
   if (proposalMatch) {
     const proposalId = Number(proposalMatch[1]);
@@ -73,9 +76,54 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
     if (!action && method === "GET") {
       return json({ proposal: getIngestProposalReview(db, proposalId) });
     }
+    if (action === "draft" && method === "PUT") {
+      requireIngester(identity);
+      let draft;
+      try {
+        draft = validateIngestProposalDraft(await readJson(req));
+      } catch (error) {
+        throw new ApiError(400, "INVALID_PROPOSAL_DRAFT", errMsg(error));
+      }
+      const release = await ingestGate.acquire(identity, requestSignal);
+      try {
+        const proposal = getIngestProposalReview(db, proposalId);
+        if (
+          draft.changes.length !== proposal.changes.length ||
+          draft.changes.some((change) =>
+            change.index >= proposal.changes.length
+          )
+        ) {
+          throw new ApiError(
+            400,
+            "INVALID_PROPOSAL_DRAFT",
+            "Draft decisions must match every proposed change",
+          );
+        }
+        if (
+          !db.proposals.savePendingIngestProposalDraft(
+            proposalId,
+            JSON.stringify(draft),
+          )
+        ) {
+          throw new ApiError(
+            409,
+            "PROPOSAL_NOT_PENDING",
+            "Ingest proposal is no longer pending",
+          );
+        }
+        return json({ saved: true });
+      } finally {
+        release();
+      }
+    }
     if (action === "reject" && method === "POST") {
       requireIngester(identity);
-      return json({ proposal: rejectIngestProposal(db, proposalId) });
+      const release = await ingestGate.acquire(identity, requestSignal);
+      try {
+        return json({ proposal: rejectIngestProposal(db, proposalId) });
+      } finally {
+        release();
+      }
     }
     if (action === "approve" && method === "POST") {
       requireIngester(identity);
@@ -111,13 +159,12 @@ export const handleReviewRoutes: ApiRoute = async (context) => {
         release,
         requestSignal,
         async (send, signal) => {
-          const providers = await resolveProviders();
           const result = await approveProposalAndRefresh(
             db,
             requestId,
             proposalId,
             send,
-            providers,
+            undefined,
             { approval, signal },
           );
           return result.notes;

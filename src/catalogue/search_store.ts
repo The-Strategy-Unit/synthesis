@@ -178,6 +178,10 @@ export class SearchStore {
     ).run(BigInt(noteId), new Float32Array(embedding));
   }
 
+  removeEmbedding(noteId: number): void {
+    this.db.prepare("DELETE FROM embeddings WHERE note_id = ?").run(noteId);
+  }
+
   searchKeyword(
     query: string,
     limit = config.search.resultLimit,

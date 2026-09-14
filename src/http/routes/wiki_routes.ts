@@ -1,6 +1,10 @@
 import { render as renderMarkdown } from "gfm";
 
 import { config } from "../../app/config.ts";
+import {
+  type ArchivedVaultSource,
+  loadArchivedVaultSource,
+} from "../../vault/vault_archive.ts";
 import { LlmServiceError } from "../../provider/llm.ts";
 import { answerWiki, validateWikiAnswer } from "../../wiki/query.ts";
 import { buildWikiGraph, getRelatedWikiPages } from "../../wiki/wiki_graph.ts";
@@ -32,6 +36,57 @@ import {
   semanticSearch,
   wikiLintContext,
 } from "../support.ts";
+
+const MAX_EVIDENCE_TEXT_CHARS = 100_000;
+
+function boundedEvidenceText(text: string): {
+  text: string;
+  truncated: boolean;
+} {
+  return text.length <= MAX_EVIDENCE_TEXT_CHARS ? { text, truncated: false } : {
+    text: text.slice(0, MAX_EVIDENCE_TEXT_CHARS),
+    truncated: true,
+  };
+}
+
+function sourceEvidenceText(
+  source: ArchivedVaultSource,
+  requestedPage: string | null,
+): { text: string; truncated: boolean; page?: number; pageCount?: number } {
+  if (source.sourceType !== "pdf") {
+    if (requestedPage !== null) {
+      throw new ApiError(
+        400,
+        "INVALID_INPUT",
+        "Page selection is available only for PDF sources",
+      );
+    }
+    return boundedEvidenceText(source.transcript);
+  }
+  const page = requestedPage === null ? 1 : Number(requestedPage);
+  if (
+    !Number.isSafeInteger(page) || page < 1 ||
+    page > (source.pageCount ?? 0)
+  ) {
+    throw new ApiError(400, "INVALID_INPUT", "Invalid PDF page");
+  }
+  const marker = new RegExp(`^## PDF page ${page}\\n\\n`, "m").exec(
+    source.transcript,
+  );
+  if (!marker) {
+    throw new ApiError(
+      422,
+      "SOURCE_ARCHIVE_INVALID",
+      "The archived PDF text is missing the requested page",
+    );
+  }
+  const remainder = source.transcript.slice(marker.index + marker[0].length);
+  const nextPage = /^## PDF page \d+\n\n/m.exec(remainder);
+  const result = boundedEvidenceText(
+    (nextPage ? remainder.slice(0, nextPage.index) : remainder).trim(),
+  );
+  return { ...result, page, pageCount: source.pageCount };
+}
 
 export const handleWikiRoutes: ApiRoute = async (context) => {
   const {
@@ -108,6 +163,32 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
         pageCount: db.sources.getNotesForSource(source.id).length,
       })),
     });
+  }
+  const sourceContentMatch = path.match(/^\/api\/sources\/(\d+)\/content$/);
+  if (sourceContentMatch && method === "GET") {
+    const id = Number(sourceContentMatch[1]);
+    const source = db.sources.getSource(id);
+    if (!source) throw new ApiError(404, "NOT_FOUND", "Not found");
+    try {
+      const archived = await loadArchivedVaultSource(
+        config.vaultDir,
+        source.content_hash,
+      );
+      return json({
+        id,
+        sourceType: archived.sourceType,
+        extractedTextVerified: archived.extractedTextVerified,
+        ...sourceEvidenceText(archived, url.searchParams.get("page")),
+      });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      logFailure(requestId, "Source evidence verification", error);
+      throw new ApiError(
+        422,
+        "SOURCE_ARCHIVE_INVALID",
+        "The archived source failed its integrity check",
+      );
+    }
   }
   if (path.startsWith("/api/sources/") && method === "GET") {
     const id = Number(path.split("/")[3]);
@@ -192,6 +273,7 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
       source_url: note.source_url,
       source_type: note.source_type,
       content,
+      body: page.body,
       bodyHtml: renderMarkdown(page.body),
       sources,
       claims,
@@ -274,46 +356,54 @@ export const handleWikiRoutes: ApiRoute = async (context) => {
       }
       return value as number;
     });
-    const queryContext = await loadWikiPages(db, citationIds);
-    let result;
+    const release = await context.ingestGate.acquire(
+      identity,
+      context.requestSignal,
+    );
     try {
-      result = validateWikiAnswer({
-        answer: body.answer,
-        citations: citationIds,
-        suggested_page: body.suggestedPage,
-      }, queryContext);
-    } catch {
-      throw new ApiError(
-        400,
-        "INVALID_INPUT",
-        "The reviewed wiki answer is invalid",
-      );
-    }
-    try {
-      const saved = await saveWikiSynthesis(
-        db,
-        result.suggestedPage,
-        result.citations,
-        await resolveProviders(),
-        question,
-      );
-      return json({ saved }, 201);
-    } catch (error) {
-      if (error instanceof WikiPageExistsError) {
-        return json({
-          error: error.message,
-          code: "PAGE_EXISTS",
-          existingNoteId: error.noteId,
-          requestId,
-        }, 409);
+      const queryContext = await loadWikiPages(db, citationIds);
+      let result;
+      try {
+        result = validateWikiAnswer({
+          answer: body.answer,
+          citations: citationIds,
+          suggested_page: body.suggestedPage,
+        }, queryContext);
+      } catch {
+        throw new ApiError(
+          400,
+          "INVALID_INPUT",
+          "The reviewed wiki answer is invalid",
+        );
       }
-      logFailure(requestId, "Wiki query save", error);
-      return errorResponse(
-        500,
-        "QUERY_SAVE_FAILED",
-        "Wiki answer could not be saved",
-        requestId,
-      );
+      try {
+        const saved = await saveWikiSynthesis(
+          db,
+          result.suggestedPage,
+          result.citations,
+          await resolveProviders(),
+          question,
+        );
+        return json({ saved }, 201);
+      } catch (error) {
+        if (error instanceof WikiPageExistsError) {
+          return json({
+            error: error.message,
+            code: "PAGE_EXISTS",
+            existingNoteId: error.noteId,
+            requestId,
+          }, 409);
+        }
+        logFailure(requestId, "Wiki query save", error);
+        return errorResponse(
+          500,
+          "QUERY_SAVE_FAILED",
+          "Wiki answer could not be saved",
+          requestId,
+        );
+      }
+    } finally {
+      release();
     }
   }
 

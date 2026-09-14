@@ -25,6 +25,17 @@ function modelJson(value: unknown): Response {
   });
 }
 
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 async function withReviewVault(
   test: (db: DB, dir: string) => void | Promise<void>,
 ): Promise<void> {
@@ -51,10 +62,6 @@ Deno.test({
     const originalFetch = globalThis.fetch;
     try {
       await withReviewVault(async (db, dir) => {
-        const embedding = Array.from(
-          { length: config.embed.dimensions },
-          (_, index) => index === 0 ? 1 : 0,
-        );
         let requests = 0;
         globalThis.fetch = () => {
           switch (requests++) {
@@ -80,10 +87,6 @@ Deno.test({
                 }],
               }));
             case 2:
-              return Promise.resolve(Response.json({
-                data: [{ embedding }],
-              }));
-            case 3:
               return Promise.resolve(modelJson({
                 items: [{
                   title: "Rejected concept",
@@ -93,7 +96,7 @@ Deno.test({
                   links: [],
                 }],
               }));
-            case 4:
+            case 3:
               return Promise.resolve(modelJson({
                 summary: "A rejected source summary.",
                 notes: [{
@@ -104,7 +107,7 @@ Deno.test({
                   links: [],
                 }],
               }));
-            case 5:
+            case 4:
               return Promise.resolve(modelJson({
                 decisions: [{ action: "new" }],
               }));
@@ -147,7 +150,7 @@ Deno.test({
           staged.proposal.id,
           () => {},
         );
-        assert.equal(requests, 3);
+        assert.equal(requests, 2, "approval must not call a provider");
         assert.equal(applied.newCount, 1);
         assert.ok(applied.historyId);
         assert.equal(db.notes.getAllNotes().length, 1);
@@ -172,7 +175,7 @@ Deno.test({
           approveIngestProposal(db, staged.proposal.id, () => {}),
           IngestProposalStateError,
         );
-        assert.equal(requests, 3);
+        assert.equal(requests, 2);
 
         const rejectedSource = {
           transcript: "The second source will be rejected.",
@@ -201,7 +204,7 @@ Deno.test({
         assert.equal(repeatedRejected.kind, "proposal");
         if (repeatedRejected.kind !== "proposal") return;
         assert.equal(repeatedRejected.proposal.status, "rejected");
-        assert.equal(requests, 6);
+        assert.equal(requests, 5);
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -303,7 +306,7 @@ Deno.test({
             }],
           },
         );
-        assert.equal(requests, 3);
+        assert.equal(requests, 2, "approval must not call a provider");
         assert.equal(applied.newCount, 1);
         assert.deepEqual(
           db.notes.getAllNotes().map((note) => note.title),
@@ -507,7 +510,7 @@ Deno.test({
           () => {},
         );
         assert.equal(applied.mergeCount, 1);
-        assert.equal(requests, 9);
+        assert.equal(requests, 8, "approval must not call a provider");
         assert.equal(
           parseWikiPage(await Deno.readTextFile(notePath)).body,
           "Changed durable knowledge plus restaged source-backed knowledge.",
@@ -610,6 +613,7 @@ Deno.test({
             sourceType: "pdf",
             originalFileName: "evidence.pdf",
             mediaType: "application/pdf",
+            extractedTextHash: await sha256Text(transcript),
             pageCount: 2,
           },
         );

@@ -8,14 +8,14 @@ import {
   type IngestHistoryAction,
   validateIngestHistoryManifest,
 } from "./ingest_history.ts";
-import { ensureVaultManifest } from "./vault_manifest.ts";
+import { ensureVaultManifest, loadVaultManifest } from "./vault_manifest.ts";
 import {
   findSourceReferenceHashes,
   parseWikiPage,
   renderWikiIndex,
   type WikiPage,
 } from "../wiki/wiki.ts";
-import { ensureWikiSchema } from "../wiki/wiki_schema.ts";
+import { ensureWikiSchema, loadWikiSchema } from "../wiki/wiki_schema.ts";
 
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
 const SOURCE_TYPES = new Set(["youtube", "text", "markdown", "pdf"]);
@@ -38,6 +38,13 @@ export interface VaultRebuildResult {
     "discovery_candidates",
     "discoveries",
   ];
+}
+
+export interface VaultVerificationResult {
+  status: "healthy";
+  sourceCount: number;
+  noteCount: number;
+  provenanceCount: number;
 }
 
 export class VaultRebuildError extends Error {}
@@ -146,6 +153,19 @@ async function parseSource(directory: string): Promise<CatalogueSource> {
   const summary = (await readUtf8(summaryPath, `${context} summary`)).trim();
   if (!summary) throw new Error(`${context} summary must not be empty`);
   await readUtf8(rawPath, `${context} transcript`);
+  if (meta.extractedTextHash !== undefined) {
+    const extractedTextHash = requiredText(
+      meta.extractedTextHash,
+      `${context}.extractedTextHash`,
+      64,
+    );
+    if (
+      !SOURCE_HASH.test(extractedTextHash) ||
+      await sha256(await Deno.readFile(rawPath)) !== extractedTextHash
+    ) {
+      throw new Error(`${context} extracted text hash is invalid`);
+    }
+  }
 
   let hashPath = rawPath;
   const originalFileName = meta.originalFileName;
@@ -398,15 +418,22 @@ async function replaceIndex(notes: PreparedNote[]): Promise<void> {
   }
 }
 
-/** Rebuild provider-independent SQLite catalogue state from authoritative files. */
-export async function rebuildVaultCatalogue(
-  db: DB,
-): Promise<VaultRebuildResult> {
+async function prepareVaultCatalogue(
+  createMissingFiles: boolean,
+): Promise<{
+  sources: CatalogueSource[];
+  notes: PreparedNote[];
+}> {
   let sources: CatalogueSource[];
   let notes: PreparedNote[];
   try {
-    await ensureVaultManifest();
-    await ensureWikiSchema();
+    if (createMissingFiles) {
+      await ensureVaultManifest();
+      await ensureWikiSchema();
+    } else {
+      await loadVaultManifest();
+      await loadWikiSchema();
+    }
     sources = await readSources();
     const historyActions = await readHistoryActions();
     notes = await readNotes(
@@ -416,6 +443,28 @@ export async function rebuildVaultCatalogue(
   } catch (error) {
     throw new VaultRebuildError(`Vault preflight failed: ${errMsg(error)}`);
   }
+  return { sources, notes };
+}
+
+/** Verify authoritative vault files without mutating the catalogue. */
+export async function verifyVault(): Promise<VaultVerificationResult> {
+  const { sources, notes } = await prepareVaultCatalogue(false);
+  return {
+    status: "healthy",
+    sourceCount: sources.length,
+    noteCount: notes.length,
+    provenanceCount: notes.reduce(
+      (count, note) => count + note.sourceHashes.length,
+      0,
+    ),
+  };
+}
+
+/** Rebuild provider-independent SQLite catalogue state from authoritative files. */
+export async function rebuildVaultCatalogue(
+  db: DB,
+): Promise<VaultRebuildResult> {
+  const { sources, notes } = await prepareVaultCatalogue(true);
   await replaceIndex(notes);
   db.maintenance.replaceCatalogue(sources, notes);
   return {
