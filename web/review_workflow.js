@@ -89,6 +89,48 @@ export function formatPageRanges(pages) {
     .join(", ");
 }
 
+export function reviewTextDiff(beforeValue, afterValue) {
+  const before = String(beforeValue ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const after = String(afterValue ?? "").replace(/\r\n?/g, "\n").split("\n");
+  if (before.length * after.length > 25_600) {
+    return [
+      ...before.map((text) => ({ kind: "remove", text })),
+      ...after.map((text) => ({ kind: "add", text })),
+    ];
+  }
+  const lengths = Array.from(
+    { length: before.length + 1 },
+    () => new Uint16Array(after.length + 1),
+  );
+  for (let left = before.length - 1; left >= 0; left--) {
+    for (let right = after.length - 1; right >= 0; right--) {
+      lengths[left][right] = before[left] === after[right]
+        ? lengths[left + 1][right + 1] + 1
+        : Math.max(lengths[left + 1][right], lengths[left][right + 1]);
+    }
+  }
+  const result = [];
+  let left = 0;
+  let right = 0;
+  while (left < before.length || right < after.length) {
+    if (
+      left < before.length && right < after.length &&
+      before[left] === after[right]
+    ) {
+      result.push({ kind: "same", text: before[left] });
+      left++;
+      right++;
+    } else if (
+      right < after.length &&
+      (left >= before.length ||
+        lengths[left][right + 1] >= lengths[left + 1][right])
+    ) {
+      result.push({ kind: "add", text: after[right++] });
+    } else result.push({ kind: "remove", text: before[left++] });
+  }
+  return result;
+}
+
 export function discoveryCoverageSummary(coverage) {
   const value = coverage && typeof coverage === "object" ? coverage : {};
   const candidates = Number.isSafeInteger(value.candidates)

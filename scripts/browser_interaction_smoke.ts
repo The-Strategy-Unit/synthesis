@@ -524,6 +524,47 @@ async function run(): Promise<void> {
       ),
       false,
     );
+    assert.deepEqual(
+      await client.evaluate<Record<string, number>>(`(() => {
+        const add = document.querySelector('#add-source-btn');
+        const vault = document.querySelector('#vault-menu-btn');
+        const topbar = document.querySelector('#topbar');
+        return {
+          addHeight: Math.round(add.getBoundingClientRect().height),
+          addFont: Number.parseFloat(getComputedStyle(add).fontSize),
+          vaultHeight: Math.round(vault.getBoundingClientRect().height),
+          vaultFont: Number.parseFloat(getComputedStyle(vault).fontSize),
+          topbarHeight: Math.round(topbar.getBoundingClientRect().height),
+        };
+      })()`),
+      {
+        addHeight: 36,
+        addFont: 13.6,
+        vaultHeight: 36,
+        vaultFont: 13.6,
+        topbarHeight: 52,
+      },
+      "Global actions must share the compact desktop control scale",
+    );
+    const vaultSwitchState = await client.evaluate<Record<string, boolean>>(
+      `(() => {
+        const button = document.querySelector('#vault-switch-btn');
+        button.click();
+        const dialog = document.querySelector('#vault-switch-modal');
+        const opened = dialog.open;
+        document.querySelector('#vault-switch-cancel').click();
+        return {
+          available: !button.classList.contains('hidden'),
+          opened,
+          closed: !dialog.open,
+        };
+      })()`,
+    );
+    assert.deepEqual(vaultSwitchState, {
+      available: true,
+      opened: true,
+      closed: true,
+    });
     console.log("Browser smoke: checking the manual source queue.");
     const queuedSources = [
       "dQw4w9WgXcQ",
@@ -572,16 +613,53 @@ async function run(): Promise<void> {
     await waitFor(
       () =>
         client!.evaluate<boolean>(
-          "document.querySelector('#graph-panel').classList.contains('is-maximized') && document.querySelectorAll('#graph circle.node').length >= 1",
+          "!document.querySelector('#graph-panel').classList.contains('hidden') && document.querySelectorAll('#graph circle.node').length >= 1",
         ),
       Boolean,
-      "Connections did not maximise and render",
+      "Connections did not render inline",
+    );
+    assert.equal(
+      await client.evaluate<boolean>(
+        "document.querySelector('#graph-panel').classList.contains('is-maximized')",
+      ),
+      false,
+      "Opening Connections must preserve the surrounding workspace",
     );
     assert.equal(
       await client.evaluate<string>(
         "document.querySelector('#graph-maximize').getAttribute('aria-pressed')",
       ),
-      "true",
+      "false",
+    );
+    const inlineGraphWidth = await client.evaluate<number>(
+      "document.querySelector('#graph-panel').getBoundingClientRect().width",
+    );
+    await client.evaluate(
+      "document.querySelector('#page-list-toggle').click(); document.querySelector('#workspace-collapse').click()",
+    );
+    await waitFor(
+      () =>
+        client!.evaluate<number>(
+          "document.querySelector('#graph-panel').getBoundingClientRect().width",
+        ),
+      (width) => width > inlineGraphWidth,
+      "Collapsing workspace panes did not enlarge the graph",
+    );
+    assert.deepEqual(
+      await client.evaluate<Record<string, boolean>>(`({
+        navigationCollapsed: document.querySelector('#workspace').classList.contains('navigation-collapsed'),
+        pageListCollapsed: document.querySelector('#knowledge-layout').classList.contains('sidebar-hidden'),
+      })`),
+      { navigationCollapsed: true, pageListCollapsed: true },
+    );
+    await client.evaluate("document.querySelector('#graph-maximize').click()");
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          "document.querySelector('#graph-panel').classList.contains('is-maximized')",
+        ),
+      Boolean,
+      "Graph did not enter full-screen mode",
     );
     assert.equal(
       await client.evaluate<string>(
@@ -589,6 +667,20 @@ async function run(): Promise<void> {
       ),
       "rgb(123, 184, 255)",
       "Reviewed wiki links were not rendered blue",
+    );
+    assert.equal(
+      await client.evaluate<number>(
+        "Number(getComputedStyle(document.querySelector('#graph .link-explicit')).strokeOpacity)",
+      ),
+      0.24,
+      "Reviewed wiki links were not visually softened",
+    );
+    assert.equal(
+      await client.evaluate<number>(
+        "Number(getComputedStyle(document.querySelector('#graph .link-explicit')).strokeWidth.replace('px', ''))",
+      ),
+      1.15,
+      "Reviewed wiki links did not use the subdued overview weight",
     );
     await client.evaluate("document.querySelector('#graph-fit').click()");
     await waitFor(
@@ -683,6 +775,23 @@ async function run(): Promise<void> {
       (count) => count === 34,
       "Clearing search did not restore the overview",
     );
+    const nodeSizing = await client.evaluate<{
+      linked: number;
+      orphan: number;
+      legend: string;
+    }>(`(() => {
+      const nodes = [...document.querySelectorAll('#graph circle.node')];
+      return {
+        linked: Number(nodes.find(node => node.__data__.title === 'Operational fact')?.getAttribute('r')),
+        orphan: Number(nodes.find(node => node.__data__.title.startsWith('Research topic'))?.getAttribute('r')),
+        legend: document.querySelector('.graph-legend').textContent,
+      };
+    })()`);
+    assert.ok(
+      nodeSizing.linked > nodeSizing.orphan,
+      "Reviewed connectivity did not increase node size",
+    );
+    assert.match(nodeSizing.legend, /Size = reviewed neighbours/);
     await client.evaluate("document.querySelector('#graph-fit').click()");
     assert.equal(
       await client.evaluate<boolean>(`(() => {
@@ -723,6 +832,14 @@ async function run(): Promise<void> {
         ),
       Boolean,
       "Escape did not restore the graph and keyboard focus",
+    );
+    assert.deepEqual(
+      await client.evaluate<Record<string, boolean>>(`({
+        navigationCollapsed: document.querySelector('#workspace').classList.contains('navigation-collapsed'),
+        pageListCollapsed: document.querySelector('#knowledge-layout').classList.contains('sidebar-hidden'),
+      })`),
+      { navigationCollapsed: true, pageListCollapsed: true },
+      "Exiting full screen did not preserve pane choices",
     );
     await client.evaluate("document.querySelector('#graph-maximize').click()");
     assert.equal(

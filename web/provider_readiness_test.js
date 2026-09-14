@@ -5,6 +5,7 @@ import {
   providerCapabilities,
   providerEmptyState,
   providerPresentation,
+  searchAvailabilityPresentation,
 } from "./provider_readiness.js";
 
 Deno.test("local Ollama preset matches the vault embedding configuration", () => {
@@ -86,6 +87,41 @@ Deno.test("offline provider state selects deterministic keyword search", () => {
   });
 });
 
+Deno.test("search availability explains the active mode and its prerequisite", () => {
+  assert.deepEqual(
+    searchAvailabilityPresentation({
+      phase: "ready",
+      mode: "remote",
+      semanticIndex: { complete: false, embedded: 3, total: 8 },
+    }),
+    {
+      mode: "keyword",
+      title: "Keyword search active",
+      detail:
+        "AI is ready, but the semantic index is incomplete. 3 of 8 wiki pages are indexed. Searches stay on-device until indexing finishes.",
+      actionLabel: "Resume semantic index",
+    },
+  );
+  assert.deepEqual(
+    searchAvailabilityPresentation({
+      phase: "ready",
+      mode: "local",
+      semanticIndex: { complete: true, embedded: 8, total: 8 },
+    }),
+    {
+      mode: "semantic",
+      title: "Semantic search active",
+      detail:
+        "All 8 wiki pages are indexed. Queries use your configured local embedding provider.",
+      actionLabel: null,
+    },
+  );
+  assert.match(
+    searchAvailabilityPresentation({ phase: "unavailable" }).detail,
+    /on-device keyword index/,
+  );
+});
+
 Deno.test("model-dependent controls expose the shared provider status", async () => {
   const html = await Deno.readTextFile(
     new URL("./index.html", import.meta.url),
@@ -99,7 +135,6 @@ Deno.test("model-dependent controls expose the shared provider status", async ()
       "add-source-btn",
       "reader-add-source",
       "ask-open-btn",
-      "proposal-approve",
       "ingest-btn",
       "discoveries-scan",
       "lint-analyse",
@@ -110,4 +145,35 @@ Deno.test("model-dependent controls expose the shared provider status", async ()
     assert.ok(control, `${id} must exist`);
     assert.match(control, /aria-describedby="provider-mode"/);
   }
+  const approval = html.match(/<button id="proposal-approve"[^>]*>/)?.[0];
+  assert.ok(approval, "proposal approval must exist");
+  assert.doesNotMatch(approval, /aria-describedby="provider-mode"/);
+  assert.match(
+    html,
+    /id="search-readiness-status" role="status"\s+aria-live="polite"/,
+  );
+  assert.match(
+    html,
+    /id="search-semantic-action"[^>]*aria-describedby="search-readiness-detail"/,
+  );
+});
+
+Deno.test("an unavailable provider does not make Add source a dead end", async () => {
+  const html = await Deno.readTextFile(
+    new URL("./index.html", import.meta.url),
+  );
+  const app = await Deno.readTextFile(new URL("./app.js", import.meta.url));
+
+  assert.match(
+    html,
+    /id="source-provider-help" class="provider-action-help hidden"/,
+  );
+  assert.match(html, /id="source-provider-open"/);
+  assert.match(app, /addSourceButton\.disabled = false/);
+  assert.match(
+    app,
+    /sourceProviderHelp\.classList\.toggle\("hidden", capabilities\.modelActions\)/,
+  );
+  assert.match(app, /sourceProviderOpen\.addEventListener\("click"/);
+  assert.match(app, /openProviderModal\(addSourceButton\)/);
 });

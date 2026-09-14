@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
     <div id="app">
       <div id="graph-tooltip" class="hidden"></div>
 
       <header id="topbar">
         <div class="brand-area">
-          <button id="nav-toggle" type="button" aria-label="Open navigation"
+          <button id="nav-toggle" type="button" aria-label="Toggle navigation"
             aria-controls="primary-nav" aria-expanded="false">&#9776;</button>
           <span class="logo">Synthesis</span>
           <button id="provider-mode" type="button" data-mode="checking"
@@ -32,26 +33,54 @@
           </button>
           <div id="vault-tools" class="disclosure">
             <button id="vault-menu-btn" class="secondary-action" type="button"
-              aria-controls="vault-menu" aria-expanded="false">
-              Vault tools
+              aria-label="Vault tools" aria-controls="vault-menu"
+              aria-expanded="false">
+              <span>Vault tools</span>
+              <span class="disclosure-chevron" aria-hidden="true">⌄</span>
             </button>
             <div id="vault-menu" class="action-menu hidden"
-              aria-label="Vault tools">
-              <button id="provider-open-btn" type="button">AI provider</button>
-              <button id="schema-open-btn" type="button">Wiki schema</button>
-              <a id="export-vault-link" href="/api/export">Export vault</a>
-              <hr />
-              <button id="rebuild-catalogue-btn" type="button"
-                title="Rebuild search and catalogue state from vault files">
-                Rebuild catalogue
-              </button>
-              <button id="rebuild-semantic-btn" type="button"
-                aria-describedby="provider-mode"
-                title="Build or resume semantic search and connection state">
-                Build semantic index
-              </button>
-              <button id="undo-ingest-btn" type="button"
-                title="Undo the latest accepted ingest">Undo latest ingest</button>
+              aria-labelledby="vault-menu-btn">
+              <section aria-labelledby="vault-settings-heading">
+                <h2 id="vault-settings-heading">Settings</h2>
+                <button id="provider-open-btn"
+                  type="button">AI provider</button>
+                <button id="schema-open-btn" type="button">Wiki schema</button>
+              </section>
+              <section aria-labelledby="vault-backup-heading">
+                <h2 id="vault-backup-heading">Backup</h2>
+                <a id="export-vault-link" href="/api/export">Export vault</a>
+              </section>
+              <section aria-labelledby="vault-health-heading">
+                <h2 id="vault-health-heading">Health &amp; indexing</h2>
+                <button id="verify-vault-btn" type="button">
+                  <span class="action-label">Verify vault</span>
+                  <small>Check authoritative files without changing them</small>
+                </button>
+                <button id="rebuild-catalogue-btn" type="button">
+                  <span class="action-label">Rebuild catalogue</span>
+                  <small>Reset derived search, proposal, and graph state</small>
+                </button>
+                <button id="rebuild-semantic-btn" type="button"
+                  aria-describedby="provider-mode">
+                  <span class="action-label">Build semantic index</span>
+                  <small>Send wiki text to the selected embedding provider</small>
+                </button>
+              </section>
+              <section class="recovery-actions"
+                aria-labelledby="vault-recovery-heading">
+                <h2 id="vault-recovery-heading">Recovery</h2>
+                <button id="undo-ingest-btn" type="button">
+                  <span class="action-label">Undo latest ingest</span>
+                  <small>Restore the previous live wiki revisions</small>
+                </button>
+              </section>
+              <section id="vault-session-actions"
+                aria-labelledby="vault-session-heading">
+                <h2 id="vault-session-heading">Session</h2>
+                <button id="vault-switch-btn" class="hidden" type="button">
+                  Switch vault…
+                </button>
+              </section>
             </div>
           </div>
         </div>
@@ -103,14 +132,19 @@
           </div>
         </nav>
 
-        <main id="main">
+        <button id="workspace-collapse" type="button"
+          aria-label="Collapse workspace navigation"
+          aria-controls="primary-nav" aria-expanded="true">‹</button>
+
+        <main id="main" tabindex="-1">
           <section id="wiki-workspace">
             <header class="knowledge-toolbar">
-              <div>
-                <p class="workspace-eyebrow">Knowledge</p>
-                <h1 id="workspace-title">Compiled wiki</h1>
-              </div>
+              <h1 id="workspace-title" tabindex="-1">Compiled wiki</h1>
               <div class="workspace-actions">
+                <button id="page-list-toggle" class="workspace-secondary"
+                  type="button" aria-controls="sidebar" aria-expanded="true">
+                  Hide page list
+                </button>
                 <button id="evidence-toggle" class="workspace-secondary hidden"
                   type="button" aria-controls="evidence-panel"
                   aria-expanded="true">Evidence</button>
@@ -130,6 +164,23 @@
                   <h2 id="note-list-heading">Wiki pages</h2>
                   <span id="page-count" aria-label="0 wiki pages">0</span>
                 </div>
+                <section id="search-readiness" class="search-readiness"
+                  data-mode="checking" aria-label="Search availability">
+                  <p id="search-readiness-status" role="status"
+                    aria-live="polite" aria-atomic="true">
+                    <strong id="search-readiness-title">
+                      Checking semantic search
+                    </strong>
+                    <span id="search-readiness-detail">
+                      Keyword search remains available on-device.
+                    </span>
+                  </p>
+                  <button id="search-semantic-action" class="hidden"
+                    type="button"
+                    aria-describedby="search-readiness-detail">
+                    Build semantic index
+                  </button>
+                </section>
                 <p id="search-method" class="search-method hidden"
                   role="status" aria-live="polite"></p>
                 <ul id="note-list"></ul>
@@ -170,7 +221,8 @@
                 <div class="graph-heading">
                   <div>
                     <p class="workspace-eyebrow">Explore</p>
-                    <h2 id="connections-title">Knowledge connections</h2>
+                    <h2 id="connections-title"
+                      tabindex="-1">Knowledge connections</h2>
                   </div>
                   <div class="graph-heading-actions">
                     <div class="graph-breadth-control">
@@ -183,7 +235,7 @@
                     </div>
                     <button id="graph-maximize" type="button"
                       aria-controls="graph-panel" aria-pressed="false">
-                      Maximise graph
+                      Full screen graph
                     </button>
                     <button id="graph-fit" type="button"
                       aria-controls="graph" title="Fit every visible node">
@@ -194,6 +246,10 @@
                 <div class="graph-legend" aria-label="Connection types">
                   <span><i class="legend-explicit"></i>Reviewed wiki link</span>
                   <span><i class="legend-semantic"></i>Mutual semantic proximity</span>
+                  <span>
+                    <i class="legend-node-connectivity"></i>
+                    Size = reviewed neighbours; halo = suggestions
+                  </span>
                   <span id="legend-search-match" class="hidden">
                     <i class="legend-search-match"></i>Direct search result
                   </span>
@@ -248,7 +304,8 @@
             <header class="review-workspace-header">
               <div>
                 <p class="workspace-eyebrow">Human review</p>
-                <h1 id="review-title">Review proposed changes</h1>
+                <h1 id="review-title"
+                  tabindex="-1">Review proposed changes</h1>
                 <p>
                   AI proposals remain separate from the compiled wiki until
                   every change has an explicit decision.
@@ -305,8 +362,8 @@
                     <button id="proposal-reject" type="button">
                       Reject proposal
                     </button>
-                    <button id="proposal-approve" type="button"
-                      aria-describedby="provider-mode">
+                    <button id="proposal-approve" class="button-primary"
+                      type="button">
                       Review every change
                     </button>
                   </div>
@@ -318,7 +375,7 @@
       </div>
 
       <aside id="source-panel" class="source-panel hidden"
-        aria-labelledby="source-panel-title">
+        role="dialog" aria-modal="true" aria-labelledby="source-panel-title">
         <header class="source-panel-header">
           <div>
             <h2 id="source-panel-title">Add a source</h2>
@@ -328,6 +385,13 @@
             aria-label="Close add source panel">&times;</button>
         </header>
         <div id="ingest-bar">
+          <div id="source-provider-help" class="provider-action-help hidden"
+            role="status" aria-live="polite">
+            <p>Configure an AI provider before preparing this source.</p>
+            <button id="source-provider-open" type="button">
+              Configure AI provider
+            </button>
+          </div>
           <label id="ingest-input-label"
             for="ingest-input">Source text or YouTube link</label>
           <textarea id="ingest-input" rows="7"
@@ -437,8 +501,9 @@
         <textarea id="ask-input" rows="4"
           placeholder="What does the accumulated evidence show?"></textarea>
         <div class="ask-actions">
-          <button id="ask-submit" type="button">Ask</button>
-          <button id="ask-save" type="button" class="hidden">
+          <button id="ask-submit" class="button-primary"
+            type="button">Ask</button>
+          <button id="ask-save" type="button" class="button-primary hidden">
             Save synthesis
           </button>
         </div>
@@ -459,19 +524,24 @@
     <dialog id="discoveries-modal" class="modal"
       aria-labelledby="discoveries-title">
       <div class="modal-content discoveries-content">
-        <button id="discoveries-close" class="modal-close" type="button"
-          aria-label="Close">&times;</button>
-        <h2 id="discoveries-title">Cross-source synthesis</h2>
-        <p class="modal-intro">
-          Synthesis systematically evaluates plausible page pairs from
-          different sources and remembers its progress. Proposed relationships
-          and possible consolidations are hypotheses for review. Similarity and
-          model confidence are not evidence, and no link is added automatically.
-        </p>
-        <div class="discoveries-toolbar">
-          <button id="discoveries-scan" aria-describedby="provider-mode"
-            type="button">Compare all sources</button>
-        </div>
+        <header class="modal-workspace-header">
+          <div>
+            <h2 id="discoveries-title">Cross-source synthesis</h2>
+            <p class="modal-intro">
+              Synthesis systematically evaluates plausible page pairs from
+              different sources and remembers its progress. Proposed relationships
+              and possible consolidations are hypotheses for review. Similarity and
+              model confidence are not evidence, and no link is added automatically.
+            </p>
+          </div>
+          <div class="discoveries-toolbar">
+            <button id="discoveries-scan" class="button-primary"
+              aria-describedby="provider-mode"
+              type="button">Compare all sources</button>
+            <button id="discoveries-close" class="modal-close" type="button"
+              aria-label="Close">&times;</button>
+          </div>
+        </header>
         <div class="discovery-filters">
           <label for="discovery-filter-text">
             Filter proposals
@@ -539,7 +609,8 @@
               <button id="discovery-investigate"
                 type="button">Investigate</button>
               <button id="discovery-reject" type="button">Reject</button>
-              <button id="discovery-confirm" type="button">Confirm link</button>
+              <button id="discovery-confirm" class="button-primary"
+                type="button">Confirm link</button>
             </div>
             <p id="discovery-action-note" class="field-help"></p>
           </section>
@@ -549,18 +620,23 @@
 
     <dialog id="lint-modal" class="modal" aria-labelledby="lint-title">
       <div class="modal-content lint-content">
-        <button id="lint-close" class="modal-close" type="button"
-          aria-label="Close">&times;</button>
-        <h2 id="lint-title">Wiki health</h2>
-        <p class="modal-intro">
-          Read-only checks for broken structure, missing provenance, and recorded
-          contradictions.
-        </p>
-        <div class="lint-actions">
-          <button id="lint-refresh" type="button">Run checks</button>
-          <button id="lint-analyse" type="button"
-            aria-describedby="provider-mode">Analyse with AI</button>
-        </div>
+        <header class="modal-workspace-header">
+          <div>
+            <h2 id="lint-title">Wiki health</h2>
+            <p class="modal-intro">
+              Read-only checks for broken structure, missing provenance, and recorded
+              contradictions.
+            </p>
+          </div>
+          <div class="lint-actions">
+            <button id="lint-refresh" class="button-primary"
+              type="button">Run checks</button>
+            <button id="lint-analyse" type="button"
+              aria-describedby="provider-mode">Analyse with AI</button>
+            <button id="lint-close" class="modal-close" type="button"
+              aria-label="Close">&times;</button>
+          </div>
+        </header>
         <p id="lint-status" role="status" aria-live="polite"></p>
         <div id="lint-summary" class="hidden"></div>
         <ul id="lint-issues"></ul>
@@ -584,7 +660,8 @@
           that service. Synthesis never switches providers automatically.
         </p>
         <div class="provider-presets">
-          <button id="provider-ollama" type="button">Use local Ollama</button>
+          <button id="provider-ollama"
+            type="button">Use local Ollama</button>
           <button id="provider-diagnose" type="button">
             Diagnose active provider
           </button>
@@ -631,7 +708,7 @@
           </fieldset>
 
           <div class="provider-actions">
-            <button id="provider-save" type="submit">
+            <button id="provider-save" class="button-primary" type="submit">
               Test and save
             </button>
           </div>
@@ -658,7 +735,8 @@
         <label for="schema-input">schema.md</label>
         <textarea id="schema-input" rows="20" spellcheck="false"></textarea>
         <div class="schema-actions">
-          <button id="schema-save" type="button">Save schema</button>
+          <button id="schema-save" class="button-primary"
+            type="button">Save schema</button>
         </div>
         <p id="schema-status" role="status" aria-live="polite"></p>
       </div>
@@ -667,13 +745,17 @@
     <dialog id="sources-modal" class="modal"
       aria-labelledby="sources-title">
       <div class="modal-content sources-content">
-        <button id="sources-close" class="modal-close" type="button"
-          aria-label="Close">&times;</button>
-        <h2 id="sources-title">Source provenance</h2>
-        <p class="modal-intro">
-          Review ingested sources and the wiki pages each source created or
-          changed.
-        </p>
+        <header class="modal-workspace-header">
+          <div>
+            <h2 id="sources-title">Source provenance</h2>
+            <p class="modal-intro">
+              Review ingested sources and the wiki pages each source created or
+              changed.
+            </p>
+          </div>
+          <button id="sources-close" class="modal-close" type="button"
+            aria-label="Close">&times;</button>
+        </header>
         <p id="sources-status" role="status" aria-live="polite"></p>
         <div class="sources-layout">
           <ul id="sources-list" aria-label="Ingested sources"></ul>
@@ -683,12 +765,75 @@
             <p id="source-detail-summary"></p>
             <a id="source-detail-link" class="hidden" target="_blank"
               rel="noopener noreferrer">Open original source</a>
+            <section id="source-evidence" class="hidden"
+              aria-labelledby="source-evidence-title">
+              <div class="source-evidence-heading">
+                <h4 id="source-evidence-title">Archived evidence text</h4>
+                <div id="source-evidence-navigation" class="hidden">
+                  <button id="source-evidence-previous" type="button">
+                    Previous page
+                  </button>
+                  <span id="source-evidence-page"></span>
+                  <button id="source-evidence-next" type="button">
+                    Next page
+                  </button>
+                </div>
+              </div>
+              <p id="source-evidence-integrity"></p>
+              <pre id="source-evidence-text" tabindex="0"></pre>
+            </section>
             <h4>Derived wiki pages</h4>
             <ul id="source-detail-pages"></ul>
           </section>
         </div>
       </div>
     </dialog>
+
+    <dialog id="vault-switch-modal" class="modal"
+      aria-labelledby="vault-switch-title">
+      <div class="modal-content vault-switch-content">
+        <button id="vault-switch-close" class="modal-close" type="button"
+          aria-label="Close">&times;</button>
+        <h2 id="vault-switch-title">Switch vault?</h2>
+        <p class="modal-intro">
+          Synthesis will close this vault safely, release its process lock, and
+          return this tab to the vault chooser. Nothing in the vault is deleted.
+        </p>
+        <p>
+          Finish or stop any active ingest, review, rebuild, or export before
+          continuing.
+        </p>
+        <p id="vault-switch-status" role="status" aria-live="polite"></p>
+        <div class="vault-switch-actions">
+          <button id="vault-switch-cancel"
+            type="button">Keep this vault open</button>
+          <button id="vault-switch-confirm" class="button-primary"
+            type="button">
+            Close and choose another
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="confirmation-modal" class="modal"
+      aria-labelledby="confirmation-title"
+      aria-describedby="confirmation-description">
+      <div class="modal-content confirmation-content">
+        <h2 id="confirmation-title">Confirm operation</h2>
+        <p id="confirmation-description" class="modal-intro"></p>
+        <div class="confirmation-actions">
+          <button id="confirmation-cancel" type="button">Cancel</button>
+          <button id="confirmation-accept" type="button">Continue</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="app-notification" class="app-notification hidden" role="status"
+      aria-live="polite" aria-atomic="true">
+      <p id="app-notification-message"></p>
+      <button id="app-notification-close" type="button"
+        aria-label="Dismiss notification">&times;</button>
+    </div>
 
     <script type="module" src="/app.bundle.js"></script>
   </body>

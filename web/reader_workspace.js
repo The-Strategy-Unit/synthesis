@@ -70,6 +70,16 @@ export function evidenceSourceLocation(source) {
   return pages ? `pages ${pages}` : null;
 }
 
+export function evidenceSourceLabel(source, position, maxLength = 44) {
+  const title = String(source?.title ?? "").replace(/\s+/g, " ").trim() ||
+    "Untitled source";
+  const compact = compactEvidenceText(title, maxLength).preview;
+  const ordinal = Number.isSafeInteger(position) && position >= 0
+    ? `Source ${position + 1}`
+    : "Source";
+  return `${ordinal}: ${compact}`;
+}
+
 export function evidenceActionLabel(action) {
   switch (action) {
     case "new":

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import denoConfig from "../deno.json" with { type: "json" };
 
 import { renderWikiPage } from "../src/wiki/wiki.ts";
 
 const PROJECT_DIRECTORY = fileURLToPath(new URL("..", import.meta.url));
 
-async function seedWiki(vault: string): Promise<void> {
+async function seedWiki(vault: string, extraPageTitle?: string): Promise<void> {
   const sourceText = "Controlled evidence supports a stable operational fact.";
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -69,6 +70,18 @@ async function seedWiki(vault: string): Promise<void> {
       type: "concept",
     }, [source]),
   );
+  if (extraPageTitle) {
+    await Deno.writeTextFile(
+      `${vault}/notes/second-vault-only.md`,
+      renderWikiPage({
+        body: "This page exists only in the second vault.",
+        links: [],
+        tags: ["switch-test"],
+        title: extraPageTitle,
+        type: "concept",
+      }, [source]),
+    );
+  }
 }
 
 function availablePort(): number {
@@ -161,6 +174,9 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(index, /id="evidence-panel" class="hidden"/);
     assert.match(index, /id="graph-panel" class="hidden"/);
     assert.match(index, /id="graph-maximize" type="button"/);
+    assert.match(index, /id="page-list-toggle"/);
+    assert.match(index, /id="nav-toggle"/);
+    assert.match(index, /id="workspace-collapse"/);
     assert.match(index, /id="graph-fit" type="button"/);
     assert.match(index, /id="graph-search-summary" role="status"/);
     assert.match(index, /id="graph-search-clear" type="button"/);
@@ -204,7 +220,7 @@ Deno.test("the running app serves the task-based UI shell", async () => {
     assert.match(bundle, /Retry with keyword search/);
     assert.match(bundle, /Semantic similarity/);
     assert.match(bundle, /\/api\/ingest\/batch/);
-    assert.equal(status.status, "ok");
+    assert.deepEqual(status, { status: "ok", version: denoConfig.version });
     assert.deepEqual(usage.usage, {
       period: usagePeriod,
       outputTokens: 1_000_001,
@@ -246,8 +262,10 @@ Deno.test("the startup GUI opens an existing vault", async () => {
   const port = availablePort();
   const root = await Deno.makeTempDir({ prefix: "synthesis-vault-chooser-" });
   const vault = join(root, "chosen-vault");
+  const secondVault = join(root, "second-vault");
   const origin = `http://127.0.0.1:${port}`;
   await seedWiki(vault);
+  await seedWiki(secondVault, "Second vault only");
   const child = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -314,6 +332,82 @@ Deno.test("the startup GUI opens an existing vault", async () => {
       response.json()
     );
     assert.equal(notes.notes.length, 2);
+
+    const appConfig = await fetch(`${origin}/api/config`).then((response) =>
+      response.json()
+    );
+    assert.equal(appConfig.vaultSwitchEnabled, true);
+    const switching = await fetch(`${origin}/api/vault/switch`, {
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      method: "POST",
+    });
+    assert.equal(switching.status, 202);
+    assert.deepEqual(await switching.json(), { status: "switching" });
+
+    status = "";
+    for (
+      let attempt = 0;
+      attempt < 200 && status !== "choosing-vault";
+      attempt++
+    ) {
+      try {
+        status = await fetch(`${origin}/api/status`).then(async (response) =>
+          (await response.json()).status
+        );
+      } catch {
+        // The application and chooser briefly exchange the port.
+      }
+      if (status !== "choosing-vault") {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    assert.equal(status, "choosing-vault");
+    assert.match(
+      await fetch(`${origin}/`).then((response) => response.text()),
+      /Current vault closed safely/,
+    );
+
+    const openedSecond = await fetch(`${origin}/api/vault/open`, {
+      body: JSON.stringify({ path: secondVault }),
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      method: "POST",
+    });
+    assert.equal(openedSecond.status, 200);
+    await openedSecond.body?.cancel();
+    status = "";
+    for (let attempt = 0; attempt < 200 && status !== "ok"; attempt++) {
+      try {
+        status = await fetch(`${origin}/api/status`).then(async (response) =>
+          (await response.json()).status
+        );
+      } catch {
+        // The chooser and next application briefly exchange the port.
+      }
+      if (status !== "ok") {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    assert.equal(status, "ok");
+    const secondRebuild = await fetch(`${origin}/api/rebuild`, {
+      body: JSON.stringify({ confirm: "REBUILD" }),
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      method: "POST",
+    });
+    assert.equal(secondRebuild.status, 200);
+    const secondNotes = await fetch(`${origin}/api/notes`).then((response) =>
+      response.json()
+    );
+    assert.equal(secondNotes.notes.length, 3);
   } finally {
     try {
       child.kill("SIGTERM");
