@@ -124,6 +124,14 @@ Deno.test("global actions are compact and vault operations explain their impact"
   assert.match(css, /--control-compact:\s*2\.25rem/);
   assert.match(
     css,
+    /#topbar \{[^}]*\n\s+height: var\(--topbar-height\)/,
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 780px\) \{[\s\S]*?#topbar \{[^}]*height: auto;[^}]*min-height: var\(--topbar-height\)/,
+  );
+  assert.match(
+    css,
     /#workspace-collapse \{[\s\S]*?top: 50%;[\s\S]*?transform: translateY\(-50%\)/,
   );
   assert.match(

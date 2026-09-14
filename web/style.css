@@ -94,7 +94,7 @@ body {
   grid-template-columns: 216px minmax(12rem, 46rem) minmax(max-content, 1fr);
   align-items: center;
   gap: 1rem;
-  min-height: var(--topbar-height);
+  height: var(--topbar-height);
   padding: 0.45rem 0.75rem;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
@@ -3557,6 +3557,8 @@ textarea:focus-visible,
   #topbar {
     display: flex;
     gap: 0.65rem;
+    height: auto;
+    min-height: var(--topbar-height);
   }
 
   #search-input {
