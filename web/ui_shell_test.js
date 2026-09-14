@@ -131,6 +131,10 @@ Deno.test("global actions are compact and vault operations explain their impact"
     /\.topbar-actions \.primary-action,[\s\S]*?min-height: var\(--control-compact\)/,
   );
   assert.match(
+    css,
+    /#search-input \{[\s\S]*?height: var\(--control-compact\)/,
+  );
+  assert.match(
     html,
     /<h2 id="vault-health-heading">Health &amp; indexing<\/h2>/,
   );

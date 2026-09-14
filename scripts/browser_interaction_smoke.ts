@@ -539,11 +539,13 @@ async function run(): Promise<void> {
     assert.deepEqual(
       await client.evaluate<Record<string, number>>(`(() => {
         const add = document.querySelector('#add-source-btn');
+        const search = document.querySelector('#search-input');
         const vault = document.querySelector('#vault-menu-btn');
         const topbar = document.querySelector('#topbar');
         return {
           addHeight: Math.round(add.getBoundingClientRect().height),
           addFont: Number.parseFloat(getComputedStyle(add).fontSize),
+          searchHeight: Math.round(search.getBoundingClientRect().height),
           vaultHeight: Math.round(vault.getBoundingClientRect().height),
           vaultFont: Number.parseFloat(getComputedStyle(vault).fontSize),
           topbarHeight: Math.round(topbar.getBoundingClientRect().height),
@@ -552,6 +554,7 @@ async function run(): Promise<void> {
       {
         addHeight: 36,
         addFont: 13.6,
+        searchHeight: 36,
         vaultHeight: 36,
         vaultFont: 13.6,
         topbarHeight: 52,

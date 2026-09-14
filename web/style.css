@@ -95,7 +95,7 @@ body {
   align-items: center;
   gap: 1rem;
   min-height: var(--topbar-height);
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   position: relative;
@@ -532,6 +532,10 @@ body {
   flex: 1;
   padding: 0.55rem 0.7rem;
   font: inherit;
+}
+
+#search-input {
+  height: var(--control-compact);
 }
 
 #ingest-title {
@@ -3553,6 +3557,10 @@ textarea:focus-visible,
   #topbar {
     display: flex;
     gap: 0.65rem;
+  }
+
+  #search-input {
+    height: var(--control-touch);
   }
 
   .topbar-actions .primary-action,
