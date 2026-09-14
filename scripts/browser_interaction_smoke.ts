@@ -455,6 +455,12 @@ async function run(): Promise<void> {
     client = await CdpClient.connect(await browserTarget(debugPort));
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
     await client.send("Page.navigate", { url: origin });
 
     console.log("Browser smoke: opening the temporary vault through the GUI.");
