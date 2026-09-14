@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1792" height="1120"
+  viewBox="0 0 1792 1120" role="img"
+  aria-labelledby="title description">
+  <title id="title">Synthesis review of a BPROAD wiki update</title>
+  <desc id="description">The Synthesis review workspace shows a BPROAD source
+    proposing a contradiction update to a blood-pressure trials wiki page. The
+    decision menu shows Decision required, Include in wiki, and Exclude from
+    approval.</desc>
+  <defs>
+    <style>
+    .ui {
+      font-family: "DejaVu Sans";
+    }
+    .white {
+      fill: #f5f5f7;
+    }
+    .muted {
+      fill: #b4b8c2;
+    }
+    .dim {
+      fill: #9299a8;
+    }
+    .eyebrow {
+      fill: #9da6b8;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    .body {
+      fill: #c7cad2;
+      font-size: 17px;
+    }
+    .small {
+      fill: #aeb4c1;
+      font-size: 14px;
+    }
+    .label {
+      fill: #c7cad2;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .heading {
+      fill: #f5f5f7;
+      font-size: 23px;
+      font-weight: 700;
+    }
+    .panel {
+      fill: #1d222c;
+      stroke: #424955;
+    }
+    .field {
+      fill: #151922;
+      stroke: #4b5362;
+    }
+    .rule {
+      stroke: #414753;
+    }
+    </style>
+  </defs>
+
+  <rect width="1792" height="1120" fill="#11141a" />
+
+  <!-- Application bar -->
+  <rect width="1792" height="66" fill="#1b2029" />
+  <line x1="0" y1="65.5" x2="1792" y2="65.5" class="rule" />
+  <text x="16" y="42" class="ui white" font-size="21"
+    font-weight="700">Synthesis</text>
+  <rect x="118" y="18" width="102" height="29" rx="15" fill="#10241b"
+    stroke="#35a46a" />
+  <text x="133" y="38" class="ui" fill="#66d894"
+    font-size="13">Local AI · ready</text>
+  <rect x="234" y="15" width="735" height="37" rx="7" class="field" />
+  <text x="250" y="39" class="ui dim"
+    font-size="14">Search your knowledge base...</text>
+  <rect x="985" y="10" width="119" height="45" rx="8" fill="#1673c8" />
+  <text x="1003" y="39" class="ui white" font-size="17"
+    font-weight="700">Add source</text>
+  <rect x="1115" y="13" width="108" height="40" rx="7" class="panel" />
+  <text x="1133" y="39" class="ui white" font-size="16">Vault tools</text>
+
+  <!-- Navigation -->
+  <rect x="0" y="66" width="215" height="1054" fill="#1b2029" />
+  <line x1="214.5" y1="66" x2="214.5" y2="1120" class="rule" />
+  <text x="19" y="94" class="ui eyebrow">WORKSPACE</text>
+  <text x="23" y="132" class="ui body">Wiki</text>
+  <rect x="12" y="150" width="191" height="42" rx="8" fill="#223651"
+    stroke="#4a7fb8" />
+  <text x="23" y="177" class="ui white" font-size="16"
+    font-weight="650">Review</text>
+  <circle cx="181" cy="171" r="12" fill="#2997ff" />
+  <text x="177" y="176" class="ui white" font-size="13"
+    font-weight="700">1</text>
+  <text x="23" y="221" class="ui body">Synthesis review</text>
+  <text x="23" y="264" class="ui body">Ask wiki</text>
+  <text x="19" y="311" class="ui eyebrow">MANAGE</text>
+  <text x="23" y="349" class="ui body">Sources</text>
+  <text x="23" y="393" class="ui body">Wiki health</text>
+
+  <!-- Review heading -->
+  <text x="237" y="94" class="ui eyebrow">HUMAN REVIEW</text>
+  <text x="237" y="124" class="ui heading">Review proposed changes</text>
+  <text x="237" y="150"
+    class="ui body">AI proposals remain separate from the compiled wiki until every change has an explicit decision.</text>
+  <line x1="215" y1="166" x2="1792" y2="166" class="rule" />
+  <text x="237" y="192" class="ui muted"
+    font-size="15">Review every change before deciding.</text>
+  <line x1="215" y1="204" x2="1792" y2="204" class="rule" />
+
+  <!-- Pending source -->
+  <rect x="215" y="204" width="280" height="916" fill="#202631" />
+  <line x1="494.5" y1="204" x2="494.5" y2="1120" class="rule" />
+  <text x="232" y="234" class="ui eyebrow">PENDING SOURCES</text>
+  <circle cx="465" cy="230" r="11" fill="#2c3340" />
+  <text x="462" y="235" class="ui small">1</text>
+  <rect x="228" y="250" width="255" height="91" rx="8" fill="#293243"
+    stroke="#2997ff" />
+  <text x="239" y="278" class="ui white" font-size="17">Curated extract:</text>
+  <text x="239" y="301" class="ui white" font-size="17">BPROAD (2024)</text>
+  <text x="239" y="327" class="ui small">1 proposed change</text>
+
+  <!-- Proposal source -->
+  <text x="534" y="238" class="ui eyebrow">SOURCE PROPOSAL</text>
+  <text x="534" y="269" class="ui heading">Curated extract: BPROAD (2024)</text>
+  <text x="534" y="294" class="ui small">text · 1 proposed change</text>
+  <rect x="1517" y="226" width="69" height="53" rx="7" class="panel" />
+  <text x="1530" y="249" class="ui small">Inspect</text>
+  <text x="1530" y="269" class="ui small">source</text>
+  <text x="534" y="326"
+    class="ui body">In Chinese adults with type 2 diabetes and increased cardiovascular risk, BPROAD found fewer major</text>
+  <text x="534" y="352"
+    class="ui body">cardiovascular events with intensive control, with more symptomatic hypotension and hyperkalaemia.</text>
+
+  <!-- Guidance -->
+  <rect x="534" y="386" width="864" height="84" fill="#172437" />
+  <rect x="534" y="386" width="3" height="84" fill="#2997ff" />
+  <text x="551" y="414" class="ui white" font-size="15"
+    font-weight="700">Review the proposal before applying it.</text>
+  <text x="551" y="440"
+    class="ui small">Choose Include or Exclude for each change. Included text can be edited before the final Apply step.</text>
+
+  <text x="534" y="511" class="ui white" font-size="17"
+    font-weight="700">Proposed changes</text>
+  <rect x="1516" y="488" width="138" height="37" rx="7" class="panel" />
+  <text x="1530" y="512" class="ui small">Include all changes</text>
+
+  <!-- Change card -->
+  <rect x="534" y="536" width="1121" height="517" rx="7" fill="#1b2029"
+    stroke="#687181" stroke-width="2" />
+  <rect x="553" y="554" width="100" height="23" rx="12" fill="#1479d4" />
+  <text x="566" y="570" class="ui white" font-size="12"
+    font-weight="700">CONTRADICT</text>
+  <text x="665" y="572" class="ui white" font-size="17"
+    font-weight="700">Blood-pressure targets across trials</text>
+  <text x="1050" y="572" class="ui dim" font-size="13">synthesis</text>
+
+  <!-- Open decision control -->
+  <text x="553" y="616" class="ui label">Decision</text>
+  <rect x="640" y="590" width="320" height="111" rx="6" fill="#151922"
+    stroke="#687181" />
+  <rect x="641" y="591" width="318" height="36" rx="5" fill="#263247" />
+  <text x="654" y="614" class="ui white" font-size="15"
+    font-weight="650">Decision required</text>
+  <line x1="641" y1="627" x2="959" y2="627" class="rule" />
+  <text x="654" y="651" class="ui body">Include in wiki</text>
+  <line x1="641" y1="664" x2="959" y2="664" class="rule" />
+  <text x="654" y="689" class="ui body">Exclude from approval</text>
+
+  <!-- Provenance -->
+  <rect x="553" y="723" width="1083" height="100" rx="7" class="field" />
+  <text x="568" y="748"
+    class="ui eyebrow">SOURCE CONTEXT &amp; PROVENANCE</text>
+  <text x="568" y="775" class="ui white" font-size="16"
+    font-weight="700">Curated extract: BPROAD (2024)</text>
+  <text x="568" y="800"
+    class="ui small">Source summary: fewer major cardiovascular events; more symptomatic hypotension and hyperkalaemia.</text>
+
+  <!-- Current and proposed versions -->
+  <rect x="553" y="842" width="532" height="193" rx="7" class="field" />
+  <rect x="1098" y="842" width="538" height="193" rx="7" class="field" />
+  <rect x="1098" y="842" width="538" height="3" fill="#2997ff" />
+  <text x="568" y="870" class="ui eyebrow">CURRENT DURABLE PAGE</text>
+  <text x="1114" y="870" class="ui eyebrow">PROPOSED EVOLVED PAGE</text>
+  <text x="568" y="902"
+    class="ui body">ACCORD BP: no significant reduction in its</text>
+  <text x="568" y="927"
+    class="ui body">primary cardiovascular composite in adults</text>
+  <text x="568" y="952"
+    class="ui body">with type 2 diabetes; stroke was less frequent.</text>
+  <text x="1114" y="902"
+    class="ui body">Keep ACCORD BP and add BPROAD’s later finding.</text>
+  <text x="1114" y="927"
+    class="ui body">Preserve population, outcome definitions and</text>
+  <text x="1114" y="952"
+    class="ui body">harms rather than choosing a universal answer.</text>
+
+  <!-- Review actions -->
+  <rect x="495" y="1053" width="1297" height="67" fill="#1b2029" />
+  <line x1="495" y1="1053" x2="1792" y2="1053" class="rule" />
+  <text x="534" y="1092"
+    class="ui small">1 decision remaining · 0 include · 0 exclude</text>
+  <rect x="1458" y="1068" width="122" height="42" rx="7" class="panel" />
+  <text x="1474" y="1094" class="ui small">Reject proposal</text>
+  <rect x="1590" y="1068" width="148" height="42" rx="7" fill="#1d5f9c" />
+  <text x="1609" y="1094" class="ui white"
+    font-size="14">Review 1 remaining</text>
+</svg>
