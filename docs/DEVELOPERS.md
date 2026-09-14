@@ -1,6 +1,6 @@
 # Developer guide
 
-Synthesis 0.2.8 is an MIT-licensed MVP.
+Synthesis 0.2.9 is an MIT-licensed MVP.
 
 ## Setup
 
@@ -217,7 +217,7 @@ Prepare and merge a release commit that updates `deno.json` and versioned
 documentation. From an up-to-date `main`, create the matching annotated tag:
 
 ```bash
-VERSION=0.2.8
+VERSION=0.2.9
 test "$(jq -r '.version' deno.json)" = "$VERSION"
 git tag -a "v$VERSION" -m "Synthesis v$VERSION"
 git push origin "v$VERSION"
