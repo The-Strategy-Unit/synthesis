@@ -1,1 +1,4 @@
+* text=auto eol=lf
+
+demos/haca-2025-vault/** -text
 demos/haca-2025-vault/synthesis.db binary
