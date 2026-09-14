@@ -150,6 +150,29 @@ export function browserExecutableArgument(
   return candidate?.trim() || undefined;
 }
 
+export function browserCandidates(
+  os: typeof Deno.build.os,
+): readonly string[] {
+  return os === "windows"
+    ? [
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ]
+    : os === "darwin"
+    ? [
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    : [
+      "google-chrome",
+      "google-chrome-stable",
+      "microsoft-edge",
+      "ungoogled-chromium",
+      "chromium",
+      "chromium-browser",
+    ];
+}
+
 export function manualQueueSmokeExpression(queuedSources: string): string {
   return `(() => {
     document.querySelector('#add-source-btn').click();
@@ -173,24 +196,7 @@ async function browserCommand(): Promise<string> {
   const explicit = browserExecutableArgument(Deno.args);
   if (explicit) return explicit;
 
-  const candidates = Deno.build.os === "windows"
-    ? [
-      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    ]
-    : Deno.build.os === "darwin"
-    ? [
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    ]
-    : [
-      "ungoogled-chromium",
-      "chromium",
-      "chromium-browser",
-      "google-chrome",
-      "microsoft-edge",
-    ];
-  for (const candidate of candidates) {
+  for (const candidate of browserCandidates(Deno.build.os)) {
     try {
       await new Deno.Command(candidate, {
         args: ["--version"],
@@ -429,7 +435,7 @@ async function run(): Promise<void> {
       "Vault chooser did not become ready",
     );
 
-    console.log("Browser smoke: launching the headless browser.");
+    console.log(`Browser smoke: launching ${executable} headlessly.`);
     browser = new Deno.Command(executable, {
       args: [
         "--headless=new",
@@ -444,7 +450,7 @@ async function run(): Promise<void> {
       ],
       stdin: "null",
       stdout: "null",
-      stderr: "null",
+      stderr: "inherit",
     }).spawn();
     client = await CdpClient.connect(await browserTarget(debugPort));
     await client.send("Runtime.enable");

@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 
 import {
+  browserCandidates,
   browserExecutableArgument,
   manualQueueSmokeExpression,
   withTimeout,
 } from "./browser_interaction_smoke.ts";
+
+Deno.test("Linux browser discovery prefers packaged Chrome", () => {
+  assert.deepEqual(browserCandidates("linux"), [
+    "google-chrome",
+    "google-chrome-stable",
+    "microsoft-edge",
+    "ungoogled-chromium",
+    "chromium",
+    "chromium-browser",
+  ]);
+});
 
 Deno.test("browserExecutableArgument accepts a direct task argument", () => {
   assert.equal(
