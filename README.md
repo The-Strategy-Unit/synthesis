@@ -11,12 +11,12 @@ keyword search, export, rebuild, and undo work without an AI provider.
 Synthesis is a single-user research MVP. It is not a clinical decision-support
 tool and is not intended for production or regulated workloads.
 
-![Animated Synthesis walkthrough: open a local vault, verify Ollama, run a semantic search, inspect source evidence and a reviewed cross-reference, and explore the knowledge graph](docs/assets/synthesis-workflow.gif)
+![Animated Synthesis walkthrough: read a compiled wiki page with its evidence, review cross-source synthesis proposals, and explore knowledge connections](docs/assets/synthesis-workflow.gif)
 
 ## Five-minute start
 
 Download and extract the archive for your platform from the
-[v0.2.8 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.8).
+[v0.2.9 release](https://github.com/The-Strategy-Unit/synthesis/releases/tag/v0.2.9).
 The executables are unsigned; macOS builds are not notarised.
 
 Start the executable without a vault flag. Synthesis opens a local startup
