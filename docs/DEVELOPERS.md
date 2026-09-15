@@ -1,6 +1,6 @@
 # Developer guide
 
-Synthesis 0.2.9 is an MIT-licensed MVP.
+Synthesis 0.2.10 is an MIT-licensed MVP.
 
 ## Setup
 
@@ -213,12 +213,21 @@ unsigned, and macOS builds are not notarized. Add signing or notarization only
 after maintainers confirm that the required accounts, certificates, and CI
 secrets are provisioned and the resulting builds have been tested.
 
+Manual dispatch on `main` verifies and uploads the platform archives but does
+not publish a release. Pushing the matching `v*` tag starts the release job
+after all three platform jobs pass.
+
 Prepare and merge a release commit that updates `deno.json` and versioned
 documentation. From an up-to-date `main`, create the matching annotated tag:
 
 ```bash
-VERSION=0.2.9
+VERSION=0.2.10
 test "$(jq -r '.version' deno.json)" = "$VERSION"
+test "$(git branch --show-current)" = main
+test -z "$(git status --porcelain --untracked-files=no)"
+git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+test -z "$(git tag --list "v$VERSION")"
 git tag -a "v$VERSION" -m "Synthesis v$VERSION"
 git push origin "v$VERSION"
 ```
