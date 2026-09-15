@@ -150,6 +150,54 @@ export function browserExecutableArgument(
   return candidate?.trim() || undefined;
 }
 
+export function browserCandidates(
+  os: typeof Deno.build.os,
+): readonly string[] {
+  return os === "windows"
+    ? [
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ]
+    : os === "darwin"
+    ? [
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    : [
+      "google-chrome",
+      "google-chrome-stable",
+      "microsoft-edge",
+      "ungoogled-chromium",
+      "chromium",
+      "chromium-browser",
+    ];
+}
+
+export function flatpakBrowserCandidates(
+  os: typeof Deno.build.os,
+): readonly string[] {
+  return os === "linux"
+    ? [
+      "org.chromium.Chromium",
+      "io.github.ungoogled_software.ungoogled_chromium",
+    ]
+    : [];
+}
+
+type BrowserLaunch = Readonly<{
+  executable: string;
+  label: string;
+  prefixArgs: readonly string[];
+}>;
+
+export function flatpakBrowserLaunch(appId: string): BrowserLaunch {
+  return {
+    executable: "flatpak",
+    label: `Flatpak ${appId}`,
+    prefixArgs: ["run", appId],
+  };
+}
+
 export function manualQueueSmokeExpression(queuedSources: string): string {
   return `(() => {
     document.querySelector('#add-source-btn').click();
@@ -169,28 +217,13 @@ export function manualQueueSmokeExpression(queuedSources: string): string {
   })()`;
 }
 
-async function browserCommand(): Promise<string> {
+async function browserCommand(): Promise<BrowserLaunch> {
   const explicit = browserExecutableArgument(Deno.args);
-  if (explicit) return explicit;
+  if (explicit) {
+    return { executable: explicit, label: explicit, prefixArgs: [] };
+  }
 
-  const candidates = Deno.build.os === "windows"
-    ? [
-      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    ]
-    : Deno.build.os === "darwin"
-    ? [
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    ]
-    : [
-      "ungoogled-chromium",
-      "chromium",
-      "chromium-browser",
-      "google-chrome",
-      "microsoft-edge",
-    ];
-  for (const candidate of candidates) {
+  for (const candidate of browserCandidates(Deno.build.os)) {
     try {
       await new Deno.Command(candidate, {
         args: ["--version"],
@@ -199,7 +232,7 @@ async function browserCommand(): Promise<string> {
         stdout: "null",
         stderr: "null",
       }).output();
-      return candidate;
+      return { executable: candidate, label: candidate, prefixArgs: [] };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) continue;
       if (
@@ -207,13 +240,28 @@ async function browserCommand(): Promise<string> {
         (error.name === "AbortError" || error.name === "TimeoutError")
       ) {
         // The executable launched but did not treat --version as a short command.
-        return candidate;
+        return { executable: candidate, label: candidate, prefixArgs: [] };
       }
       // Try the next known Chromium-family executable after another launch error.
     }
   }
+
+  for (const appId of flatpakBrowserCandidates(Deno.build.os)) {
+    try {
+      const result = await new Deno.Command("flatpak", {
+        args: ["info", appId],
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+        stdin: "null",
+        stdout: "null",
+        stderr: "null",
+      }).output();
+      if (result.success) return flatpakBrowserLaunch(appId);
+    } catch {
+      // Flatpak is unavailable or this installation could not be inspected.
+    }
+  }
   throw new Error(
-    "No Chromium-family browser found. Pass its executable path: deno task test:browser -- /path/to/chromium",
+    "No Chromium-family browser found as a native executable or known Flatpak. Pass its executable path: deno task test:browser -- /path/to/chromium",
   );
 }
 
@@ -378,7 +426,7 @@ async function removeTemporaryDirectory(path: string): Promise<void> {
 
 async function run(): Promise<void> {
   console.log("Browser smoke: locating a Chromium-family browser.");
-  const executable = await browserCommand();
+  const browserLaunch = await browserCommand();
   const appPort = availablePort();
   const providerPort = availablePort();
   const debugPort = availablePort();
@@ -429,9 +477,10 @@ async function run(): Promise<void> {
       "Vault chooser did not become ready",
     );
 
-    console.log("Browser smoke: launching the headless browser.");
-    browser = new Deno.Command(executable, {
+    console.log(`Browser smoke: launching ${browserLaunch.label} headlessly.`);
+    browser = new Deno.Command(browserLaunch.executable, {
       args: [
+        ...browserLaunch.prefixArgs,
         "--headless=new",
         "--disable-background-networking",
         "--disable-default-apps",
@@ -444,11 +493,17 @@ async function run(): Promise<void> {
       ],
       stdin: "null",
       stdout: "null",
-      stderr: "null",
+      stderr: "inherit",
     }).spawn();
     client = await CdpClient.connect(await browserTarget(debugPort));
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
     await client.send("Page.navigate", { url: origin });
 
     console.log("Browser smoke: opening the temporary vault through the GUI.");
@@ -527,11 +582,13 @@ async function run(): Promise<void> {
     assert.deepEqual(
       await client.evaluate<Record<string, number>>(`(() => {
         const add = document.querySelector('#add-source-btn');
+        const search = document.querySelector('#search-input');
         const vault = document.querySelector('#vault-menu-btn');
         const topbar = document.querySelector('#topbar');
         return {
           addHeight: Math.round(add.getBoundingClientRect().height),
           addFont: Number.parseFloat(getComputedStyle(add).fontSize),
+          searchHeight: Math.round(search.getBoundingClientRect().height),
           vaultHeight: Math.round(vault.getBoundingClientRect().height),
           vaultFont: Number.parseFloat(getComputedStyle(vault).fontSize),
           topbarHeight: Math.round(topbar.getBoundingClientRect().height),
@@ -540,6 +597,7 @@ async function run(): Promise<void> {
       {
         addHeight: 36,
         addFont: 13.6,
+        searchHeight: 36,
         vaultHeight: 36,
         vaultFont: 13.6,
         topbarHeight: 52,
@@ -753,13 +811,20 @@ async function run(): Promise<void> {
     await waitFor(
       () =>
         client!.evaluate<boolean>(
-          "document.querySelector('#graph-panel').classList.contains('hidden') && !document.querySelector('#reader-panel').classList.contains('hidden')",
+          "document.querySelector('#graph-panel').classList.contains('hidden') && !document.querySelector('#graph-panel').classList.contains('is-maximized') && !document.querySelector('#reader-panel').classList.contains('hidden')",
         ),
       Boolean,
       "Opening a graph neighbour did not open the wiki page",
     );
     await client.evaluate(
       "document.querySelector('#connections-view-btn').click()",
+    );
+    assert.equal(
+      await client.evaluate<boolean>(
+        "document.querySelector('#graph-panel').classList.contains('is-maximized')",
+      ),
+      false,
+      "Returning to Connections must keep the graph inline",
     );
     await client.evaluate(
       "document.querySelector('#graph-focus-clear').click()",
@@ -822,6 +887,14 @@ async function run(): Promise<void> {
       input.dispatchEvent(new Event('input'));
     })()`);
 
+    await client.evaluate("document.querySelector('#graph-maximize').click()");
+    assert.equal(
+      await client.evaluate<boolean>(
+        "document.querySelector('#graph-panel').classList.contains('is-maximized')",
+      ),
+      true,
+      "Graph did not re-enter full-screen mode for the Escape check",
+    );
     await client.evaluate(
       "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))",
     );

@@ -1,10 +1,41 @@
 import assert from "node:assert/strict";
 
 import {
+  browserCandidates,
   browserExecutableArgument,
+  flatpakBrowserCandidates,
+  flatpakBrowserLaunch,
   manualQueueSmokeExpression,
   withTimeout,
 } from "./browser_interaction_smoke.ts";
+
+Deno.test("Linux browser discovery prefers packaged Chrome", () => {
+  assert.deepEqual(browserCandidates("linux"), [
+    "google-chrome",
+    "google-chrome-stable",
+    "microsoft-edge",
+    "ungoogled-chromium",
+    "chromium",
+    "chromium-browser",
+  ]);
+});
+
+Deno.test("Linux browser discovery supports known Chromium Flatpaks", () => {
+  assert.deepEqual(flatpakBrowserCandidates("linux"), [
+    "org.chromium.Chromium",
+    "io.github.ungoogled_software.ungoogled_chromium",
+  ]);
+  assert.deepEqual(flatpakBrowserCandidates("darwin"), []);
+  assert.deepEqual(flatpakBrowserCandidates("windows"), []);
+});
+
+Deno.test("Flatpak browsers launch through their application ID", () => {
+  assert.deepEqual(flatpakBrowserLaunch("org.chromium.Chromium"), {
+    executable: "flatpak",
+    label: "Flatpak org.chromium.Chromium",
+    prefixArgs: ["run", "org.chromium.Chromium"],
+  });
+});
 
 Deno.test("browserExecutableArgument accepts a direct task argument", () => {
   assert.equal(

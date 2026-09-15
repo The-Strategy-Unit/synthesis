@@ -1,6 +1,6 @@
 {
   "name": "synthesis",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "tasks": {
     "app": "deno task start",
     "setup": "deno run --allow-all scripts/setup.ts",
