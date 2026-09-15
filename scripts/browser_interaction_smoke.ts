@@ -548,6 +548,14 @@ async function run(): Promise<void> {
       (status) => status === "ok",
       "Selected vault did not become ready",
     );
+    await waitFor(
+      () =>
+        client!.evaluate<boolean>(
+          "document.querySelector('#topbar') !== null && document.querySelector('#note-list') !== null",
+        ),
+      Boolean,
+      "Vault chooser did not navigate to the application",
+    );
     const rebuild = await fetch(`${origin}/api/rebuild`, {
       body: JSON.stringify({ confirm: "REBUILD" }),
       headers: { "Content-Type": "application/json", Origin: origin },
@@ -555,6 +563,15 @@ async function run(): Promise<void> {
     });
     assert.equal(rebuild.status, 200);
     await rebuild.body?.cancel();
+    const notes = await fetch(`${origin}/api/notes`);
+    assert.equal(notes.status, 200);
+    assert.equal(
+      (await notes.json() as { notes: unknown[] }).notes.length,
+      34,
+      "Rebuilt wiki pages were not served by the API",
+    );
+    // The app may have loaded its empty catalogue before this API-only rebuild.
+    await client.send("Page.reload", { ignoreCache: true });
 
     console.log("Browser smoke: waiting for the seeded wiki.");
     await waitFor(
